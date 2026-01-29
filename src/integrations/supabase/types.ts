@@ -228,12 +228,14 @@ export type Database = {
           description: string | null
           featured: boolean | null
           floor_number: number | null
+          freshness_status: string | null
           furnished: boolean | null
           host_id: string | null
           host_name: string | null
           host_response_time: string | null
           id: string
           images: string[] | null
+          last_checked_at: string | null
           latitude: number | null
           location: unknown
           longitude: number | null
@@ -247,10 +249,13 @@ export type Database = {
           price_monthly: number | null
           price_weekly: number | null
           rating: number | null
+          raw_amenities: Json | null
           review_count: number | null
           size_sqm: number | null
           slug: string | null
           smoking_allowed: boolean | null
+          source_listing_id: string | null
+          source_url: string | null
           status: string | null
           title: string
           total_floors: number | null
@@ -277,12 +282,14 @@ export type Database = {
           description?: string | null
           featured?: boolean | null
           floor_number?: number | null
+          freshness_status?: string | null
           furnished?: boolean | null
           host_id?: string | null
           host_name?: string | null
           host_response_time?: string | null
           id?: string
           images?: string[] | null
+          last_checked_at?: string | null
           latitude?: number | null
           location?: unknown
           longitude?: number | null
@@ -296,10 +303,13 @@ export type Database = {
           price_monthly?: number | null
           price_weekly?: number | null
           rating?: number | null
+          raw_amenities?: Json | null
           review_count?: number | null
           size_sqm?: number | null
           slug?: string | null
           smoking_allowed?: boolean | null
+          source_listing_id?: string | null
+          source_url?: string | null
           status?: string | null
           title: string
           total_floors?: number | null
@@ -326,12 +336,14 @@ export type Database = {
           description?: string | null
           featured?: boolean | null
           floor_number?: number | null
+          freshness_status?: string | null
           furnished?: boolean | null
           host_id?: string | null
           host_name?: string | null
           host_response_time?: string | null
           id?: string
           images?: string[] | null
+          last_checked_at?: string | null
           latitude?: number | null
           location?: unknown
           longitude?: number | null
@@ -345,10 +357,13 @@ export type Database = {
           price_monthly?: number | null
           price_weekly?: number | null
           rating?: number | null
+          raw_amenities?: Json | null
           review_count?: number | null
           size_sqm?: number | null
           slug?: string | null
           smoking_allowed?: boolean | null
+          source_listing_id?: string | null
+          source_url?: string | null
           status?: string | null
           title?: string
           total_floors?: number | null
@@ -1150,6 +1165,145 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           timezone?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      rental_freshness_log: {
+        Row: {
+          checked_at: string
+          created_at: string
+          html_signature_match: boolean | null
+          http_status: number | null
+          id: string
+          listing_id: string
+          status: string
+        }
+        Insert: {
+          checked_at?: string
+          created_at?: string
+          html_signature_match?: boolean | null
+          http_status?: number | null
+          id?: string
+          listing_id: string
+          status: string
+        }
+        Update: {
+          checked_at?: string
+          created_at?: string
+          html_signature_match?: boolean | null
+          http_status?: number | null
+          id?: string
+          listing_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_freshness_log_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "apartments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_listing_images: {
+        Row: {
+          created_at: string
+          height: number | null
+          id: string
+          listing_id: string
+          mime_type: string | null
+          sort_order: number | null
+          source_url: string | null
+          storage_path: string
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          listing_id: string
+          mime_type?: string | null
+          sort_order?: number | null
+          source_url?: string | null
+          storage_path: string
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          listing_id?: string
+          mime_type?: string | null
+          sort_order?: number | null
+          source_url?: string | null
+          storage_path?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_listing_images_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "apartments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_listing_sources: {
+        Row: {
+          base_url: string | null
+          created_at: string
+          id: string
+          is_enabled: boolean
+          last_crawl_at: string | null
+          rate_limit_config: Json | null
+          source_key: string
+          updated_at: string
+        }
+        Insert: {
+          base_url?: string | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          last_crawl_at?: string | null
+          rate_limit_config?: Json | null
+          source_key: string
+          updated_at?: string
+        }
+        Update: {
+          base_url?: string | null
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          last_crawl_at?: string | null
+          rate_limit_config?: Json | null
+          source_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rental_search_sessions: {
+        Row: {
+          created_at: string
+          filter_json: Json
+          id: string
+          result_ids: string[] | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          filter_json?: Json
+          id?: string
+          result_ids?: string[] | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          filter_json?: Json
+          id?: string
+          result_ids?: string[] | null
+          user_id?: string | null
         }
         Relationships: []
       }
