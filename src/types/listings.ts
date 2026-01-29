@@ -72,6 +72,11 @@ export interface Apartment {
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  // Rentals AI fields
+  source_url?: string;
+  freshness_status?: 'active' | 'unconfirmed' | 'stale';
+  last_checked_at?: string;
+  source_listing_id?: string;
 }
 
 // Cars

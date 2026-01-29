@@ -495,15 +495,20 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const body = await req.json();
+    const action = body.action;
+
+    // Actions that require authentication
+    const authRequiredActions = ["intake", "verify"];
+    
+    if (authRequiredActions.includes(action) && !authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const body = await req.json();
-    const action = body.action;
+    console.log(`Rentals action: ${action}`);
 
     console.log(`Rentals action: ${action}`);
 
@@ -526,14 +531,14 @@ Deno.serve(async (req) => {
       case "search": {
         const filterJson: FilterJson = body.filter_json || {};
         const limit = body.limit || 50;
-        const userId = await getUserId(authHeader);
+        const userId = authHeader ? await getUserId(authHeader) : null;
 
         const searchResult = await executeSearch(filterJson, limit);
         const resultIds = searchResult.listings.map((l: any) => l.id);
 
         // Store search session if user is authenticated
         let jobId = null;
-        if (userId) {
+        if (userId && authHeader) {
           const service = getServiceClient();
           const { data: session } = await service
             .from("rental_search_sessions")

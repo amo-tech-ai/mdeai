@@ -89,3 +89,21 @@ export function useFeaturedEvents(limit = 4) {
     },
   });
 }
+
+export function useUpcomingEvents(limit = 5) {
+  return useQuery({
+    queryKey: ["events", "upcoming", limit],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("is_active", true)
+        .gte("event_start_time", new Date().toISOString())
+        .order("event_start_time", { ascending: true })
+        .limit(limit);
+
+      if (error) throw error;
+      return { events: data as Event[], total: data?.length || 0 };
+    },
+  });
+}

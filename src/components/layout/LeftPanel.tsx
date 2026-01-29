@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Compass, Heart, Sparkles, User, LogOut, ChevronLeft, ChevronRight, Building2, Car, UtensilsCrossed, CalendarDays, Plane, CalendarCheck } from "lucide-react";
+import { Home, Compass, Heart, Sparkles, User, LogOut, ChevronLeft, ChevronRight, Building2, Car, UtensilsCrossed, CalendarDays, Plane, CalendarCheck, LayoutDashboard, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,12 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { icon: Home, label: "Home", path: "/" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", protected: true },
   { icon: Compass, label: "Explore", path: "/explore" },
 ];
 
 const listingsNavItems: NavItem[] = [
+  { icon: Search, label: "AI Rentals", path: "/rentals" },
   { icon: Building2, label: "Apartments", path: "/apartments" },
   { icon: Car, label: "Cars", path: "/cars" },
   { icon: UtensilsCrossed, label: "Restaurants", path: "/restaurants" },

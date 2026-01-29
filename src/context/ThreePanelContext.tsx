@@ -8,7 +8,7 @@ export interface SelectedItem {
   data: any; // Full entity data
 }
 
-interface ThreePanelContextType {
+export interface ThreePanelContextType {
   // Right panel state
   selectedItem: SelectedItem | null;
   rightPanelOpen: boolean;
@@ -19,11 +19,15 @@ interface ThreePanelContextType {
   // View state
   viewMode: "grid" | "list" | "map";
   
+  // Custom right panel content (for dashboards)
+  rightPanelContent: ReactNode | null;
+  
   // Actions
   openDetailPanel: (item: SelectedItem) => void;
   closeDetailPanel: () => void;
   toggleLeftPanel: () => void;
   setViewMode: (mode: "grid" | "list" | "map") => void;
+  setRightPanelContent: (content: ReactNode | null) => void;
 }
 
 const ThreePanelContext = createContext<ThreePanelContextType | null>(null);
@@ -50,11 +54,13 @@ export function ThreePanelProvider({ children }: ThreePanelProviderProps) {
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [viewMode, setViewModeState] = useState<"grid" | "list" | "map">("grid");
+  const [rightPanelContent, setRightPanelContentState] = useState<ReactNode | null>(null);
 
   // Open detail panel with URL sync
   const openDetailPanel = useCallback((item: SelectedItem) => {
     setSelectedItem(item);
     setRightPanelOpen(true);
+    setRightPanelContentState(null); // Clear custom content when opening detail
     
     // Update URL with detail param
     const newParams = new URLSearchParams(searchParams);
@@ -66,6 +72,7 @@ export function ThreePanelProvider({ children }: ThreePanelProviderProps) {
   const closeDetailPanel = useCallback(() => {
     setRightPanelOpen(false);
     setSelectedItem(null);
+    setRightPanelContentState(null);
     
     // Remove detail param from URL
     const newParams = new URLSearchParams(searchParams);
@@ -81,6 +88,15 @@ export function ThreePanelProvider({ children }: ThreePanelProviderProps) {
     setViewModeState(mode);
   }, []);
 
+  // Set custom right panel content (opens panel if content is provided)
+  const setRightPanelContent = useCallback((content: ReactNode | null) => {
+    setRightPanelContentState(content);
+    if (content) {
+      setRightPanelOpen(true);
+      setSelectedItem(null); // Clear item selection when using custom content
+    }
+  }, []);
+
   return (
     <ThreePanelContext.Provider
       value={{
@@ -88,10 +104,12 @@ export function ThreePanelProvider({ children }: ThreePanelProviderProps) {
         rightPanelOpen,
         leftPanelCollapsed,
         viewMode,
+        rightPanelContent,
         openDetailPanel,
         closeDetailPanel,
         toggleLeftPanel,
         setViewMode,
+        setRightPanelContent,
       }}
     >
       {children}
