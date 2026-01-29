@@ -1,6 +1,6 @@
 # I Love Medellín — Master Progress Tracker
 
-> **Last Updated:** 2026-01-29 | **Overall Completion:** 80%
+> **Last Updated:** 2026-01-29 | **Overall Completion:** 85%
 
 ---
 
@@ -8,9 +8,9 @@
 
 ```mermaid
 pie title Implementation Progress
-    "Complete" : 80
+    "Complete" : 85
     "In Progress" : 8
-    "Not Started" : 12
+    "Not Started" : 7
 ```
 
 | Phase | Status | % Complete | Priority |
@@ -20,7 +20,9 @@ pie title Implementation Progress
 | **Phase 3: AI Agents** | 🟡 In Progress | 50% | P1 |
 | **Phase 4: Realtime Backend** | 🟢 Complete | 100% | Done |
 | **Phase 4B: Realtime Frontend** | 🟢 Complete | 90% | Done |
-| **Phase 5: Marketing** | 🔴 Not Started | 0% | P2 |
+| **Phase 5: Marketing Routes** | 🟢 Complete | 100% | Done |
+| **Phase 5B: AI Safety (PAU)** | 🔴 Not Started | 0% | P1 |
+| **Phase 5C: AI Wiring** | 🔴 Not Started | 0% | P1 |
 | **Phase 6: Automations** | 🔴 Not Started | 0% | P3 |
 
 ---
@@ -238,14 +240,20 @@ stateDiagram-v2
 
 ---
 
-## 🔴 Phase 5B: Marketing Routes (0% Complete)
+## ✅ Phase 5: Marketing Routes (100% Complete)
 
-| Task ID | Description | Status | % | Prompt |
-|---------|-------------|--------|---|--------|
-| MR-1 | Add 4 public routes | 🔴 TODO | 0% | MR-P1 |
-| MR-2 | How It Works page | 🔴 TODO | 0% | MR-P2 |
-| MR-3 | Pricing page | 🔴 TODO | 0% | MR-P3 |
-| MR-4 | Privacy + Terms pages | 🔴 TODO | 0% | MR-P4 |
+| Task ID | Description | Status | % | Verified |
+|---------|-------------|--------|---|----------|
+| MR-1 | Add 4 public routes | 🟢 Done | 100% | ✅ Routes registered in App.tsx |
+| MR-2 | How It Works page | 🟢 Done | 100% | ✅ /how-it-works renders |
+| MR-3 | Pricing page | 🟢 Done | 100% | ✅ /pricing renders |
+| MR-4 | Privacy + Terms pages | 🟢 Done | 100% | ✅ /privacy and /terms render |
+
+**Created Files:**
+- `src/pages/HowItWorks.tsx` — 4-step user journey
+- `src/pages/Pricing.tsx` — 3 pricing tiers
+- `src/pages/Privacy.tsx` — Privacy policy
+- `src/pages/Terms.tsx` — Terms of service
 
 ---
 
@@ -363,14 +371,11 @@ flowchart LR
 
 ## 🎯 Next Steps (Priority Order)
 
-1. **P1: Realtime Backend** — Add triggers for messages, trips, agent_jobs
-2. **P1: Realtime Frontend** — Subscribe to live updates in chat/trips
-3. **P1: AI Safety** — Preview-Apply-Undo for AI-proposed changes
-4. **P1: AI Wiring** — Connect ai-search to Explore/Concierge
-5. **P2: Marketing Routes** — How it works, Pricing, Privacy, Terms
-6. **P2: Home Dashboard** — Personalized post-login experience
-7. **P3: Automations** — Rules engine + notification center
-8. **P3: Payment** — Stripe integration
+1. **P1: AI Safety (PAU)** — Preview-Apply-Undo for AI-proposed changes
+2. **P1: AI Wiring** — Connect ai-search to Explore/Concierge, ai-trip-planner to TripWizard
+3. **P2: Home Dashboard** — Personalized post-login experience
+4. **P3: Automations** — Rules engine + notification center
+5. **P3: Payment** — Stripe integration
 
 ---
 

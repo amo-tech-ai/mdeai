@@ -32,6 +32,11 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Sitemap from "./pages/Sitemap";
+// Marketing pages
+import HowItWorks from "./pages/HowItWorks";
+import Pricing from "./pages/Pricing";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 // Admin pages
 import {
   AdminDashboard,
@@ -55,6 +60,11 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/onboarding" element={<Onboarding />} />
+            {/* Marketing Routes */}
+            <Route path="/how-it-works" element={<HowItWorks />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
             <Route path="/explore" element={<Explore />} />
             <Route path="/apartments" element={<Apartments />} />
             <Route path="/apartments/:id" element={<ApartmentDetail />} />
