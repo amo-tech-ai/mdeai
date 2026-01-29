@@ -86,11 +86,12 @@
 
 | Task ID | Task name | Description | Status | % | ✅ Done | ⚠️ Blocked / Missing | 💡 Next action |
 |---------|-----------|-------------|--------|---|---------|------------------------|----------------|
-| **FE-RT-1** | Chat Realtime subscription | Concierge + FloatingChatWidget: subscribe to `conversation:{id}:messages` when conversation open; handle INSERT/UPDATE/DELETE; ref/auth + cleanup | 🔴 Not started | 0% | — | No subscription in app | Use Lovable prompt FE-P1 below |
-| **FE-RT-2** | Trip Realtime subscription | TripDetail: subscribe to `trip:{tripId}:items` and `trip:{tripId}:meta`; on events refetch/merge; cleanup on unmount or tripId change | 🔴 Not started | 0% | — | No subscription in app | Use Lovable prompt FE-P2 below |
-| **FE-RT-3** | Job progress Realtime subscription | When job starts, subscribe to `job:{jobId}:status`; on `job_status_changed` update UI; unsubscribe on done/fail or unmount | 🔴 Not started | 0% | — | Job UI may not exist yet | Use Lovable prompt FE-P3 below |
-| **FE-RT-4** | Shared Realtime hook (optional) | Optional: `useRealtimeChannel(topic, handlers)` to centralize setAuth, subscribe, cleanup | 🔴 Not started | 0% | — | — | After FE-RT-1–FE-RT-3 if desired |
-| **FE-RT-5** | Verification | Verify chat, trip, job flows with two tabs or devices; document steps | 🔴 Not started | 0% | — | — | After FE-RT-1–FE-RT-3 |
+| **FE-RT-1** | Chat Realtime subscription | Concierge + FloatingChatWidget: subscribe to `conversation:{id}:messages` when conversation open; handle INSERT/UPDATE/DELETE; ref/auth + cleanup | 🟢 Complete | 100% | ✅ useRealtimeChannel integrated in useChat | — | — |
+| **FE-RT-2** | Trip Realtime subscription | TripDetail: subscribe to `trip:{tripId}:items` and `trip:{tripId}:meta`; on events refetch/merge; cleanup on unmount or tripId change | 🟢 Complete | 100% | ✅ useRealtimeChannel integrated in useTrip | — | — |
+| **FE-RT-3** | Job progress Realtime subscription | When job starts, subscribe to `job:{jobId}:status`; on `job_status_changed` update UI; unsubscribe on done/fail or unmount | 🟢 Complete | 100% | ✅ useJobProgress hook created | — | Integrate into job UI when ready |
+| **FE-RT-4** | Shared Realtime hook | `useRealtimeChannel(topic, handlers)` to centralize setAuth, subscribe, cleanup | 🟢 Complete | 100% | ✅ src/hooks/useRealtimeChannel.ts | — | — |
+| **FE-RT-5** | Verification | Verify chat, trip, job flows with two tabs or devices; document steps | 🟡 Ready | 0% | — | Manual testing required | Test with two browser tabs |
+
 
 ---
 

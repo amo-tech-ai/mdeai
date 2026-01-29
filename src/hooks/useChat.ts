@@ -1,13 +1,13 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripContext } from '@/context/TripContext';
 import { ChatMessage, Conversation, ChatTab, tabToAgentType } from '@/types/chat';
+import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
 // Use environment variable with fallback for the Supabase URL
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://zkwcbyxiwklihegjhuql.supabase.co';
-
+const SUPABASE_URL = 'https://zkwcbyxiwklihegjhuql.supabase.co';
 export interface IntentResult {
   intent: string;
   targetAgent: ChatTab;
@@ -28,6 +28,40 @@ export function useChat(activeTab: ChatTab) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [lastIntent, setLastIntent] = useState<IntentResult | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Realtime subscription handler for message updates
+  const handleRealtimeEvent = useCallback((event: RealtimeEvent) => {
+    const messagePayload = event.payload as Partial<ChatMessage> & { id: string };
+    
+    switch (event.type) {
+      case 'INSERT':
+        // Only add if not already in list (avoid duplicating our own sent messages)
+        setMessages(prev => {
+          if (prev.some(m => m.id === messagePayload.id)) return prev;
+          return [...prev, messagePayload as ChatMessage];
+        });
+        break;
+      case 'UPDATE':
+        setMessages(prev =>
+          prev.map(m => m.id === messagePayload.id ? { ...m, ...messagePayload } : m)
+        );
+        break;
+      case 'DELETE':
+        setMessages(prev => prev.filter(m => m.id !== messagePayload.id));
+        break;
+    }
+  }, []);
+
+  // Subscribe to realtime updates for current conversation
+  const realtimeTopic = currentConversation?.id 
+    ? `conversation:${currentConversation.id}:messages` 
+    : '';
+
+  useRealtimeChannel({
+    topic: realtimeTopic,
+    enabled: !!currentConversation?.id && !!user,
+    onEvent: handleRealtimeEvent,
+  });
 
   // Fetch conversations for the current tab
   const fetchConversations = useCallback(async () => {

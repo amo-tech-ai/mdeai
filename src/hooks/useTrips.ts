@@ -1,6 +1,8 @@
+import { useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useRealtimeChannel, RealtimeEvent } from "@/hooks/useRealtimeChannel";
 import type { Trip, TripFilters, TripWithItems, CreateTripInput, TripStatus } from "@/types/trip";
 
 export function useTrips(filters: TripFilters = {}) {
@@ -55,6 +57,34 @@ export function useTrips(filters: TripFilters = {}) {
 
 export function useTrip(id: string) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Realtime handler for trip items changes
+  const handleItemsEvent = useCallback((event: RealtimeEvent) => {
+    // Invalidate query to refetch on any item change
+    queryClient.invalidateQueries({ queryKey: ["trip", id] });
+  }, [queryClient, id]);
+
+  // Realtime handler for trip meta changes
+  const handleMetaEvent = useCallback((event: RealtimeEvent) => {
+    // Invalidate query to refetch on any trip meta change
+    queryClient.invalidateQueries({ queryKey: ["trip", id] });
+    queryClient.invalidateQueries({ queryKey: ["trips"] });
+  }, [queryClient, id]);
+
+  // Subscribe to trip items changes
+  useRealtimeChannel({
+    topic: `trip:${id}:items`,
+    enabled: !!id && !!user?.id,
+    onEvent: handleItemsEvent,
+  });
+
+  // Subscribe to trip meta changes
+  useRealtimeChannel({
+    topic: `trip:${id}:meta`,
+    enabled: !!id && !!user?.id,
+    onEvent: handleMetaEvent,
+  });
 
   return useQuery({
     queryKey: ["trip", id],
