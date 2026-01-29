@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Search, MapPin, Sparkles, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
@@ -7,11 +7,14 @@ import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
 import { ExploreMapView } from "@/components/explore/ExploreMapView";
 import { NeighborhoodSelector } from "@/components/places/NeighborhoodSelector";
 import { ContextBanner } from "@/components/places/ContextBanner";
+import { AISearchInput } from "@/components/explore/AISearchInput";
 import { useExplorePlaces, useExploreCounts } from "@/hooks/useExplorePlaces";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import type { ExploreCategory, ExplorePlaceResult } from "@/types/explore";
 import type { SelectedItem } from "@/context/ThreePanelContext";
+import type { AISearchResult } from "@/hooks/useAISearch";
 
 // Category labels and routes for "See more" links
 const categoryRoutes: Record<string, { label: string; route: string }> = {
@@ -26,7 +29,9 @@ function ExploreContent() {
   const [activeCategory, setActiveCategory] = useState<ExploreCategory>("all");
   const [neighborhood, setNeighborhood] = useState("El Poblado");
   const [searchQuery, setSearchQuery] = useState("");
+  const [aiSearchResults, setAISearchResults] = useState<AISearchResult[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [useAISearch, setUseAISearch] = useState(false);
   const { openDetailPanel } = useThreePanelContext();
 
   // Supabase queries
@@ -71,6 +76,44 @@ function ExploreContent() {
     openDetailPanel(selectedItem);
   };
 
+  // Handle AI search result click
+  const handleAIResultSelect = useCallback((result: AISearchResult) => {
+    const selectedItem: SelectedItem = {
+      type: result.type as SelectedItem["type"],
+      id: result.id,
+      data: result.metadata || result,
+    };
+    setSelectedPlaceId(result.id);
+    openDetailPanel(selectedItem);
+  }, [openDetailPanel]);
+
+  // Handle AI search results
+  const handleAIResultsChange = useCallback((results: AISearchResult[]) => {
+    setAISearchResults(results);
+    setUseAISearch(results.length > 0);
+  }, []);
+
+  // Convert AI results to ExplorePlaceResult format for display
+  const aiPlaces = useMemo((): ExplorePlaceResult[] => {
+    return aiSearchResults.map((result) => ({
+      id: result.id,
+      type: result.type,
+      title: result.title,
+      description: result.description || "",
+      image: result.imageUrl || "",
+      neighborhood: result.location || "",
+      rating: result.rating || null,
+      price: result.priceLabel || "",
+      priceLevel: result.price ? Math.ceil(result.price / 50) : 1,
+      tags: [],
+      coordinates: null,
+      rawData: result.metadata,
+    }));
+  }, [aiSearchResults]);
+
+  // Use AI results if available, otherwise use regular query results
+  const displayPlaces = useAISearch && aiPlaces.length > 0 ? aiPlaces : places;
+
   return (
     <div className="min-h-screen bg-secondary/30">
       {/* Header */}
@@ -82,16 +125,22 @@ function ExploreContent() {
           />
         </div>
 
-        {/* Search */}
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search places, vibes, or cravings..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-card border-border rounded-full h-12"
-          />
-        </div>
+        {/* AI-Powered Search */}
+        <AISearchInput
+          onResultsChange={handleAIResultsChange}
+          onResultSelect={handleAIResultSelect}
+          neighborhood={neighborhood}
+          placeholder="Search with AI... try 'romantic dinner in Poblado'"
+          className="mb-4"
+        />
+
+        {/* Show badge when AI search is active */}
+        {useAISearch && aiPlaces.length > 0 && (
+          <Badge variant="secondary" className="mb-4">
+            <Sparkles className="w-3 h-3 mr-1" />
+            AI found {aiPlaces.length} results
+          </Badge>
+        )}
 
         {/* Category Tabs with counts */}
         <ExploreCategoryTabs

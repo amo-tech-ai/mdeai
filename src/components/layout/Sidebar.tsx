@@ -1,14 +1,16 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Compass, Heart, Sparkles, User, LogOut } from "lucide-react";
+import { Home, Compass, Heart, Sparkles, Bell, Calendar, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
   { icon: Compass, label: "Explore", path: "/explore" },
   { icon: Heart, label: "Saved", path: "/saved", protected: true },
-  { icon: Sparkles, label: "Concierge", path: "/concierge", badge: "Soon", protected: true },
+  { icon: Calendar, label: "Trips", path: "/trips", protected: true },
+  { icon: Sparkles, label: "Concierge", path: "/concierge" },
 ];
 
 export function Sidebar() {
@@ -48,18 +50,20 @@ export function Sidebar() {
             >
               <item.icon className="w-5 h-5" />
               <span>{item.label}</span>
-              {item.badge && (
-                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent-foreground">
-                  {item.badge}
-                </span>
-              )}
             </Link>
           );
         })}
       </nav>
 
-      {/* User Profile */}
-      <div className="p-4 border-t border-sidebar-border">
+      {/* Notifications & User Profile */}
+      <div className="p-4 border-t border-sidebar-border space-y-4">
+        {user && (
+          <div className="flex items-center justify-between px-2">
+            <span className="text-sm text-muted-foreground">Notifications</span>
+            <NotificationBell />
+          </div>
+        )}
+        
         {user ? (
           <div className="space-y-2">
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-sidebar-accent/30">
