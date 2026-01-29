@@ -8,10 +8,12 @@ import { TripProvider } from "@/context/TripContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
 import Index from "./pages/Index";
+import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import Explore from "./pages/Explore";
 import Apartments from "./pages/Apartments";
 import ApartmentDetail from "./pages/ApartmentDetail";
+import Rentals from "./pages/Rentals";
 import Cars from "./pages/Cars";
 import CarDetail from "./pages/CarDetail";
 import Restaurants from "./pages/Restaurants";
@@ -60,6 +62,11 @@ const App = () => (
           <TripProvider>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
             <Route path="/onboarding" element={<Onboarding />} />
             {/* Marketing Routes */}
             <Route path="/how-it-works" element={<HowItWorks />} />
@@ -69,6 +76,7 @@ const App = () => (
             <Route path="/explore" element={<Explore />} />
             <Route path="/apartments" element={<Apartments />} />
             <Route path="/apartments/:id" element={<ApartmentDetail />} />
+            <Route path="/rentals" element={<Rentals />} />
             <Route path="/cars" element={<Cars />} />
             <Route path="/cars/:id" element={<CarDetail />} />
             <Route path="/restaurants" element={<Restaurants />} />

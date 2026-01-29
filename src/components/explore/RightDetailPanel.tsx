@@ -116,7 +116,7 @@ interface RightDetailPanelProps {
 }
 
 export function RightDetailPanel({ className }: RightDetailPanelProps) {
-  const { selectedItem, rightPanelOpen, closeDetailPanel } = useThreePanelContext();
+  const { selectedItem, rightPanelOpen, rightPanelContent, closeDetailPanel } = useThreePanelContext();
   const { user } = useAuth();
   
   const { data: isSaved = false } = useIsSaved(
@@ -146,6 +146,51 @@ export function RightDetailPanel({ className }: RightDetailPanelProps) {
     });
   }, [selectedItem, user, isSaved, toggleSave]);
 
+  // If no content to show, don't render
+  if (!selectedItem && !rightPanelContent) return null;
+
+  // Custom content mode (for dashboards, etc.)
+  if (rightPanelContent) {
+    return (
+      <>
+        {/* Backdrop for mobile/tablet */}
+        <div 
+          className={cn(
+            "fixed inset-0 bg-black/50 z-30 transition-opacity duration-300 lg:hidden",
+            rightPanelOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+          onClick={closeDetailPanel}
+        />
+        
+        {/* Panel with custom content */}
+        <aside
+          className={cn(
+            "fixed top-0 right-0 h-screen w-full sm:w-[500px] bg-background z-40",
+            "transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "shadow-[-4px_0_24px_rgba(0,0,0,0.1)] overflow-y-auto",
+            rightPanelOpen ? "translate-x-0" : "translate-x-full",
+            className
+          )}
+        >
+          {/* Close button */}
+          <div className="sticky top-0 bg-background z-10 p-4 border-b border-border flex justify-end">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={closeDetailPanel}
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          
+          {/* Custom content */}
+          {rightPanelContent}
+        </aside>
+      </>
+    );
+  }
+
+  // Standard entity detail mode
   if (!selectedItem) return null;
 
   const { type, data } = selectedItem;
