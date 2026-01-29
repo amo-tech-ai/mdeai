@@ -23,3 +23,11 @@ verify_jwt = false
 [functions.rules-engine]
 enabled = true
 verify_jwt = false
+
+[functions.ai-search]
+enabled = true
+verify_jwt = false
+
+[functions.ai-trip-planner]
+enabled = true
+verify_jwt = false
