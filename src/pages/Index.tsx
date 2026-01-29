@@ -239,9 +239,10 @@ export default function Index() {
               © 2025 I Love Medellín. Made with 💚 in the City of Eternal Spring.
             </p>
             <div className="flex items-center gap-4 text-sm opacity-60">
-              <a href="#" className="hover:opacity-100">Privacy</a>
-              <a href="#" className="hover:opacity-100">Terms</a>
-              <a href="#" className="hover:opacity-100">Contact</a>
+              <Link to="/how-it-works" className="hover:opacity-100">How It Works</Link>
+              <Link to="/pricing" className="hover:opacity-100">Pricing</Link>
+              <Link to="/privacy" className="hover:opacity-100">Privacy</Link>
+              <Link to="/terms" className="hover:opacity-100">Terms</Link>
             </div>
           </div>
         </div>
