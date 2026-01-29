@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          current_step: string | null
+          error: string | null
+          expires_at: string
+          id: string
+          input_json: Json
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          progress: number | null
+          result_json: Json | null
+          run_after: string
+          started_at: string | null
+          status: string
+          total_steps: number | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          current_step?: string | null
+          error?: string | null
+          expires_at?: string
+          id?: string
+          input_json: Json
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          progress?: number | null
+          result_json?: Json | null
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          total_steps?: number | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          current_step?: string | null
+          error?: string | null
+          expires_at?: string
+          id?: string
+          input_json?: Json
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          progress?: number | null
+          result_json?: Json | null
+          run_after?: string
+          started_at?: string | null
+          status?: string
+          total_steps?: number | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_context: {
         Row: {
           conversation_id: string
@@ -2174,6 +2240,15 @@ export type Database = {
         Args: { lat1: number; lat2: number; lng1: number; lng2: number }
         Returns: number
       }
+      claim_agent_job: {
+        Args: { p_job_types?: string[]; p_worker_id: string }
+        Returns: string
+      }
+      cleanup_expired_agent_jobs: { Args: never; Returns: number }
+      complete_agent_job: {
+        Args: { p_job_id: string; p_result: Json }
+        Returns: boolean
+      }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -2207,6 +2282,10 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      fail_agent_job: {
+        Args: { p_error: string; p_job_id: string }
+        Returns: boolean
+      }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
@@ -2360,6 +2439,10 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      release_stale_agent_job_locks: {
+        Args: { p_stale_threshold?: unknown }
+        Returns: number
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       st_3dclosestpoint: {
@@ -2944,6 +3027,10 @@ export type Database = {
         Returns: unknown
       }
       unlockrows: { Args: { "": string }; Returns: number }
+      update_agent_job_progress: {
+        Args: { p_current_step?: string; p_job_id: string; p_progress: number }
+        Returns: boolean
+      }
       updategeometrysrid: {
         Args: {
           catalogn_name: string
