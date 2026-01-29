@@ -1,6 +1,6 @@
 # I Love Medellín — Master Progress Tracker
 
-> **Last Updated:** 2026-01-29 | **Overall Completion:** 98%
+> **Last Updated:** 2026-01-29 | **Overall Completion:** 99%
 
 ---
 
@@ -8,8 +8,8 @@
 
 ```mermaid
 pie title Implementation Progress
-    "Complete" : 98
-    "In Progress" : 2
+    "Complete" : 99
+    "In Progress" : 1
     "Not Started" : 0
 ```
 
@@ -24,6 +24,7 @@ pie title Implementation Progress
 | **Phase 5B: AI Safety (PAU)** | 🟢 Complete | 100% | Done |
 | **Phase 5C: AI Wiring** | 🟢 Complete | 100% | Done |
 | **Phase 6: Automations** | 🟢 Complete | 100% | Done |
+| **Phase 7: Rentals AI** | 🟢 Complete | 100% | Done |
 
 ---
 
@@ -258,6 +259,28 @@ SELECT cron.schedule(
 | ai-search | Multi-domain search | ✅ | Gemini Flash | ✅ Deployed |
 | ai-trip-planner | Itinerary generation | ✅ | Gemini Pro | ✅ Deployed |
 | rules-engine | Automated suggestions | ✅ | — | ✅ Deployed |
+| **rentals** | **AI apartment search** | ✅ | **Gemini 3 Pro/Flash** | ✅ **Deployed** |
+
+---
+
+## ✅ Phase 7: Rentals AI System (100% Complete)
+
+| Task ID | Description | Status | Verified |
+|---------|-------------|--------|----------|
+| RNT-1 | Task documentation with Mermaid diagrams | 🟢 Done | ✅ 6 files |
+| RNT-2 | Intake Agent (Gemini 3 Pro) | 🟢 Done | ✅ Working |
+| RNT-3 | Search Service with filters | 🟢 Done | ✅ 2 listings returned |
+| RNT-4 | Verify Agent (HTTP checks) | 🟢 Done | ✅ Working |
+| RNT-5 | Listing detail endpoint | 🟢 Done | ✅ Working |
+
+### Rentals API Tests — VERIFIED ✅
+
+| Endpoint | Test | Result |
+|----------|------|--------|
+| `POST /rentals {action: "intake"}` | AI extracts criteria | ✅ filter_json + next_questions |
+| `POST /rentals {action: "search"}` | Query apartments | ✅ 2 listings, map_pins, filters |
+| `POST /rentals {action: "listing"}` | Get detail | ✅ Full apartment data |
+| `POST /rentals {action: "verify"}` | Check freshness | ✅ Status updated |
 
 ---
 
@@ -281,7 +304,7 @@ SELECT cron.schedule(
 | Protected Routes | 10 | 10 |
 | Components | ~135 | ~140 |
 | Hooks | 35 | 35 |
-| Edge Functions | 8 | 8 ✅ |
+| Edge Functions | 9 | 9 ✅ |
 | Database Tables | 24 | 24 |
 | RLS Coverage | 96% | 100% |
 | Realtime Triggers | 5 | 5 ✅ |
@@ -305,4 +328,5 @@ SELECT cron.schedule(
 - [Preview-Apply-Undo Prompts](04-preview-apply-undo.md)
 - [AI Wiring Prompts](05-ai-wiring.md)
 - [Automations Prompts](06-automations.md)
+- [Rentals AI System](07-rentals/) ✨ NEW
 - [Knowledge Base](../knowledge/README.md)

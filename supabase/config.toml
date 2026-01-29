@@ -31,3 +31,7 @@ verify_jwt = false
 [functions.ai-trip-planner]
 enabled = true
 verify_jwt = false
+
+[functions.rentals]
+enabled = true
+verify_jwt = false
