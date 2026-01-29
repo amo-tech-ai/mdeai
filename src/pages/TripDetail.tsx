@@ -10,6 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ThreePanelLayout } from "@/components/explore/ThreePanelLayout";
 import { VisualItineraryBuilder } from "@/components/itinerary/VisualItineraryBuilder";
 import { DayTimeline } from "@/components/trips/DayTimeline";
+import { AITripPlannerButton } from "@/components/trips/AITripPlannerButton";
 import { useTrip, useUpdateTrip } from "@/hooks/useTrips";
 import { useDeleteTripItem, useReorderTripItem, useUpdateTripItem } from "@/hooks/useTripItems";
 import { useRouteOptimization } from "@/hooks/useRouteOptimization";
@@ -181,6 +182,14 @@ function TripDetailContent() {
         </div>
 
         <div className="flex gap-2">
+          <AITripPlannerButton
+            tripId={trip.id}
+            startDate={trip.start_date}
+            endDate={trip.end_date}
+            destination={trip.destination}
+            existingItems={trip.items}
+            variant="outline"
+          />
           {status === "draft" && (
             <Button onClick={() => handleStatusChange("active")}>
               Activate Trip
