@@ -9,9 +9,9 @@
 
 ```mermaid
 pie title Rentals Implementation Progress
-    "Complete" : 0
-    "In Progress" : 15
-    "Not Started" : 85
+    "Complete" : 85
+    "In Progress" : 10
+    "Not Started" : 5
 ```
 
 ## 📁 Document Index
@@ -24,6 +24,7 @@ pie title Rentals Implementation Progress
 | [03-intake-agent.md](./03-intake-agent.md) | **Task:** Implement AI Intake Agent with Gemini 3 Pro |
 | [04-search-logic.md](./04-search-logic.md) | **Task:** Implement real search that queries apartments table |
 | [05-verification.md](./05-verification.md) | **Task:** Implement real HTTP verification for freshness |
+| [06-unified-rentals-plan.md](./06-unified-rentals-plan.md) | **NEW:** Unified wizard form + Concierge integration plan |
 
 ---
 

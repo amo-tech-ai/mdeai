@@ -8,11 +8,79 @@ const corsHeaders = {
 
 // Tool definitions for AI function calling
 const tools = [
+  // Rentals tools - integrated with rentals Edge Function
+  {
+    type: "function",
+    function: {
+      name: "rentals_search",
+      description: "Search for apartment rentals in Medellín. Use this when users want to find an apartment, rental, or housing. Returns listings with freshness verification, map pins, and available filters.",
+      parameters: {
+        type: "object",
+        properties: {
+          neighborhoods: {
+            type: "array",
+            items: { type: "string" },
+            description: "Neighborhood names (e.g., ['El Poblado', 'Laureles', 'Envigado'])"
+          },
+          bedrooms_min: {
+            type: "integer",
+            description: "Minimum number of bedrooms (0 for studio)"
+          },
+          budget_min: {
+            type: "number",
+            description: "Minimum monthly price in USD"
+          },
+          budget_max: {
+            type: "number",
+            description: "Maximum monthly price in USD"
+          },
+          furnished: {
+            type: "boolean",
+            description: "Whether apartment should be furnished"
+          },
+          amenities: {
+            type: "array",
+            items: { type: "string" },
+            description: "Required amenities (e.g., ['wifi', 'parking', 'gym', 'pool', 'ac'])"
+          },
+          pets: {
+            type: "boolean",
+            description: "Whether pets are allowed"
+          },
+          verified_only: {
+            type: "boolean",
+            description: "Only show verified/active listings"
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "rentals_intake",
+      description: "Collect rental search criteria through conversation. Use this when user mentions wanting an apartment but hasn't provided enough details. Returns either next questions to ask or a complete filter_json when ready to search.",
+      parameters: {
+        type: "object",
+        properties: {
+          user_message: {
+            type: "string",
+            description: "The user's latest message about their rental needs"
+          },
+          collected_criteria: {
+            type: "object",
+            description: "Criteria collected so far from previous messages"
+          }
+        },
+        required: ["user_message"]
+      }
+    }
+  },
   {
     type: "function",
     function: {
       name: "search_restaurants",
-      description: "Search for restaurants in Medellín by cuisine type, price level, or location. Returns a list of matching restaurants with details.",
       parameters: {
         type: "object",
         properties: {
@@ -516,6 +584,99 @@ function executeCreateBookingPreview(params: Record<string, unknown>, userId: st
   };
 }
 
+// Execute rentals search by calling the rentals Edge Function
+async function executeRentalsSearch(params: Record<string, unknown>) {
+  console.log("Executing rentals_search with params:", params);
+  
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/rentals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({
+        action: "search",
+        filter_json: params,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Rentals search error:", errorText);
+      return { error: "Failed to search rentals", details: errorText };
+    }
+    
+    const result = await response.json();
+    
+    // Format for chat display
+    return {
+      success: true,
+      total_count: result.results?.total_count || 0,
+      listings: result.results?.listings?.slice(0, 5) || [],
+      filters_applied: params,
+      actions: [
+        { type: "OPEN_RENTALS_RESULTS", payload: { listings: result.results?.listings, map_pins: result.map_data?.pins } }
+      ],
+      message: result.results?.total_count > 0 
+        ? `Found ${result.results.total_count} apartments matching your criteria.`
+        : "No apartments found matching your criteria. Try adjusting your filters."
+    };
+  } catch (error) {
+    console.error("Rentals search error:", error);
+    return { error: "Failed to search rentals", details: String(error) };
+  }
+}
+
+// Execute rentals intake for conversational criteria collection
+async function executeRentalsIntake(params: Record<string, unknown>) {
+  console.log("Executing rentals_intake with params:", params);
+  
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/rentals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({
+        action: "intake",
+        user_message: params.user_message,
+        context: {
+          collected_criteria: params.collected_criteria || {},
+          message_history: [],
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Rentals intake error:", errorText);
+      return { error: "Failed to process rental inquiry", details: errorText };
+    }
+    
+    const result = await response.json();
+    
+    // Return structured response for the chat
+    return {
+      status: result.status,
+      filter_json: result.filter_json,
+      next_questions: result.next_questions,
+      ready_to_search: result.status === "complete",
+      summary: result.summary,
+    };
+  } catch (error) {
+    console.error("Rentals intake error:", error);
+    return { error: "Failed to process rental inquiry", details: String(error) };
+  }
+}
+
 // Execute a tool call
 async function executeTool(
   toolName: string, 
@@ -526,6 +687,10 @@ async function executeTool(
   console.log(`Executing tool: ${toolName}`, params);
   
   switch (toolName) {
+    case "rentals_search":
+      return executeRentalsSearch(params);
+    case "rentals_intake":
+      return executeRentalsIntake(params);
     case "search_restaurants":
       return executeSearchRestaurants(params, supabase);
     case "search_apartments":
