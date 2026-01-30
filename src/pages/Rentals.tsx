@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Building2, Sparkles, List } from "lucide-react";
+import { Building2, Sparkles, List, LayoutGrid, Map } from "lucide-react";
 import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RentalsIntakeWizard } from "@/components/rentals/RentalsIntakeWizard";
+import { RentalsWizardForm } from "@/components/rentals/RentalsWizardForm";
 import { RentalsSearchResults } from "@/components/rentals/RentalsSearchResults";
 import { RentalsListingDetail } from "@/components/rentals/RentalsListingDetail";
 import type { Apartment } from "@/types/listings";
@@ -57,7 +57,7 @@ function RentalsContent() {
             Find Your Apartment
           </h1>
           <p className="text-muted-foreground mt-1">
-            AI-powered apartment search in Medellín
+            Search apartments in Medellín
           </p>
         </div>
         {view === "results" && (
@@ -68,29 +68,31 @@ function RentalsContent() {
         )}
       </div>
 
-      {/* View Tabs */}
-      <Tabs value={view} onValueChange={(v) => setView(v as RentalView)}>
-        <TabsList>
-          <TabsTrigger value="wizard" className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            AI Assistant
-          </TabsTrigger>
-          <TabsTrigger value="results" className="flex items-center gap-2" disabled={!filterJson}>
-            <List className="w-4 h-4" />
-            Results {filterJson && "(Active)"}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="wizard" className="mt-6">
-          <div className="max-w-2xl">
-            <RentalsIntakeWizard
-              onComplete={handleWizardComplete}
-              onCancel={() => setView("results")}
-            />
+      {/* Main Content - NO chat here, wizard or results only */}
+      {view === "wizard" ? (
+        <div className="flex justify-center">
+          <RentalsWizardForm
+            onComplete={handleWizardComplete}
+            onCancel={filterJson ? () => setView("results") : undefined}
+          />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* View toggle */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setView("wizard")}
+              >
+                <Sparkles className="w-4 h-4 mr-1" />
+                Edit Search
+              </Button>
+            </div>
           </div>
-        </TabsContent>
 
-        <TabsContent value="results" className="mt-6">
+          {/* Results */}
           {filterJson ? (
             <RentalsSearchResults
               filterJson={filterJson}
@@ -98,17 +100,27 @@ function RentalsContent() {
             />
           ) : (
             <div className="text-center py-12">
-              <Sparkles className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <Building2 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                Use the AI Assistant to describe what you're looking for
+                Use the wizard to specify your search criteria
               </p>
               <Button className="mt-4" onClick={() => setView("wizard")}>
-                Start AI Search
+                Start Search
               </Button>
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
+
+      {/* Tip about Concierge */}
+      {view === "wizard" && (
+        <div className="text-center text-sm text-muted-foreground mt-8">
+          <p>
+            💡 Prefer to chat? Use the <strong>AI Concierge</strong> on the right 
+            to describe what you're looking for in natural language.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
