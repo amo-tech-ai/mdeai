@@ -3,6 +3,7 @@ import { Clock, ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 interface OnboardingLayoutProps {
   children: ReactNode;
@@ -58,10 +59,8 @@ export function OnboardingLayout({
       <div className="hidden lg:grid lg:grid-cols-[320px_1fr_380px] min-h-screen">
         {/* LEFT PANEL: Context */}
         <aside className="border-r border-border bg-secondary/30 p-8 flex flex-col">
-          <div className="mb-12">
-            <h1 className="font-display text-2xl font-semibold text-foreground mb-1">
-              I Love Medellín
-            </h1>
+          <div className="mb-12 space-y-3">
+            <BrandLogo variant="sidebar" className="max-w-[220px]" />
             <p className="text-sm text-muted-foreground">Your personal concierge</p>
           </div>
 

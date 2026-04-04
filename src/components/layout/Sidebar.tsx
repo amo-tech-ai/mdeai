@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
@@ -21,15 +22,8 @@ export function Sidebar() {
     <aside className="hidden lg:flex w-64 flex-col border-r border-sidebar-border bg-sidebar h-screen sticky top-0">
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-xl">💚</span>
-          </div>
-          <div>
-            <h1 className="font-display text-lg font-semibold text-sidebar-foreground">
-              I Love Medellín
-            </h1>
-          </div>
+        <Link to="/" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md">
+          <BrandLogo variant="sidebar" />
         </Link>
       </div>
 

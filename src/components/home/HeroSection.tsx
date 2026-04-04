@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 // Hero images
 import skylineImg from "@/assets/hero/medellin-skyline.jpg";
@@ -49,12 +50,10 @@ export function HeroSection() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             {/* Left Column - Content */}
             <div className="lg:col-span-5 space-y-6">
-              {/* Brand eyebrow */}
-              <p
-                className="text-sm font-medium uppercase tracking-widest text-muted-foreground animate-fade-in"
-              >
-                I Love Medellín
-              </p>
+              {/* Brand */}
+              <div className="animate-fade-in">
+                <BrandLogo variant="hero" />
+              </div>
 
               {/* Main headline */}
               <h1
@@ -69,8 +68,8 @@ export function HeroSection() {
                 className="text-lg md:text-xl text-muted-foreground leading-relaxed animate-fade-in"
                 style={{ animationDelay: "200ms" }}
               >
-                Welcome to I Love Medellín — your guide to discovering cities,
-                experiences, and unforgettable trips across the country.
+                Your guide to discovering cities, experiences, and unforgettable
+                trips across Colombia.
               </p>
 
               {/* CTAs */}

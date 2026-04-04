@@ -203,7 +203,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      toast.success("Welcome to I Love Medellín!", {
+      toast.success("Welcome to mdeai.co!", {
         description: "Your preferences have been saved.",
       });
 

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, Lock, ArrowLeft, User } from "lucide-react";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -76,9 +77,9 @@ export default function Signup() {
     <div className="min-h-screen bg-background flex">
       {/* Left side - Branding */}
       <div className="hidden lg:flex flex-1 bg-primary items-center justify-center p-16">
-        <div className="max-w-md text-center">
-          <span className="text-6xl">💚</span>
-          <h2 className="font-display text-3xl font-bold text-primary-foreground mt-6">
+        <div className="max-w-md text-center flex flex-col items-center">
+          <BrandLogo variant="panel" />
+          <h2 className="font-display text-3xl font-bold text-primary-foreground mt-8">
             Join the Community
           </h2>
           <p className="mt-4 text-primary-foreground/80">

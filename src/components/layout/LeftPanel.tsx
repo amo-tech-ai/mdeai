@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { TripSelector } from "@/components/trips/TripSelector";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 interface NavItem {
   icon: typeof Home;
@@ -90,20 +91,14 @@ export function LeftPanel({ collapsed = false, onToggle }: LeftPanelProps) {
     <aside className="flex flex-col border-r border-sidebar-border bg-sidebar h-screen sticky top-0">
       {/* Logo */}
       <div className={cn("p-6 border-b border-sidebar-border", collapsed && "p-3")}>
-        <Link to="/" className="flex items-center gap-3">
-          <div className={cn(
-            "rounded-xl bg-primary flex items-center justify-center flex-shrink-0",
-            collapsed ? "w-10 h-10" : "w-10 h-10"
-          )}>
-            <span className="text-xl">💚</span>
-          </div>
-          {!collapsed && (
-            <div>
-              <h1 className="font-display text-lg font-semibold text-sidebar-foreground">
-                I Love Medellín
-              </h1>
-            </div>
+        <Link
+          to="/"
+          className={cn(
+            "flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md",
+            collapsed && "justify-center"
           )}
+        >
+          <BrandLogo variant={collapsed ? "sidebarCollapsed" : "sidebar"} />
         </Link>
       </div>
 

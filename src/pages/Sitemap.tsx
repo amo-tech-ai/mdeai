@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 interface SitemapLink {
   path: string;
@@ -339,13 +340,11 @@ export default function Sitemap() {
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-sm">💚</span>
-              </div>
-              <span className="font-display font-semibold text-foreground hidden sm:inline">
-                I Love Medellín
-              </span>
+            <Link
+              to="/"
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+            >
+              <BrandLogo variant="nav" />
             </Link>
           </div>
         </div>
@@ -358,8 +357,7 @@ export default function Sitemap() {
             Site Map
           </h1>
           <p className="text-lg md:text-xl text-primary-foreground/80 max-w-2xl mx-auto mb-8">
-            Complete overview of all pages and screens in the I Love Medellín
-            platform
+            Complete overview of all pages and screens on mdeai.co
           </p>
 
           {/* Stats */}
@@ -465,7 +463,7 @@ export default function Sitemap() {
       <footer className="border-t border-border py-8 mt-12">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
           <p>
-            © {new Date().getFullYear()} I Love Medellín. All rights reserved.
+            © {new Date().getFullYear()} mdeai.co. All rights reserved.
           </p>
         </div>
       </footer>

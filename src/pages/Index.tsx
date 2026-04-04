@@ -9,6 +9,7 @@ import { GetInspiredSlider } from "@/components/home/GetInspiredSlider";
 import { AIFeaturesSection } from "@/components/home/AIFeaturesSection";
 import { useFeaturedPlaces } from "@/hooks/useFeaturedPlaces";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 const categoryIcons = {
   apartments: Home,
@@ -26,11 +27,8 @@ export default function Index() {
       {/* Navigation Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="text-2xl">💚</span>
-            <span className="font-display text-xl font-semibold text-foreground italic">
-              i love Medellín
-            </span>
+          <Link to="/" className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md">
+            <BrandLogo variant="nav" />
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -192,9 +190,8 @@ export default function Index() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
             {/* Brand */}
             <div className="col-span-2 md:col-span-1">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">💚</span>
-                <span className="font-display text-lg font-semibold">I Love Medellín</span>
+              <div className="mb-4">
+                <BrandLogo variant="footer" />
               </div>
               <p className="text-sm text-muted opacity-80">
                 Your AI-powered guide to the City of Eternal Spring.
@@ -236,7 +233,7 @@ export default function Index() {
 
           <div className="pt-8 border-t border-background/20 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm opacity-60">
-              © 2025 I Love Medellín. Made with 💚 in the City of Eternal Spring.
+              © {new Date().getFullYear()} mdeai.co. Made in the City of Eternal Spring.
             </p>
             <div className="flex items-center gap-4 text-sm opacity-60">
               <Link to="/how-it-works" className="hover:opacity-100">How It Works</Link>

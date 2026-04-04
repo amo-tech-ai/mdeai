@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { 
   Search, 
   MapPin, 
@@ -43,8 +44,11 @@ export default function HowItWorks() {
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-2xl font-bold text-primary">
-            I Love Medellín
+          <Link
+            to="/"
+            className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+          >
+            <BrandLogo variant="nav" />
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/how-it-works" className="text-foreground font-medium">How It Works</Link>
@@ -139,7 +143,7 @@ export default function HowItWorks() {
             <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           </div>
           <p className="text-center text-sm text-muted-foreground mt-4">
-            © {new Date().getFullYear()} I Love Medellín. All rights reserved.
+            © {new Date().getFullYear()} mdeai.co. All rights reserved.
           </p>
         </div>
       </footer>

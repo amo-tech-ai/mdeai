@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export default function Terms() {
   return (
@@ -7,8 +8,11 @@ export default function Terms() {
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-2xl font-bold text-primary">
-            I Love Medellín
+          <Link
+            to="/"
+            className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+          >
+            <BrandLogo variant="nav" />
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">How It Works</Link>
@@ -31,7 +35,7 @@ export default function Terms() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">1. Acceptance of Terms</h2>
               <p className="text-muted-foreground">
-                By accessing or using I Love Medellín ("the Service"), you agree to be bound by these 
+                By accessing or using mdeai.co ("the Service"), you agree to be bound by these 
                 Terms of Service. If you do not agree to these terms, please do not use our Service. 
                 We reserve the right to modify these terms at any time, and your continued use of the 
                 Service constitutes acceptance of any changes.
@@ -41,7 +45,7 @@ export default function Terms() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">2. Description of Service</h2>
               <p className="text-muted-foreground">
-                I Love Medellín is a travel discovery and booking platform that helps users explore 
+                mdeai.co is a travel discovery and booking platform that helps users explore 
                 restaurants, events, accommodations, and car rentals in Medellín, Colombia. We provide 
                 trip planning tools, an AI-powered concierge, and booking facilitation services.
               </p>
@@ -103,7 +107,7 @@ export default function Terms() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">7. Intellectual Property</h2>
               <p className="text-muted-foreground">
-                All content, features, and functionality of the Service are owned by I Love Medellín 
+                All content, features, and functionality of the Service are owned by mdeai.co 
                 and are protected by international copyright, trademark, and other intellectual property 
                 laws. You may not reproduce, distribute, or create derivative works without our permission.
               </p>
@@ -171,7 +175,7 @@ export default function Terms() {
             <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           </div>
           <p className="text-center text-sm text-muted-foreground mt-4">
-            © {new Date().getFullYear()} I Love Medellín. All rights reserved.
+            © {new Date().getFullYear()} mdeai.co. All rights reserved.
           </p>
         </div>
       </footer>

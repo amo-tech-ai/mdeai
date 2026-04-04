@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, Lock, ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -180,12 +181,9 @@ export default function Login() {
 
       {/* Right side - Branding */}
       <div className="hidden lg:flex flex-1 bg-primary items-center justify-center p-16">
-        <div className="max-w-md text-center">
-          <span className="text-6xl">💚</span>
-          <h2 className="font-display text-3xl font-bold text-primary-foreground mt-6">
-            I Love Medellín
-          </h2>
-          <p className="mt-4 text-primary-foreground/80">
+        <div className="max-w-md text-center flex flex-col items-center">
+          <BrandLogo variant="panel" />
+          <p className="mt-8 text-primary-foreground/80">
             Discover the best stays, restaurants, events, and car rentals in the City of Eternal Spring.
           </p>
         </div>
