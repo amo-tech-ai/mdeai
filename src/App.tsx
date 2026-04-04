@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Provider as GadgetProvider } from "@gadgetinc/react";
+import { gadgetApi } from "@/integrations/gadget/client";
 import { AuthProvider } from "@/hooks/useAuth";
 import { TripProvider } from "@/context/TripContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -14,6 +16,8 @@ import Explore from "./pages/Explore";
 import Apartments from "./pages/Apartments";
 import ApartmentDetail from "./pages/ApartmentDetail";
 import Rentals from "./pages/Rentals";
+import Coffee from "./pages/Coffee";
+import CoffeeDetail from "./pages/CoffeeDetail";
 import Cars from "./pages/Cars";
 import CarDetail from "./pages/CarDetail";
 import Restaurants from "./pages/Restaurants";
@@ -53,6 +57,7 @@ import {
 const queryClient = new QueryClient();
 
 const App = () => (
+  <GadgetProvider api={gadgetApi}>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -77,6 +82,8 @@ const App = () => (
             <Route path="/apartments" element={<Apartments />} />
             <Route path="/apartments/:id" element={<ApartmentDetail />} />
             <Route path="/rentals" element={<Rentals />} />
+            <Route path="/coffee" element={<Coffee />} />
+            <Route path="/coffee/:handle" element={<CoffeeDetail />} />
             <Route path="/cars" element={<Cars />} />
             <Route path="/cars/:id" element={<CarDetail />} />
             <Route path="/restaurants" element={<Restaurants />} />
@@ -163,6 +170,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+  </GadgetProvider>
 );
 
 export default App;
