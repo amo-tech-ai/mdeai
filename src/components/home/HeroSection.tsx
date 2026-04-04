@@ -3,6 +3,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { MAIN_NAV_LINKS } from "@/config/marketingNav";
 
 // Hero images
 import skylineImg from "@/assets/hero/medellin-skyline.jpg";
@@ -51,8 +52,26 @@ export function HeroSection() {
             {/* Left Column - Content */}
             <div className="lg:col-span-5 space-y-6">
               {/* Brand */}
-              <div className="animate-fade-in">
+              <div className="animate-fade-in space-y-4">
                 <BrandLogo variant="hero" />
+                {/*
+                  In-hero quick nav: visible below lg where the fixed header hides center links
+                  (md only shows hamburger + Sign in). Desktop uses SiteHeader center nav.
+                */}
+                <nav
+                  className="flex flex-wrap gap-x-4 gap-y-2 border-b border-border/50 pb-4 lg:hidden"
+                  aria-label="Sections"
+                >
+                  {MAIN_NAV_LINKS.map(({ to, label }) => (
+                    <Link
+                      key={to}
+                      to={to}
+                      className="text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </nav>
               </div>
 
               {/* Main headline */}

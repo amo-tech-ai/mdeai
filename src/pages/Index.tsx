@@ -1,14 +1,14 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Home, Utensils, Calendar, Car, LogOut } from "lucide-react";
+import { ArrowRight, Home, Utensils, Calendar, Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { categories } from "@/lib/mockData";
 import { PlaceCard } from "@/components/places/PlaceCard";
-import { useAuth } from "@/hooks/useAuth";
 import { HeroSection } from "@/components/home/HeroSection";
 import { GetInspiredSlider } from "@/components/home/GetInspiredSlider";
 import { AIFeaturesSection } from "@/components/home/AIFeaturesSection";
 import { useFeaturedPlaces } from "@/hooks/useFeaturedPlaces";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SiteHeader } from "@/components/layout/SiteHeader";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 
 const categoryIcons = {
@@ -20,56 +20,13 @@ const categoryIcons = {
 
 export default function Index() {
   const { data: featuredPlaces, isLoading: placesLoading } = useFeaturedPlaces(4);
-  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md">
-            <BrandLogo variant="nav" />
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
-              Home
-            </Link>
-            <Link to="/concierge" className="text-muted-foreground hover:text-foreground transition-colors">
-              Concierge
-            </Link>
-            <Link to="/events" className="text-muted-foreground hover:text-foreground transition-colors">
-              Events
-            </Link>
-            <Link to="/apartments" className="text-muted-foreground hover:text-foreground transition-colors">
-              Real Estate
-            </Link>
-            <Link to="/explore" className="text-muted-foreground hover:text-foreground transition-colors">
-              Itinerary
-            </Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            {user ? (
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-sm hidden sm:inline">
-                  {user.email?.split("@")[0]}
-                </span>
-                <Button variant="ghost" size="sm" onClick={signOut}>
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
-              <Link to="/login">
-                <Button size="sm" className="rounded-full">
-                  Sign In
-                </Button>
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
-      {/* Spacer for fixed header */}
-      <div className="h-[72px]" />
+      {/* Spacer for fixed header (matches logo + py-4) */}
+      <div className="h-[88px] sm:h-[96px] md:h-[104px]" />
 
       {/* Hero Section */}
       <HeroSection />
@@ -185,61 +142,115 @@ export default function Index() {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 bg-foreground text-background">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
+      <footer className="bg-foreground text-background py-14 md:py-16">
+        <div className="container mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-10 md:gap-x-10 lg:gap-x-12 mb-12 items-start">
             {/* Brand */}
-            <div className="col-span-2 md:col-span-1">
-              <div className="mb-4">
-                <BrandLogo variant="footer" />
-              </div>
-              <p className="text-sm text-muted opacity-80">
+            <div className="col-span-2 md:col-span-1 space-y-4 max-w-sm md:max-w-none">
+              <BrandLogo variant="footer" />
+              <p className="text-sm leading-relaxed text-background/70">
                 Your AI-powered guide to the City of Eternal Spring.
               </p>
             </div>
 
             {/* Explore */}
-            <div>
-              <h4 className="font-semibold mb-4">Explore</h4>
-              <ul className="space-y-2 text-sm opacity-80">
-                <li><Link to="/apartments" className="hover:opacity-100 transition-opacity">Apartments</Link></li>
-                <li><Link to="/restaurants" className="hover:opacity-100 transition-opacity">Restaurants</Link></li>
-                <li><Link to="/events" className="hover:opacity-100 transition-opacity">Events</Link></li>
-                <li><Link to="/cars" className="hover:opacity-100 transition-opacity">Car Rentals</Link></li>
+            <div className="min-w-0">
+              <p className="font-sans text-xs font-semibold uppercase tracking-wider text-background/90 mb-4">
+                Explore
+              </p>
+              <ul className="space-y-2.5 text-sm text-background/70">
+                <li>
+                  <Link to="/apartments" className="hover:text-background transition-colors">
+                    Apartments
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/restaurants" className="hover:text-background transition-colors">
+                    Restaurants
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/events" className="hover:text-background transition-colors">
+                    Events
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/cars" className="hover:text-background transition-colors">
+                    Car Rentals
+                  </Link>
+                </li>
               </ul>
             </div>
 
             {/* Features */}
-            <div>
-              <h4 className="font-semibold mb-4">Features</h4>
-              <ul className="space-y-2 text-sm opacity-80">
-                <li><Link to="/concierge" className="hover:opacity-100 transition-opacity">AI Concierge</Link></li>
-                <li><Link to="/trips" className="hover:opacity-100 transition-opacity">Trip Planning</Link></li>
-                <li><Link to="/bookings" className="hover:opacity-100 transition-opacity">Bookings</Link></li>
-                <li><Link to="/saved" className="hover:opacity-100 transition-opacity">Saved Places</Link></li>
+            <div className="min-w-0">
+              <p className="font-sans text-xs font-semibold uppercase tracking-wider text-background/90 mb-4">
+                Features
+              </p>
+              <ul className="space-y-2.5 text-sm text-background/70">
+                <li>
+                  <Link to="/concierge" className="hover:text-background transition-colors">
+                    AI Concierge
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/trips" className="hover:text-background transition-colors">
+                    Trip Planning
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/bookings" className="hover:text-background transition-colors">
+                    Bookings
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/saved" className="hover:text-background transition-colors">
+                    Saved Places
+                  </Link>
+                </li>
               </ul>
             </div>
 
             {/* Account */}
-            <div>
-              <h4 className="font-semibold mb-4">Account</h4>
-              <ul className="space-y-2 text-sm opacity-80">
-                <li><Link to="/login" className="hover:opacity-100 transition-opacity">Sign In</Link></li>
-                <li><Link to="/signup" className="hover:opacity-100 transition-opacity">Create Account</Link></li>
-                <li><Link to="/onboarding" className="hover:opacity-100 transition-opacity">Get Started</Link></li>
+            <div className="min-w-0">
+              <p className="font-sans text-xs font-semibold uppercase tracking-wider text-background/90 mb-4">
+                Account
+              </p>
+              <ul className="space-y-2.5 text-sm text-background/70">
+                <li>
+                  <Link to="/login" className="hover:text-background transition-colors">
+                    Sign In
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/signup" className="hover:text-background transition-colors">
+                    Create Account
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/onboarding" className="hover:text-background transition-colors">
+                    Get Started
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-8 border-t border-background/20 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm opacity-60">
-              © {new Date().getFullYear()} mdeai.co. Made in the City of Eternal Spring.
-            </p>
-            <div className="flex items-center gap-4 text-sm opacity-60">
-              <Link to="/how-it-works" className="hover:opacity-100">How It Works</Link>
-              <Link to="/pricing" className="hover:opacity-100">Pricing</Link>
-              <Link to="/privacy" className="hover:opacity-100">Privacy</Link>
-              <Link to="/terms" className="hover:opacity-100">Terms</Link>
+          <div className="pt-10 border-t border-background/15 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm text-background/55">
+            <p>© {new Date().getFullYear()} mdeai.co. Made in the City of Eternal Spring.</p>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <Link to="/how-it-works" className="hover:text-background transition-colors">
+                How It Works
+              </Link>
+              <Link to="/pricing" className="hover:text-background transition-colors">
+                Pricing
+              </Link>
+              <Link to="/privacy" className="hover:text-background transition-colors">
+                Privacy
+              </Link>
+              <Link to="/terms" className="hover:text-background transition-colors">
+                Terms
+              </Link>
             </div>
           </div>
         </div>

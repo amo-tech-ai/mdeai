@@ -60,7 +60,7 @@ export function OnboardingLayout({
         {/* LEFT PANEL: Context */}
         <aside className="border-r border-border bg-secondary/30 p-8 flex flex-col">
           <div className="mb-12 space-y-3">
-            <BrandLogo variant="sidebar" className="max-w-[220px]" />
+            <BrandLogo variant="sidebar" className="max-w-[300px]" />
             <p className="text-sm text-muted-foreground">Your personal concierge</p>
           </div>
 
