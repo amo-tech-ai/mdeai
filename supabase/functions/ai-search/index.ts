@@ -58,9 +58,9 @@ async function extractSearchParams(query: string): Promise<{
   eventType: string | null;
   vehicleType: string | null;
 }> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
   
-  if (!LOVABLE_API_KEY) {
+  if (!GEMINI_API_KEY) {
     // Fallback to simple extraction
     return {
       keywords: query.toLowerCase().split(/\s+/).filter(w => w.length > 2),
@@ -74,14 +74,14 @@ async function extractSearchParams(query: string): Promise<{
   }
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "system",
@@ -301,9 +301,9 @@ async function searchEvents(
 
 // Generate AI summary of results
 async function generateSummary(query: string, results: SearchResult[]): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
   
-  if (!LOVABLE_API_KEY || results.length === 0) {
+  if (!GEMINI_API_KEY || results.length === 0) {
     return results.length === 0 
       ? "No results found for your search. Try broadening your criteria."
       : `Found ${results.length} results matching your search.`;
@@ -314,14 +314,14 @@ async function generateSummary(query: string, results: SearchResult[]): Promise<
       `- ${r.title} (${r.type}): ${r.price ? `$${r.price}` : "Price varies"}, Rating: ${r.rating || "N/A"}`
     ).join("\n");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "system",

@@ -107,9 +107,9 @@ RULES:
 6. Default currency to USD unless they mention pesos`;
 
 async function runIntakeAgent(messages: Message[]): Promise<IntakeResult> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("LOVABLE_API_KEY not configured");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY not configured");
     // Return fallback questions
     return {
       filter_json: null,
@@ -129,14 +129,14 @@ async function runIntakeAgent(messages: Message[]): Promise<IntakeResult> {
   ];
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-preview",
+        model: "gemini-3.1-pro-preview",
         messages: aiMessages,
         tools: [
           {

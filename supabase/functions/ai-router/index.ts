@@ -144,7 +144,7 @@ async function classifyWithAI(
   conversationHistory: Array<{ role: string; content: string }> = [],
   userContext?: RouterInput['userContext']
 ): Promise<RouterOutput> {
-  const AI_GATEWAY_URL = Deno.env.get("AI_GATEWAY_URL") || "https://ai-gateway.lovable.dev";
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 
   const intentList = Object.entries(INTENT_CATEGORIES)
@@ -176,14 +176,14 @@ Be precise. If the user wants to FIND something, use discovery intents. If they 
   }));
 
   try {
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${SUPABASE_URL}`,
+        "Authorization": `Bearer ${GEMINI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "anthropic/claude-sonnet-4-20250514",
+        model: "gemini-3.1-flash-lite-preview",
         messages: [
           { role: "system", content: systemPrompt },
           ...recentHistory,

@@ -719,9 +719,9 @@ serve(async (req) => {
     const { messages, tab = "concierge", conversationId, activeTripContext } = await req.json();
     const authHeader = req.headers.get("Authorization");
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     // Initialize Supabase client
@@ -740,14 +740,14 @@ serve(async (req) => {
     console.log(`AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || 'anonymous'}`);
 
     // First call: Let AI decide if it needs to use tools
-    const initialResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const initialResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "gemini-3-flash-preview",
         messages: aiMessages,
         tools: tools,
         tool_choice: "auto",
@@ -807,14 +807,14 @@ serve(async (req) => {
         ...toolResults,
       ];
 
-      const finalResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const finalResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "gemini-3-flash-preview",
           messages: messagesWithTools,
           stream: true,
           temperature: 0.7,
@@ -839,14 +839,14 @@ serve(async (req) => {
 
     // No tool calls needed - stream a simple response
     // Re-request with streaming enabled
-    const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const streamResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "gemini-3-flash-preview",
         messages: aiMessages,
         stream: true,
         temperature: 0.7,

@@ -109,10 +109,10 @@ async function generateItinerary(
   request: TripPlanRequest,
   listings: Awaited<ReturnType<typeof fetchListingsContext>>
 ): Promise<TripPlanResponse> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
   
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY is not configured");
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured");
   }
 
   const startDate = new Date(request.startDate);
@@ -182,14 +182,14 @@ Generate a JSON response with this EXACT structure:
 
 Include 3-5 activities per day. Use REAL restaurant names from the list when suggesting meals. Match activities to their interests. Be specific with times.`;
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${GEMINI_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-pro-preview",
+      model: "gemini-3.1-pro-preview",
       messages: [
         {
           role: "system",

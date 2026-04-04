@@ -4,9 +4,9 @@
 
 **mdeai.co** is an AI-powered marketplace connecting travelers and locals to premium coffee, luxury stays, and experiences in Medellin, Colombia. It's a "Digital Concierge" vendor marketplace with AI discovery, automated payouts, and zero-friction purchasing.
 
-**Status:** ~88% complete MVP frontend. Commerce layer (Shopify headless + Gadget.dev) not yet integrated. Not yet deployed to production domain.
+**Status:** 95%+ complete. 25+ features working with real Supabase data. Commerce layer (Shopify + Gadget) integrated. AI chat fully wired (6 edge functions, 7 agents).
 
-**Website:** https://www.mdeai.co/ (currently placeholder — app not deployed)
+**Website:** https://www.mdeai.co/ (live on Vercel: medell-n-connect.vercel.app)
 
 ## Tech Stack
 
@@ -252,7 +252,8 @@ GADGET_API_KEY                       # Gadget public key
 GADGET_API_SECRET                    # Gadget secret (CRITICAL — never commit)
 ```
 
-Edge functions use additional secrets (ANTHROPIC_API_KEY, SUPABASE_SERVICE_ROLE_KEY, etc.) configured in Supabase dashboard.
+Edge function secrets configured in Supabase dashboard:
+`GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `INFOBIP_API_KEY`, `INFOBIP_BASE_URL`, `INFOBIP_PHONE_NUMBER`
 
 ## Commerce Tooling
 
@@ -266,30 +267,71 @@ Edge functions use additional secrets (ANTHROPIC_API_KEY, SUPABASE_SERVICE_ROLE_
 ### Shopify App Location
 The Shopify React Router app lives at `~/mdeai-development/` (separate repo from this one). It connects to Gadget at `mdeai--development.gadget.app`.
 
-## Phase 1 Priorities (from PRD)
+## AI Models (Edge Functions)
 
-The next major milestone is commerce integration:
-1. Connect Shopify headless dev store via Gadget.dev
-2. Build `/coffee` route displaying products from Gadget
-3. Cart via Storefront API mutations
-4. Checkout redirect to Shopify hosted payment
+All edge functions call Google Gemini directly via OpenAI-compatible endpoint:
+`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+
+| Edge Function | Model | Purpose |
+|--------------|-------|---------|
+| ai-chat (x3 calls) | `gemini-3-flash-preview` | Main conversational AI |
+| ai-search (x2) | `gemini-3-flash-preview` | Semantic search parsing |
+| ai-router | `gemini-3.1-flash-lite-preview` | Intent classification (cheapest) |
+| ai-trip-planner | `gemini-3.1-pro-preview` | Complex trip generation |
+| ai-optimize-route | `gemini-3-flash-preview` | Route optimization |
+| rentals | `gemini-3.1-pro-preview` | Rental intake conversation |
+
+Auth: `GEMINI_API_KEY` secret in Supabase dashboard.
+
+## .claude/ Architecture
+
+### Rules (`.claude/rules/`)
+- `style-guide.md` — TypeScript, React, file naming, imports, styling
+- `supabase-patterns.md` — RLS, client usage, schema, security
+- `edge-function-patterns.md` — Request lifecycle, auth, validation, AI logging
+- `ai-interaction-patterns.md` — Propose-only, intent router, chat, embeddings
+
+### Commands (`.claude/commands/`)
+- `/process-task [ID|description|latest]` — Execute a task from backlog
+- `/deploy-check [quick|full]` — Pre-deployment verification checklist
+
+### Skills (`.claude/skills/`)
+- `mdeai-freshness` — Triggers on: freshness, roasted, badge, coffee age
+- `mdeai-commerce` — Triggers on: shopify, gadget, cart, checkout, buy, order
+- `mdeai-three-panel` — Triggers on: panel, layout, sidebar, responsive
+
+### Agents (`.claude/agents/`)
+- `security-auditor` — Scans for exposed secrets, missing RLS, auth bypasses (haiku)
+- `performance-reviewer` — Checks re-renders, query efficiency, bundle size (haiku)
+
+### Installed Skills (`.agents/skills/`)
+- `gadget-best-practices` — Gadget models, actions, routes, Shopify integration
+- `shopify-development` — GraphQL Admin API, CLI, Polaris, Liquid
+- `shopify-apps` — Modern Shopify app template with React Router
+- `shopify-hydrogen` — Hydrogen + Oxygen storefront
+- `shopify-app-deployment` — Deployment strategies for Shopify apps
+
+## Phase 1 Priorities
+
+Commerce integration (IN PROGRESS):
+1. ~~Connect Shopify headless dev store via Gadget.dev~~ DONE
+2. ~~Build `/coffee` route displaying products from Gadget~~ DONE
+3. ~~Cart via Storefront API mutations~~ DONE (useShopifyCart hook)
+4. Test full checkout flow (needs test products in Shopify)
 5. Extend `ai-chat` to search real Shopify products
-6. Deploy to mdeai.co via Vercel
-
-**Not in Phase 1:** Multi-vendor payouts, WhatsApp, vendor self-registration, geofencing, courier dispatch.
+6. ~~Deploy to mdeai.co via Vercel~~ DONE (live at www.mdeai.co)
 
 ## Known Issues
 
-- Google Maps API key is empty (`VITE_GOOGLE_MAPS_API_KEY=""`) — map features won't work
-- Admin routes lack proper admin auth guards (uses `useAdminAuth` hook but needs audit)
+- Admin routes lack proper admin auth guards (useAdminAuth hook needs audit)
 - No e2e tests written yet (Playwright configured but empty)
 - Unit test coverage is minimal
-- Commerce layer not yet integrated into the React frontend — Shopify app scaffolded at `~/mdeai-development/` but `/coffee` route not built yet
 - `bun.lockb` and `package-lock.json` both present — pick one package manager
-- Node version mismatch: nvm has v25.8.2 active but ggt requires >=22.0.0 (compatible, but pin in `.nvmrc`)
+- Need test coffee products in Shopify dev store + Gadget sync
 
 ## Git Workflow
 
 - Branch from `main` for features
 - Run `npm run lint && npm run build` before pushing
-- Keep commits focused and descriptive
+- Repo: github.com/amo-tech-ai/medell-n-connect
+- Vercel auto-deploys on push to main
