@@ -2,7 +2,16 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripContext } from '@/context/TripContext';
-import { ChatMessage, Conversation, ChatTab, ChatAction, tabToAgentType } from '@/types/chat';
+import {
+  ChatMessage,
+  Conversation,
+  ChatTab,
+  ChatAction,
+  ChatContext,
+  EMPTY_CHAT_CONTEXT,
+  hasChatContext,
+  tabToAgentType,
+} from '@/types/chat';
 import type { ReasoningPhase } from '@/components/chat/ChatReasoningTrace';
 import { useAnonSession } from './useAnonSession';
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
@@ -32,6 +41,13 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
   // Reasoning-trace phases streamed from edge function SSE sidecar events.
   // Drives the "Thought for Ns" collapsible — cleared on every new send.
   const [reasoningPhases, setReasoningPhases] = useState<ReasoningPhase[]>([]);
+  // Persistent session context — four chips (neighborhood, dates, travelers,
+  // budget) that travel with the conversation. Authenticated users mirror
+  // this to conversations.session_data.chat_context; anon visitors keep it
+  // in-memory only until they sign in. Rendered as ChatContextChips above
+  // the message list; flows into every tool call via the ai-chat request
+  // body so Gemini inherits chip values without the user re-typing them.
+  const [chatContext, setChatContext] = useState<ChatContext>(EMPTY_CHAT_CONTEXT);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFailedMessageRef = useRef<string | null>(null);
 
@@ -137,8 +153,51 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
   // Select a conversation
   const selectConversation = useCallback(async (conversation: Conversation) => {
     setCurrentConversation(conversation);
+    // Hydrate chips from the conversation's persisted session_data. Missing
+    // or malformed shapes fall back to an empty context so the chip bar
+    // never renders stale junk from an older schema.
+    const persisted = (conversation.session_data?.chat_context ?? null) as ChatContext | null;
+    setChatContext(persisted && typeof persisted === 'object' ? { ...EMPTY_CHAT_CONTEXT, ...persisted } : EMPTY_CHAT_CONTEXT);
     await fetchMessages(conversation.id);
   }, [fetchMessages]);
+
+  // Update chips + persist to conversations.session_data.chat_context.
+  // Authenticated + existing conversation → write-through to Postgres.
+  // Anon or no-conversation-yet → in-memory only; will be written on the
+  // first sendMessage() that creates the DB row.
+  const updateChatContext = useCallback(
+    (next: ChatContext) => {
+      setChatContext(next);
+      if (!user || !currentConversation) return;
+      // Fire-and-forget — failure to persist chip state should never block
+      // the chat flow. We keep the in-memory copy authoritative for the
+      // current session.
+      void supabase
+        .from('conversations')
+        .update({
+          session_data: {
+            ...(currentConversation.session_data ?? {}),
+            chat_context: next,
+          },
+        })
+        .eq('id', currentConversation.id)
+        .then(({ error: updErr }) => {
+          if (updErr) {
+            console.error('Failed to persist chat_context to session_data:', updErr);
+          }
+        });
+      // Mirror into local state so repeated updates send the latest shape
+      // (not the stale one loaded at conversation-open time).
+      setCurrentConversation({
+        ...currentConversation,
+        session_data: {
+          ...(currentConversation.session_data ?? {}),
+          chat_context: next,
+        },
+      });
+    },
+    [user, currentConversation],
+  );
 
   // Send a message with streaming. Supports both authenticated users
   // (DB-persisted conversation + messages) and anonymous visitors
@@ -164,6 +223,26 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
       if (!conversation) {
         conversation = await createConversation(content.slice(0, 50));
         if (!conversation) return;
+        // Carry the pre-conversation chips onto the brand-new DB row so a
+        // user who set chips on the welcome screen doesn't lose them when
+        // their first message creates the conversation.
+        if (hasChatContext(chatContext)) {
+          const { error: seedErr } = await supabase
+            .from('conversations')
+            .update({
+              session_data: { chat_context: chatContext },
+            })
+            .eq('id', conversation.id);
+          if (seedErr) {
+            console.error('Failed to seed session_data on new conversation:', seedErr);
+          } else {
+            conversation = {
+              ...conversation,
+              session_data: { chat_context: chatContext },
+            };
+            setCurrentConversation(conversation);
+          }
+        }
       }
     } else {
       // Anon path: use (or fabricate) a client-only conversation identity.
@@ -278,6 +357,10 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
             end_date: activeTrip.end_date,
             destination: activeTrip.destination,
           } : null,
+          // Persistent chips (neighborhood · dates · travelers · budget).
+          // Sent only when at least one chip is set so the payload stays
+          // small for empty-context turns.
+          sessionData: hasChatContext(chatContext) ? chatContext : null,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -434,7 +517,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [user, anonSessionId, currentConversation, messages, activeTab, activeTrip, createConversation, options, setCurrentConversation]);
+  }, [user, anonSessionId, currentConversation, messages, activeTab, activeTrip, createConversation, options, setCurrentConversation, chatContext]);
 
   // Cancel streaming
   const cancelStream = useCallback(() => {
@@ -489,6 +572,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     error,
     pendingActions,
     reasoningPhases,
+    chatContext,
     fetchConversations,
     createConversation,
     selectConversation,
@@ -500,5 +584,6 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     setMessages,
     setPendingActions,
     setReasoningPhases,
+    updateChatContext,
   };
 }

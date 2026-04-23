@@ -3,6 +3,7 @@ import { Sparkles, DollarSign, Heart, MapPin, Calendar } from 'lucide-react';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
 import { ChatMap } from './ChatMap';
+import { ChatContextChips } from './ChatContextChips';
 import { EmailGateModal } from './EmailGateModal';
 import { LeftPanel } from '@/components/layout/LeftPanel';
 import { MobileNav } from '@/components/layout/MobileNav';
@@ -82,11 +83,13 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     error,
     pendingActions,
     reasoningPhases,
+    chatContext,
     fetchConversations,
     sendMessage,
     cancelStream,
     retryLastMessage,
     setPendingActions,
+    updateChatContext,
   } = useChat(activeTab, {
     onAnonLimitExceeded: (retry) => {
       setEmailGateRetry(retry);
@@ -137,6 +140,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
           <LeftPanel />
         </div>
         <main className="flex-1 flex flex-col min-w-0">
+          <ChatContextChips value={chatContext} onChange={updateChatContext} />
           <div className="flex-1 min-h-0 overflow-hidden">
             {messages.length === 0 ? (
               <WelcomeState onQuery={sendMessage} />
@@ -176,6 +180,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
           <LeftPanel />
         </div>
         <main className="flex-1 flex flex-col min-w-0">
+          <ChatContextChips value={chatContext} onChange={updateChatContext} />
           <div className="flex-1 min-h-0 overflow-hidden">
             {messages.length === 0 ? (
               <WelcomeState onQuery={sendMessage} />
@@ -207,6 +212,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
       {/* Mobile: single column, chat only (map toggle is a follow-up) */}
       <div className="md:hidden flex flex-col min-h-screen pb-20">
         <main className="flex-1 flex flex-col min-w-0">
+          <ChatContextChips value={chatContext} onChange={updateChatContext} />
           <div className="flex-1 min-h-0 overflow-hidden">
             {messages.length === 0 ? (
               <WelcomeState onQuery={sendMessage} />

@@ -65,6 +65,31 @@ function phaseNarrationFor(
 
 // Strict caps limit prompt-injection surface and prevent token-burn attacks.
 // Previous 500KB x 50 = 25MB was absurdly permissive.
+//
+// sessionData (chips): narrow jsonb mirrored from
+// conversations.session_data.chat_context. Strictly-typed so client drift
+// can't inject arbitrary keys into the system prompt.
+const sessionDataSchema = z
+  .object({
+    neighborhood: z.string().trim().min(1).max(80).nullable().optional(),
+    dates: z
+      .object({
+        start: z.string().trim().min(1).max(20).nullable().optional(),
+        end: z.string().trim().min(1).max(20).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+    travelers: z.number().int().min(1).max(16).nullable().optional(),
+    budget: z
+      .object({
+        min: z.number().min(0).max(100_000).nullable().optional(),
+        max: z.number().min(0).max(100_000).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
 const chatBodySchema = z.object({
   messages: z.array(
     z.object({
@@ -75,7 +100,38 @@ const chatBodySchema = z.object({
   tab: z.enum(["concierge", "trips", "explore", "bookings"]).optional().default("concierge"),
   conversationId: z.string().uuid().optional().nullable(),
   activeTripContext: z.record(z.unknown()).optional().nullable(),
+  sessionData: sessionDataSchema.nullable().optional(),
 });
+
+type ChatSessionData = z.infer<typeof sessionDataSchema>;
+
+/**
+ * Format the sessionData chip bag into a compact system-prompt block.
+ * Returns "" when nothing is set so the prompt isn't polluted with
+ * "current filters: none". Every chip key is echoed exactly so Gemini
+ * can quote them back in the "What I Searched For" section verbatim.
+ */
+function sessionContextBlock(data: ChatSessionData | null | undefined): string {
+  if (!data) return "";
+  const rows: string[] = [];
+  if (data.neighborhood) rows.push(`- Neighborhood: ${data.neighborhood}`);
+  if (data.dates && (data.dates.start || data.dates.end)) {
+    const s = data.dates.start || "?";
+    const e = data.dates.end || "?";
+    rows.push(`- Dates: ${s} → ${e}`);
+  }
+  if (data.travelers != null) rows.push(`- Travelers: ${data.travelers}`);
+  if (data.budget && (data.budget.min != null || data.budget.max != null)) {
+    const mn = data.budget.min != null ? `$${data.budget.min}` : "any";
+    const mx = data.budget.max != null ? `$${data.budget.max}` : "any";
+    rows.push(`- Budget (USD/mo): ${mn}–${mx}`);
+  }
+  if (rows.length === 0) return "";
+  return `\n\n🎯 CURRENT SEARCH CONTEXT (from chips):
+${rows.join("\n")}
+
+When calling rentals_search / search_apartments, inherit these values unless the user's latest message overrides them. Map chips → tool params: neighborhood → \`neighborhood\` (or \`neighborhoods: [neighborhood]\`); budget.min/max → \`min_price\`/\`max_price\` (or \`budget_min\`/\`budget_max\`); travelers → reasonable bedroom default (1–2 → 1BR, 3–4 → 2BR, ≥5 → 3BR+). Echo these back in the "What I Searched For" section so the user sees their chips were used.`;
+}
 
 /**
  * Tool registry — one entry per capability. Add a new vertical here with
@@ -197,7 +253,12 @@ const TOOLS: Record<string, ToolExecutor> = {
 const tools = toolsArrayFromRegistry(TOOLS);
 
 // System prompts for each tab/agent type - enhanced with tool awareness
-const getSystemPrompt = (tab: string, tripContext?: { id: string; title: string; start_date: string; end_date: string; destination?: string } | null): string => {
+const getSystemPrompt = (
+  tab: string,
+  tripContext?: { id: string; title: string; start_date: string; end_date: string; destination?: string } | null,
+  sessionData?: ChatSessionData | null,
+): string => {
+  const sessionBlock = sessionContextBlock(sessionData);
   const tripInfo = tripContext 
     ? `\n\n🎯 ACTIVE TRIP CONTEXT:
 The user is currently planning/viewing: "${tripContext.title}"
@@ -288,7 +349,7 @@ IMPORTANT: Always use create_booking_preview and WAIT for explicit user confirma
 
 7. If the user didn't provide dates, travelers, or budget, pick reasonable defaults (current month, 1 traveler, any budget) and disclose them in "What I Searched For". Never refuse to search for missing info — assume and disclose.`;
 
-  return (basePrompts[tab] || basePrompts.concierge) + universalGuardrails;
+  return (basePrompts[tab] || basePrompts.concierge) + sessionBlock + universalGuardrails;
 };
 
 // Type alias for Supabase client (uses shared helpers from _shared/supabase-clients.ts)
@@ -710,7 +771,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { messages, tab, conversationId, activeTripContext } = bodyParsed.data;
+  const { messages, tab, conversationId, activeTripContext, sessionData } = bodyParsed.data;
 
   const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
   if (!GEMINI_API_KEY) {
@@ -718,7 +779,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const systemPrompt = getSystemPrompt(tab, activeTripContext as Parameters<typeof getSystemPrompt>[1]);
+    const systemPrompt = getSystemPrompt(
+      tab,
+      activeTripContext as Parameters<typeof getSystemPrompt>[1],
+      sessionData ?? null,
+    );
 
     const aiMessages = [
       { role: "system" as const, content: systemPrompt },

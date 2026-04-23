@@ -68,13 +68,63 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>;
 }
 
+// ─── Session context chips ───────────────────────────────────────────────
+// Persistent filters that travel with the conversation (neighborhood, dates,
+// travelers, budget). Rendered as chips above the message list; edited
+// values flow into the next tool call via the `sessionData` field on the
+// ai-chat request. Authenticated users get these mirrored to
+// `public.conversations.session_data` jsonb on every change. Anon users
+// keep them in memory only until they sign in.
+
+export interface ChatContextDates {
+  /** ISO 8601 date (YYYY-MM-DD). Null = not set. */
+  start?: string | null;
+  /** ISO 8601 date (YYYY-MM-DD). Null = not set. */
+  end?: string | null;
+}
+
+export interface ChatContextBudget {
+  /** Monthly USD floor. Null = not set. */
+  min?: number | null;
+  /** Monthly USD ceiling. Null = not set. */
+  max?: number | null;
+}
+
+export interface ChatContext {
+  neighborhood?: string | null;
+  dates?: ChatContextDates | null;
+  travelers?: number | null;
+  budget?: ChatContextBudget | null;
+}
+
+export const EMPTY_CHAT_CONTEXT: ChatContext = {
+  neighborhood: null,
+  dates: null,
+  travelers: null,
+  budget: null,
+};
+
+/**
+ * True when any chip has a user-supplied value. Used to decide whether to
+ * persist to session_data and to include in the ai-chat request payload.
+ */
+export function hasChatContext(ctx: ChatContext | null | undefined): boolean {
+  if (!ctx) return false;
+  if (ctx.neighborhood && ctx.neighborhood.trim().length > 0) return true;
+  if (ctx.travelers != null) return true;
+  if (ctx.dates && (ctx.dates.start || ctx.dates.end)) return true;
+  if (ctx.budget && (ctx.budget.min != null || ctx.budget.max != null)) return true;
+  return false;
+}
+
 export interface Conversation {
   id: string;
   user_id: string;
   title: string;
   agent_type: string;
   status: 'active' | 'archived';
-  session_data?: Record<string, unknown>;
+  /** Persistent context chips — hydrated into ChatContext on load. */
+  session_data?: { chat_context?: ChatContext } & Record<string, unknown>;
   last_message_at?: string;
   message_count?: number;
   created_at: string;
