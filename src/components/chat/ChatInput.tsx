@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Send, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,12 +13,20 @@ interface ChatInputProps {
 
 export function ChatInput({ onSend, onCancel, isLoading, isStreaming, placeholder }: ChatInputProps) {
   const [input, setInput] = useState('');
+  // Ref-based guard against double-fires (Enter + click, rapid clicks).
+  // isLoading flips async; a ref is the only way to reject the second call synchronously.
+  const sendingRef = useRef(false);
+
+  // Release the guard when the parent finishes processing.
+  useEffect(() => {
+    if (!isLoading && !isStreaming) sendingRef.current = false;
+  }, [isLoading, isStreaming]);
 
   const handleSend = () => {
-    if (input.trim() && !isLoading) {
-      onSend(input.trim());
-      setInput('');
-    }
+    if (sendingRef.current || isLoading || !input.trim()) return;
+    sendingRef.current = true;
+    onSend(input.trim());
+    setInput('');
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

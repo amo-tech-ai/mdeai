@@ -2,13 +2,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Provider as GadgetProvider } from "@gadgetinc/react";
 import { gadgetApi } from "@/integrations/gadget/client";
 import { AuthProvider } from "@/hooks/useAuth";
 import { TripProvider } from "@/context/TripContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
+import Home from "./pages/Home";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
@@ -56,6 +57,17 @@ import {
 
 const queryClient = new QueryClient();
 
+/**
+ * Render the FloatingChatWidget on every route EXCEPT the chat-canvas pages.
+ * Canvas pages (`/` and future `/c/:id`) already have chat as their primary
+ * surface — a floating widget would be redundant and confusing.
+ */
+function ConditionalFloatingChat() {
+  const { pathname } = useLocation();
+  if (pathname === "/" || pathname.startsWith("/c/")) return null;
+  return <FloatingChatWidget />;
+}
+
 const App = () => (
   <GadgetProvider api={gadgetApi}>
   <QueryClientProvider client={queryClient}>
@@ -66,7 +78,10 @@ const App = () => (
         <AuthProvider>
           <TripProvider>
           <Routes>
-            <Route path="/" element={<Index />} />
+            {/* Chat-as-app canvas — primary interaction surface */}
+            <Route path="/" element={<Home />} />
+            {/* Original marketing landing, still reachable */}
+            <Route path="/welcome" element={<Index />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
@@ -163,8 +178,8 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-            {/* Global Floating Chat Widget */}
-            <FloatingChatWidget />
+            {/* Floating widget only on non-chat routes; the canvas at `/` IS the chat. */}
+            <ConditionalFloatingChat />
           </TripProvider>
         </AuthProvider>
       </BrowserRouter>

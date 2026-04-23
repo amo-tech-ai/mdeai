@@ -2,32 +2,54 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripContext } from '@/context/TripContext';
-import { ChatMessage, Conversation, ChatTab, tabToAgentType } from '@/types/chat';
+import {
+  ChatMessage,
+  Conversation,
+  ChatTab,
+  ChatAction,
+  ChatContext,
+  EMPTY_CHAT_CONTEXT,
+  hasChatContext,
+  tabToAgentType,
+} from '@/types/chat';
+import type { ReasoningPhase } from '@/components/chat/ChatReasoningTrace';
+import { useAnonSession } from './useAnonSession';
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
-// Use environment variable with fallback for the Supabase URL
-const SUPABASE_URL = 'https://zkwcbyxiwklihegjhuql.supabase.co';
-export interface IntentResult {
-  intent: string;
-  targetAgent: ChatTab;
-  confidence: number;
-  entities: Record<string, unknown>;
-  suggestedResponse?: string;
-  requiresAuth?: boolean;
-  reasoning?: string;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+export interface UseChatOptions {
+  /** Called when an anon visitor exhausts their free quota (HTTP 402). */
+  onAnonLimitExceeded?: (retryAfterSeconds: number) => void;
 }
 
-export function useChat(activeTab: ChatTab) {
+export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
   const { user } = useAuth();
   const { activeTrip } = useTripContext();
+  const { anonSessionId } = useAnonSession();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [lastIntent, setLastIntent] = useState<IntentResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Structured actions emitted by tools (e.g. OPEN_RENTALS_RESULTS). The UI
+  // renders these as affordances (buttons) under the latest assistant message.
+  // Cleared on every new send.
+  const [pendingActions, setPendingActions] = useState<ChatAction[]>([]);
+  // Reasoning-trace phases streamed from edge function SSE sidecar events.
+  // Drives the "Thought for Ns" collapsible — cleared on every new send.
+  const [reasoningPhases, setReasoningPhases] = useState<ReasoningPhase[]>([]);
+  // Persistent session context — four chips (neighborhood, dates, travelers,
+  // budget) that travel with the conversation. Authenticated users mirror
+  // this to conversations.session_data.chat_context; anon visitors keep it
+  // in-memory only until they sign in. Rendered as ChatContextChips above
+  // the message list; flows into every tool call via the ai-chat request
+  // body so Gemini inherits chip values without the user re-typing them.
+  const [chatContext, setChatContext] = useState<ChatContext>(EMPTY_CHAT_CONTEXT);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFailedMessageRef = useRef<string | null>(null);
 
   // Realtime subscription handler for message updates
   const handleRealtimeEvent = useCallback((event: RealtimeEvent) => {
@@ -131,82 +153,151 @@ export function useChat(activeTab: ChatTab) {
   // Select a conversation
   const selectConversation = useCallback(async (conversation: Conversation) => {
     setCurrentConversation(conversation);
+    // Hydrate chips from the conversation's persisted session_data. Missing
+    // or malformed shapes fall back to an empty context so the chip bar
+    // never renders stale junk from an older schema.
+    const persisted = (conversation.session_data?.chat_context ?? null) as ChatContext | null;
+    setChatContext(persisted && typeof persisted === 'object' ? { ...EMPTY_CHAT_CONTEXT, ...persisted } : EMPTY_CHAT_CONTEXT);
     await fetchMessages(conversation.id);
   }, [fetchMessages]);
 
-  // Route message through AI Router for intent classification
-  const routeMessage = useCallback(async (content: string): Promise<IntentResult | null> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': session?.access_token 
-            ? `Bearer ${session.access_token}` 
-            : `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
-          message: content,
-          currentTab: activeTab,
-          conversationHistory: messages.slice(-6).map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          userContext: {
-            hasActiveTrip: !!activeTrip,
-            hasPendingBookings: false, // Could be enhanced later
-            currentPage: window.location.pathname,
+  // Update chips + persist to conversations.session_data.chat_context.
+  // Authenticated + existing conversation → write-through to Postgres.
+  // Anon or no-conversation-yet → in-memory only; will be written on the
+  // first sendMessage() that creates the DB row.
+  const updateChatContext = useCallback(
+    (next: ChatContext) => {
+      setChatContext(next);
+      if (!user || !currentConversation) return;
+      // Fire-and-forget — failure to persist chip state should never block
+      // the chat flow. We keep the in-memory copy authoritative for the
+      // current session.
+      void supabase
+        .from('conversations')
+        .update({
+          session_data: {
+            ...(currentConversation.session_data ?? {}),
+            chat_context: next,
           },
-        }),
+        })
+        .eq('id', currentConversation.id)
+        .then(({ error: updErr }) => {
+          if (updErr) {
+            console.error('Failed to persist chat_context to session_data:', updErr);
+          }
+        });
+      // Mirror into local state so repeated updates send the latest shape
+      // (not the stale one loaded at conversation-open time).
+      setCurrentConversation({
+        ...currentConversation,
+        session_data: {
+          ...(currentConversation.session_data ?? {}),
+          chat_context: next,
+        },
       });
+    },
+    [user, currentConversation],
+  );
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          setLastIntent(result.data);
-          return result.data as IntentResult;
+  // Send a message with streaming. Supports both authenticated users
+  // (DB-persisted conversation + messages) and anonymous visitors
+  // (in-memory only; server enforces a 3-message/24h quota via
+  // X-Anon-Session-Id header).
+  const sendMessage = useCallback(async (content: string) => {
+    if (!content.trim()) return;
+    if (!user && !anonSessionId) {
+      // Very first render before useAnonSession mounts. Soft-fail silently.
+      return;
+    }
+    setError(null);
+    // Clear previous turn's action affordances + reasoning trace —
+    // the next tool call will emit its own.
+    setPendingActions([]);
+    setReasoningPhases([]);
+
+    // Authenticated users get a DB-backed conversation. Anon visitors work
+    // in-memory only — conversation is a synthetic placeholder so the rest
+    // of the flow can key off conversation.id.
+    let conversation = currentConversation;
+    if (user) {
+      if (!conversation) {
+        conversation = await createConversation(content.slice(0, 50));
+        if (!conversation) return;
+        // Carry the pre-conversation chips onto the brand-new DB row so a
+        // user who set chips on the welcome screen doesn't lose them when
+        // their first message creates the conversation.
+        if (hasChatContext(chatContext)) {
+          const { error: seedErr } = await supabase
+            .from('conversations')
+            .update({
+              session_data: { chat_context: chatContext },
+            })
+            .eq('id', conversation.id);
+          if (seedErr) {
+            console.error('Failed to seed session_data on new conversation:', seedErr);
+          } else {
+            conversation = {
+              ...conversation,
+              session_data: { chat_context: chatContext },
+            };
+            setCurrentConversation(conversation);
+          }
         }
       }
-      return null;
-    } catch (error) {
-      console.error('Intent routing error:', error);
-      return null;
-    }
-  }, [activeTab, messages, activeTrip]);
-
-  // Send a message with streaming (now includes intent routing)
-  const sendMessage = useCallback(async (content: string) => {
-    if (!user || !content.trim()) return;
-
-    // Route the message first to classify intent (non-blocking)
-    routeMessage(content).catch(console.error);
-
-    // Create conversation if none exists
-    let conversation = currentConversation;
-    if (!conversation) {
-      conversation = await createConversation(content.slice(0, 50));
-      if (!conversation) return;
+    } else {
+      // Anon path: use (or fabricate) a client-only conversation identity.
+      if (!conversation) {
+        conversation = {
+          id: `anon-${anonSessionId}`,
+          user_id: 'anon',
+          title: content.slice(0, 50),
+          agent_type: tabToAgentType[activeTab],
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Conversation;
+        setCurrentConversation(conversation);
+      }
     }
 
-    // Add user message to UI immediately
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      conversation_id: conversation.id,
-      role: 'user',
-      content,
-      created_at: new Date().toISOString(),
-    };
+    // Authenticated users get a DB-backed message row (matches realtime
+    // broadcast UUIDs for clean dedup). Anon visitors skip DB — messages
+    // are in-memory only and disappear on refresh until the user signs in.
+    let userMessage: ChatMessage;
+    if (user) {
+      const { data: insertedRow, error: userInsertErr } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversation.id,
+          role: 'user',
+          content,
+        })
+        .select('id, created_at')
+        .single();
+
+      if (userInsertErr) {
+        console.error('Failed to save user message:', userInsertErr);
+        toast.error(userInsertErr.message || 'Failed to send message');
+        return;
+      }
+
+      userMessage = {
+        id: insertedRow?.id ?? crypto.randomUUID(),
+        conversation_id: conversation.id,
+        role: 'user',
+        content,
+        created_at: insertedRow?.created_at ?? new Date().toISOString(),
+      };
+    } else {
+      userMessage = {
+        id: crypto.randomUUID(),
+        conversation_id: conversation.id,
+        role: 'user',
+        content,
+        created_at: new Date().toISOString(),
+      };
+    }
     setMessages(prev => [...prev, userMessage]);
-
-    // Save user message to database
-    await supabase.from('messages').insert({
-      conversation_id: conversation.id,
-      role: 'user',
-      content,
-    });
 
     // Start streaming response
     setIsLoading(true);
@@ -236,20 +327,29 @@ export function useChat(activeTab: ChatTab) {
         ? `Bearer ${session.access_token}` 
         : `Bearer ${anonKey}`;
 
+      // Build the request headers. Anon visitors carry X-Anon-Session-Id so
+      // the server can enforce a per-session quota without requiring auth.
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+      };
+      if (!user && anonSessionId) {
+        headers['X-Anon-Session-Id'] = anonSessionId;
+      }
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader,
-        },
+        headers,
         body: JSON.stringify({
-          messages: [...messages, userMessage].map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
+          // Send only the current user message for anon (no prior context
+          // stored server-side). Authenticated users get full-history
+          // (server will load from DB in a future refactor; today we send
+          // client state, same as previous behavior).
+          messages: user
+            ? [...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
+            : [{ role: 'user', content }],
           tab: activeTab,
-          conversationId: conversation.id,
-          // Pass active trip context to AI
+          conversationId: user ? conversation.id : null,
           activeTripContext: activeTrip ? {
             id: activeTrip.id,
             title: activeTrip.title,
@@ -257,6 +357,10 @@ export function useChat(activeTab: ChatTab) {
             end_date: activeTrip.end_date,
             destination: activeTrip.destination,
           } : null,
+          // Persistent chips (neighborhood · dates · travelers · budget).
+          // Sent only when at least one chip is set so the payload stays
+          // small for empty-context turns.
+          sessionData: hasChatContext(chatContext) ? chatContext : null,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -266,11 +370,43 @@ export function useChat(activeTab: ChatTab) {
           toast.error('Rate limit exceeded. Please try again later.');
           throw new Error('Rate limit exceeded');
         }
+        // 402 with ANON_LIMIT_EXCEEDED code → trigger the email gate
+        // modal via callback. Other 402s (billing-style) still show toast.
         if (response.status === 402) {
+          try {
+            const j = (await response.clone().json()) as {
+              error?: { code?: string; retry_after_seconds?: number };
+            };
+            if (j?.error?.code === 'ANON_LIMIT_EXCEEDED') {
+              options?.onAnonLimitExceeded?.(j.error.retry_after_seconds ?? 0);
+              // Remove the optimistic user + assistant placeholders so the
+              // user's message isn't stuck as "in flight" in the transcript.
+              setMessages(prev =>
+                prev.filter(m => m.id !== userMessage.id && m.id !== assistantMessage.id),
+              );
+              return;
+            }
+          } catch {
+            /* fall through to generic */
+          }
           toast.error('AI credits exhausted. Please add credits to continue.');
           throw new Error('Payment required');
         }
-        throw new Error('Failed to get AI response');
+        let detail = 'Failed to get AI response';
+        try {
+          const j = (await response.json()) as {
+            error?: string | { code?: string; message?: string };
+          };
+          if (typeof j?.error === 'object' && j.error?.message) {
+            detail = String(j.error.message);
+          } else if (typeof j?.error === 'string') {
+            detail = j.error;
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+        toast.error(detail);
+        throw new Error(detail);
       }
 
       if (!response.body) throw new Error('No response body');
@@ -299,6 +435,19 @@ export function useChat(activeTab: ChatTab) {
 
           try {
             const parsed = JSON.parse(jsonStr);
+            // Structured sidecar from edge function: tool emitted action(s)
+            if (parsed && Array.isArray(parsed.mdeai_actions)) {
+              setPendingActions(prev => [...prev, ...(parsed.mdeai_actions as ChatAction[])]);
+            }
+            // Reasoning-trace phase event (handoff / thinking / ranking / etc)
+            if (parsed && typeof parsed.phase === 'string' && typeof parsed.message === 'string') {
+              setReasoningPhases(prev => [...prev, {
+                phase: parsed.phase,
+                agent_label: parsed.agent_label,
+                message: parsed.message,
+                ts: Date.now(),
+              }]);
+            }
             const deltaContent = parsed.choices?.[0]?.delta?.content;
             if (deltaContent) {
               assistantContent += deltaContent;
@@ -318,37 +467,57 @@ export function useChat(activeTab: ChatTab) {
         }
       }
 
-      // Save assistant message to database
-      await supabase.from('messages').insert({
-        conversation_id: conversation.id,
-        role: 'assistant',
-        content: assistantContent,
-        agent_name: tabToAgentType[activeTab],
-      });
+      // Fallback if the model produced no content (empty tool response, etc.)
+      // Never persist empty assistant rows — show a helpful message instead.
+      if (!assistantContent.trim()) {
+        const fallback = "I couldn't find results for that right now. Try rephrasing, or ask me about a specific neighborhood (El Poblado, Laureles, Envigado).";
+        assistantContent = fallback;
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessage.id ? { ...m, content: fallback } : m
+          )
+        );
+      }
 
-      // Update conversation
-      await supabase
+      // Save assistant message + update conversation metadata — authenticated
+      // only. Anon visitors keep history in-memory until they sign in.
+      if (user) {
+        const { error: insertErr } = await supabase.from('messages').insert({
+          conversation_id: conversation.id,
+          role: 'assistant',
+          content: assistantContent,
+          agent_name: tabToAgentType[activeTab],
+        });
+        if (insertErr) {
+          console.error('Failed to save assistant message:', insertErr);
+          toast.error('Message saved locally only — failed to persist to history');
+        }
+
+        await supabase
         .from('conversations')
         .update({
           last_message_at: new Date().toISOString(),
           message_count: (conversation.message_count || 0) + 2,
         })
         .eq('id', conversation.id);
+      }
 
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') {
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
         console.log('Request aborted');
       } else {
-        console.error('Chat error:', error);
-        toast.error('Failed to get response');
-        // Remove failed assistant message
+        console.error('Chat error:', err);
+        const msg = (err as Error).message || 'Failed to get response';
+        setError(msg);
+        lastFailedMessageRef.current = content;
+        // Remove the empty assistant placeholder so user sees the error inline
         setMessages(prev => prev.filter(m => m.id !== assistantMessage.id));
       }
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [user, currentConversation, messages, activeTab, activeTrip, createConversation]);
+  }, [user, anonSessionId, currentConversation, messages, activeTab, activeTrip, createConversation, options, setCurrentConversation, chatContext]);
 
   // Cancel streaming
   const cancelStream = useCallback(() => {
@@ -357,6 +526,23 @@ export function useChat(activeTab: ChatTab) {
       setIsStreaming(false);
     }
   }, []);
+
+  // Retry the last failed message
+  const retryLastMessage = useCallback(() => {
+    if (lastFailedMessageRef.current) {
+      const msg = lastFailedMessageRef.current;
+      lastFailedMessageRef.current = null;
+      setError(null);
+      // Remove the user's failed message so sendMessage re-adds it
+      setMessages(prev => {
+        const lastUserIdx = [...prev].reverse().findIndex(m => m.role === 'user');
+        if (lastUserIdx === -1) return prev;
+        const idx = prev.length - 1 - lastUserIdx;
+        return prev.slice(0, idx);
+      });
+      sendMessage(msg);
+    }
+  }, [sendMessage]);
 
   // Archive a conversation
   const archiveConversation = useCallback(async (conversationId: string) => {
@@ -383,15 +569,21 @@ export function useChat(activeTab: ChatTab) {
     currentConversation,
     isLoading,
     isStreaming,
-    lastIntent,
+    error,
+    pendingActions,
+    reasoningPhases,
+    chatContext,
     fetchConversations,
     createConversation,
     selectConversation,
     sendMessage,
-    routeMessage,
     cancelStream,
+    retryLastMessage,
     archiveConversation,
     setCurrentConversation,
     setMessages,
+    setPendingActions,
+    setReasoningPhases,
+    updateChatContext,
   };
 }

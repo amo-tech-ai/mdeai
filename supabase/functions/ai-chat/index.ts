@@ -1,298 +1,264 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { getCorsHeaders, errorBody, jsonResponse } from "../_shared/http.ts";
+import { allowRateDurable } from "../_shared/rate-limit.ts";
+import { insertAiRun, extractUsage } from "../_shared/ai-runs.ts";
+import { safeJsonParse } from "../_shared/json.ts";
+import { getUserClient, getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
+import { fetchGemini, fetchGeminiStream } from "../_shared/gemini.ts";
+import {
+  type ToolExecutor,
+  toolsArrayFromRegistry,
+  dispatchTool,
+} from "../_shared/tool-registry.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+/**
+ * Human-readable persona per tool, used in the reasoning-trace header.
+ * Mindtrip narrates "Handing off to our hotel agent…"; we do the same
+ * but as a lightweight theater layer over the tool-registry pattern —
+ * one LLM call under the hood, personas on the surface.
+ */
+const AGENT_LABELS: Record<string, string> = {
+  rentals_search: "Rentals Concierge",
+  rentals_intake: "Rentals Concierge",
+  search_apartments: "Rentals Concierge",
+  get_user_trips: "Trip Planner",
+  get_user_bookings: "Booking Assistant",
+  create_booking_preview: "Booking Assistant",
 };
 
-// Tool definitions for AI function calling
-const tools = [
-  // Rentals tools - integrated with rentals Edge Function
-  {
-    type: "function",
-    function: {
+/**
+ * Build a compact "I considered N of M…" phase event from a tool result.
+ * Returns null for tool results that don't fit the standard envelope
+ * (e.g. booking preview, user trips list).
+ */
+function phaseNarrationFor(
+  toolName: string,
+  result: unknown,
+  agentLabel: string,
+): Record<string, unknown> | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const r = result as Record<string, unknown>;
+  if (typeof r.total_count === "number") {
+    const total = r.total_count as number;
+    if (total === 0) {
+      return {
+        phase: "thinking",
+        agent_label: agentLabel,
+        message: "No listings matched those criteria — widening search…",
+      };
+    }
+    return {
+      phase: "thinking",
+      agent_label: agentLabel,
+      message: `Considering ${total} match${total === 1 ? "" : "es"} in the database…`,
+    };
+  }
+  if (r.error) {
+    return {
+      phase: "thinking",
+      agent_label: agentLabel,
+      message: `Tool returned an error: ${String(r.error).slice(0, 80)}`,
+    };
+  }
+  return null;
+}
+
+// Strict caps limit prompt-injection surface and prevent token-burn attacks.
+// Previous 500KB x 50 = 25MB was absurdly permissive.
+//
+// sessionData (chips): narrow jsonb mirrored from
+// conversations.session_data.chat_context. Strictly-typed so client drift
+// can't inject arbitrary keys into the system prompt.
+const sessionDataSchema = z
+  .object({
+    neighborhood: z.string().trim().min(1).max(80).nullable().optional(),
+    dates: z
+      .object({
+        start: z.string().trim().min(1).max(20).nullable().optional(),
+        end: z.string().trim().min(1).max(20).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+    travelers: z.number().int().min(1).max(16).nullable().optional(),
+    budget: z
+      .object({
+        min: z.number().min(0).max(100_000).nullable().optional(),
+        max: z.number().min(0).max(100_000).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
+const chatBodySchema = z.object({
+  messages: z.array(
+    z.object({
+      role: z.enum(["user", "assistant", "system", "tool"]),
+      content: z.string().min(1).max(8_000),
+    }),
+  ).min(1).max(20),
+  tab: z.enum(["concierge", "trips", "explore", "bookings"]).optional().default("concierge"),
+  conversationId: z.string().uuid().optional().nullable(),
+  activeTripContext: z.record(z.unknown()).optional().nullable(),
+  sessionData: sessionDataSchema.nullable().optional(),
+});
+
+type ChatSessionData = z.infer<typeof sessionDataSchema>;
+
+/**
+ * Format the sessionData chip bag into a compact system-prompt block.
+ * Returns "" when nothing is set so the prompt isn't polluted with
+ * "current filters: none". Every chip key is echoed exactly so Gemini
+ * can quote them back in the "What I Searched For" section verbatim.
+ */
+function sessionContextBlock(data: ChatSessionData | null | undefined): string {
+  if (!data) return "";
+  const rows: string[] = [];
+  if (data.neighborhood) rows.push(`- Neighborhood: ${data.neighborhood}`);
+  if (data.dates && (data.dates.start || data.dates.end)) {
+    const s = data.dates.start || "?";
+    const e = data.dates.end || "?";
+    rows.push(`- Dates: ${s} → ${e}`);
+  }
+  if (data.travelers != null) rows.push(`- Travelers: ${data.travelers}`);
+  if (data.budget && (data.budget.min != null || data.budget.max != null)) {
+    const mn = data.budget.min != null ? `$${data.budget.min}` : "any";
+    const mx = data.budget.max != null ? `$${data.budget.max}` : "any";
+    rows.push(`- Budget (USD/mo): ${mn}–${mx}`);
+  }
+  if (rows.length === 0) return "";
+  return `\n\n🎯 CURRENT SEARCH CONTEXT (from chips):
+${rows.join("\n")}
+
+When calling rentals_search / search_apartments, inherit these values unless the user's latest message overrides them. Map chips → tool params: neighborhood → \`neighborhood\` (or \`neighborhoods: [neighborhood]\`); budget.min/max → \`min_price\`/\`max_price\` (or \`budget_min\`/\`budget_max\`); travelers → reasonable bedroom default (1–2 → 1BR, 3–4 → 2BR, ≥5 → 3BR+). Echo these back in the "What I Searched For" section so the user sees their chips were used.`;
+}
+
+/**
+ * Tool registry — one entry per capability. Add a new vertical here with
+ * { definition, execute } and it shows up in Gemini's tool list and the
+ * dispatcher automatically. See tasks/CHAT-CENTRAL-PLAN.md §3.
+ *
+ * Executor functions are declared later in this file; TypeScript hoists
+ * function declarations so forward-references work.
+ */
+const TOOLS: Record<string, ToolExecutor> = {
+  rentals_search: {
+    definition: {
       name: "rentals_search",
       description: "Search for apartment rentals in Medellín. Use this when users want to find an apartment, rental, or housing. Returns listings with freshness verification, map pins, and available filters.",
       parameters: {
         type: "object",
         properties: {
-          neighborhoods: {
-            type: "array",
-            items: { type: "string" },
-            description: "Neighborhood names (e.g., ['El Poblado', 'Laureles', 'Envigado'])"
-          },
-          bedrooms_min: {
-            type: "integer",
-            description: "Minimum number of bedrooms (0 for studio)"
-          },
-          budget_min: {
-            type: "number",
-            description: "Minimum monthly price in USD"
-          },
-          budget_max: {
-            type: "number",
-            description: "Maximum monthly price in USD"
-          },
-          furnished: {
-            type: "boolean",
-            description: "Whether apartment should be furnished"
-          },
-          amenities: {
-            type: "array",
-            items: { type: "string" },
-            description: "Required amenities (e.g., ['wifi', 'parking', 'gym', 'pool', 'ac'])"
-          },
-          pets: {
-            type: "boolean",
-            description: "Whether pets are allowed"
-          },
-          verified_only: {
-            type: "boolean",
-            description: "Only show verified/active listings"
-          }
+          neighborhoods: { type: "array", items: { type: "string" }, description: "Neighborhood names (e.g., ['El Poblado', 'Laureles', 'Envigado'])" },
+          bedrooms_min: { type: "integer", description: "Minimum number of bedrooms (0 for studio)" },
+          budget_min: { type: "number", description: "Minimum monthly price in USD" },
+          budget_max: { type: "number", description: "Maximum monthly price in USD" },
+          furnished: { type: "boolean", description: "Whether apartment should be furnished" },
+          amenities: { type: "array", items: { type: "string" }, description: "Required amenities (e.g., ['wifi', 'parking', 'gym', 'pool', 'ac'])" },
+          pets: { type: "boolean", description: "Whether pets are allowed" },
+          verified_only: { type: "boolean", description: "Only show verified/active listings" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeRentalsSearch(ctx.params, ctx.authHeader),
   },
-  {
-    type: "function",
-    function: {
+  rentals_intake: {
+    definition: {
       name: "rentals_intake",
       description: "Collect rental search criteria through conversation. Use this when user mentions wanting an apartment but hasn't provided enough details. Returns either next questions to ask or a complete filter_json when ready to search.",
       parameters: {
         type: "object",
         properties: {
-          user_message: {
-            type: "string",
-            description: "The user's latest message about their rental needs"
-          },
-          collected_criteria: {
-            type: "object",
-            description: "Criteria collected so far from previous messages"
-          }
+          user_message: { type: "string", description: "The user's latest message about their rental needs" },
+          collected_criteria: { type: "object", description: "Criteria collected so far from previous messages" },
         },
-        required: ["user_message"]
-      }
-    }
+        required: ["user_message"],
+      },
+    },
+    execute: (ctx) => executeRentalsIntake(ctx.params, ctx.authHeader),
   },
-  {
-    type: "function",
-    function: {
-      name: "search_restaurants",
-      parameters: {
-        type: "object",
-        properties: {
-          cuisine: {
-            type: "string",
-            description: "Type of cuisine (e.g., 'Colombian', 'Italian', 'Seafood', 'Mexican')"
-          },
-          price_level: {
-            type: "integer",
-            description: "Price level from 1 (cheap) to 4 (expensive)"
-          },
-          city: {
-            type: "string",
-            description: "City to search in (default: Medellín)"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
+  search_apartments: {
+    definition: {
       name: "search_apartments",
       description: "Search for apartment rentals in Medellín by neighborhood, price range, or amenities.",
       parameters: {
         type: "object",
         properties: {
-          neighborhood: {
-            type: "string",
-            description: "Neighborhood name (e.g., 'El Poblado', 'Laureles', 'Envigado')"
-          },
-          min_price: {
-            type: "number",
-            description: "Minimum monthly price in USD"
-          },
-          max_price: {
-            type: "number",
-            description: "Maximum monthly price in USD"
-          },
-          bedrooms: {
-            type: "integer",
-            description: "Number of bedrooms"
-          },
-          amenities: {
-            type: "array",
-            items: { type: "string" },
-            description: "Required amenities (e.g., ['WiFi', 'Pool', 'Gym'])"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
+          neighborhood: { type: "string", description: "Neighborhood name (e.g., 'El Poblado', 'Laureles', 'Envigado')" },
+          min_price: { type: "number", description: "Minimum monthly price in USD" },
+          max_price: { type: "number", description: "Maximum monthly price in USD" },
+          bedrooms: { type: "integer", description: "Number of bedrooms" },
+          amenities: { type: "array", items: { type: "string" }, description: "Required amenities (e.g., ['WiFi', 'Pool', 'Gym'])" },
+          limit: { type: "integer", description: "Maximum number of results to return (default: 5)" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeSearchApartments(ctx.params, ctx.supabase),
   },
-  {
-    type: "function",
-    function: {
-      name: "search_cars",
-      description: "Search for car rentals in Medellín by vehicle type, price, or features.",
-      parameters: {
-        type: "object",
-        properties: {
-          vehicle_type: {
-            type: "string",
-            description: "Type of vehicle (e.g., 'sedan', 'SUV', 'luxury', 'economy')"
-          },
-          max_price_daily: {
-            type: "number",
-            description: "Maximum daily rental price in USD"
-          },
-          transmission: {
-            type: "string",
-            enum: ["automatic", "manual"],
-            description: "Transmission type"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_events",
-      description: "Search for upcoming events in Medellín by type, date range, or keywords.",
-      parameters: {
-        type: "object",
-        properties: {
-          event_type: {
-            type: "string",
-            description: "Type of event (e.g., 'concert', 'festival', 'cultural', 'nightlife')"
-          },
-          date_from: {
-            type: "string",
-            description: "Start date in ISO format (YYYY-MM-DD)"
-          },
-          date_to: {
-            type: "string",
-            description: "End date in ISO format (YYYY-MM-DD)"
-          },
-          free_only: {
-            type: "boolean",
-            description: "Only show free events"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
+  get_user_trips: {
+    definition: {
       name: "get_user_trips",
       description: "Get the user's saved trips and itineraries.",
       parameters: {
         type: "object",
         properties: {
-          status: {
-            type: "string",
-            enum: ["planning", "active", "completed"],
-            description: "Filter by trip status"
-          }
+          status: { type: "string", enum: ["planning", "active", "completed"], description: "Filter by trip status" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeGetUserTrips(ctx.params, ctx.supabase, ctx.userId),
   },
-  {
-    type: "function",
-    function: {
+  get_user_bookings: {
+    definition: {
       name: "get_user_bookings",
       description: "Get the user's current and upcoming bookings.",
       parameters: {
         type: "object",
         properties: {
-          booking_type: {
-            type: "string",
-            enum: ["apartment", "car", "restaurant", "event"],
-            description: "Filter by booking type"
-          },
-          status: {
-            type: "string",
-            enum: ["pending", "confirmed", "cancelled"],
-            description: "Filter by booking status"
-          }
+          booking_type: { type: "string", enum: ["apartment", "car", "restaurant", "event"], description: "Filter by booking type" },
+          status: { type: "string", enum: ["pending", "confirmed", "cancelled"], description: "Filter by booking status" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeGetUserBookings(ctx.params, ctx.supabase, ctx.userId),
   },
-  {
-    type: "function",
-    function: {
+  create_booking_preview: {
+    definition: {
       name: "create_booking_preview",
       description: "Create a preview of a booking that the user can review before confirming. Returns booking details for user approval.",
       parameters: {
         type: "object",
         properties: {
-          booking_type: {
-            type: "string",
-            enum: ["apartment", "car", "restaurant", "event"],
-            description: "Type of booking"
-          },
-          resource_id: {
-            type: "string",
-            description: "ID of the resource to book (apartment, car, restaurant, or event)"
-          },
-          resource_title: {
-            type: "string",
-            description: "Name/title of the resource being booked"
-          },
-          start_date: {
-            type: "string",
-            description: "Start date in ISO format (YYYY-MM-DD)"
-          },
-          end_date: {
-            type: "string",
-            description: "End date in ISO format (YYYY-MM-DD), optional for single-day bookings"
-          },
-          party_size: {
-            type: "integer",
-            description: "Number of people (for restaurants/events)"
-          },
-          special_requests: {
-            type: "string",
-            description: "Any special requests or notes"
-          }
+          booking_type: { type: "string", enum: ["apartment", "car", "restaurant", "event"], description: "Type of booking" },
+          resource_id: { type: "string", description: "ID of the resource to book (apartment, car, restaurant, or event)" },
+          resource_title: { type: "string", description: "Name/title of the resource being booked" },
+          start_date: { type: "string", description: "Start date in ISO format (YYYY-MM-DD)" },
+          end_date: { type: "string", description: "End date in ISO format (YYYY-MM-DD), optional for single-day bookings" },
+          party_size: { type: "integer", description: "Number of people (for restaurants/events)" },
+          special_requests: { type: "string", description: "Any special requests or notes" },
         },
-        required: ["booking_type", "resource_id", "resource_title", "start_date"]
-      }
-    }
-  }
-];
+        required: ["booking_type", "resource_id", "resource_title", "start_date"],
+      },
+    },
+    // Sync function — still return the expected Promise-compatible shape.
+    execute: (ctx) => Promise.resolve(executeCreateBookingPreview(ctx.params, ctx.userId)),
+  },
+};
+
+// Gemini request format derived from the registry — single source of truth.
+const tools = toolsArrayFromRegistry(TOOLS);
 
 // System prompts for each tab/agent type - enhanced with tool awareness
-const getSystemPrompt = (tab: string, tripContext?: { id: string; title: string; start_date: string; end_date: string; destination?: string } | null): string => {
+const getSystemPrompt = (
+  tab: string,
+  tripContext?: { id: string; title: string; start_date: string; end_date: string; destination?: string } | null,
+  sessionData?: ChatSessionData | null,
+): string => {
+  const sessionBlock = sessionContextBlock(sessionData);
   const tripInfo = tripContext 
     ? `\n\n🎯 ACTIVE TRIP CONTEXT:
 The user is currently planning/viewing: "${tripContext.title}"
@@ -304,139 +270,96 @@ When adding items to trips, use this trip ID: ${tripContext.id}`
     : '';
 
   const basePrompts: Record<string, string> = {
-    concierge: `You are the I Love Medellín AI Concierge - a friendly, knowledgeable local guide for Medellín, Colombia.
+    concierge: `You are the mdeai.co AI Concierge — a friendly, knowledgeable local guide for Medellín rentals.
 
-You have access to tools to search the database for real-time information about:
-- Restaurants (use search_restaurants)
-- Apartments (use search_apartments)
-- Car rentals (use search_cars)
-- Events (use search_events)
+Primary job: help people find an apartment to rent in Medellín. Use tools:
+- rentals_search / rentals_intake — find verified apartment rentals with filters, freshness, map pins
+- search_apartments — quick direct lookup by neighborhood, price, bedrooms, amenities
+- get_user_trips / get_user_bookings — recall the user's existing trips/bookings when they ask
+- create_booking_preview — propose a booking for user approval (never auto-confirm)
 
-When users ask for recommendations, USE THE TOOLS to search the database and provide real results.
-Format results nicely with names, prices, ratings, and key details.
+When users ask for recommendations, USE THE TOOLS to search the database and give real results.
 
-Your expertise covers:
-- Neighborhoods and their characteristics (El Poblado, Laureles, Envigado, etc.)
-- Safety tips and practical advice for visitors
-- Colombian culture, customs, and etiquette
-- Budget planning and cost of living
-- Transportation options
+You can also answer local questions about:
+- Neighborhoods (El Poblado, Laureles, Envigado, Provenza, Belén, Sabaneta)
+- Safety, commute, Wi-Fi quality, expat/nomad areas
+- Colombian culture, weather, cost of living
 
-Be warm, helpful, and conversational. Provide specific, actionable advice.${tripInfo}`,
+Be warm, helpful, conversational. Specific, actionable advice.${tripInfo}`,
 
-    trips: `You are an expert Trip Planner for Medellín, Colombia. Help users create amazing itineraries.
+    trips: `You are an mdeai.co Trip Planner. Help users add apartments and notes to their Medellín trips.
 
-You have access to tools:
-- get_user_trips: View user's existing trips
-- search_restaurants, search_apartments, search_cars, search_events: Find places to add to trips
-- create_booking_preview: Prepare bookings for user approval
+Tools:
+- get_user_trips — view existing trips
+- rentals_search / search_apartments — find apartments to add
+- create_booking_preview — prepare a booking for user approval
 
-When creating itineraries:
-- Search for real places using the tools
-- Be specific with timing and locations
-- Include meal recommendations from actual restaurants
-- Consider travel time between locations
-- Suggest alternatives for different weather conditions${tripInfo}`,
+Be specific with timing, neighborhoods, and budget. If you don't have the tool for something (e.g., a restaurant reservation), say so and offer to help with rentals or neighborhoods instead.${tripInfo}`,
 
-    explore: `You are a Discovery Agent for Medellín, Colombia. Help users find amazing places.
+    explore: `You are the mdeai.co Discovery Agent for Medellín rentals.
 
-You MUST use the search tools to find real places:
-- search_restaurants: Find restaurants by cuisine, price, location
-- search_apartments: Find apartments by neighborhood, price, amenities
-- search_cars: Find car rentals by type, price
-- search_events: Find upcoming events
+You MUST use the rental tools for real listings:
+- rentals_search / rentals_intake — composite-scored listings with verification + filters
+- search_apartments — direct query by neighborhood/price/bedrooms/amenities
 
-When recommending places:
-- ALWAYS search the database first to get real listings
-- Include the neighborhood
-- Mention price range ($ to $$$$)
-- Note ratings and reviews
-- Suggest best times to visit${tripInfo}`,
+For each recommendation include: neighborhood, monthly price (USD), bedrooms, and one standout detail (Wi-Fi Mbps, walkability, amenities). Ask a refining follow-up.${tripInfo}`,
 
-    bookings: `You are a Booking Assistant for Medellín, Colombia. Help users manage reservations.
+    bookings: `You are the mdeai.co Booking Assistant. Help users manage rental bookings.
 
-You have access to tools:
-- get_user_bookings: View existing bookings
-- search_restaurants, search_apartments, search_cars, search_events: Find bookable resources
-- create_booking_preview: Create booking previews for user approval
+Tools:
+- get_user_bookings — view existing bookings
+- rentals_search / search_apartments — find bookable apartments
+- create_booking_preview — show a booking preview for user approval
 
-IMPORTANT: When creating bookings:
-1. First search for the resource to get its ID
-2. Use create_booking_preview to show the user what will be booked
-3. WAIT for user confirmation before any actual booking
-4. Never create bookings without explicit user approval
-
-When helping with bookings:
-- Confirm dates, times, and party size
-- Mention pricing when relevant
-- Note any requirements (deposits, ID, etc.)
-- Provide next steps clearly${tripInfo}`,
+IMPORTANT: Always use create_booking_preview and WAIT for explicit user confirmation before any booking action. Never book without confirmation.${tripInfo}`,
   };
 
-  return basePrompts[tab] || basePrompts.concierge;
+  const universalGuardrails = `
+
+🛑 RESPONSE RULES (ALWAYS FOLLOW):
+
+1. NEVER respond with an empty message. If you have nothing to say, ask a clarifying question.
+
+2. If a tool returns an error, say so in one short sentence and suggest a next step.
+
+3. If a tool returns no results (total_count=0), tell the user plainly, propose 1–2 ways to widen the search, and offer help in adjacent areas.
+
+4. When a rental search returns results, structure your reply EXACTLY as these sections (markdown headings):
+
+   **What I Searched For**
+   - Location: [neighborhoods searched]
+   - Criteria: [bedrooms / price range / amenities — whatever is relevant]
+   - Dates: [if provided; if not, explicitly say "no dates specified — showing current inventory"]
+
+   **Best Option**
+   One sentence naming the top pick and why it stands out. The card itself renders below your text — don't repeat all its details.
+
+   **Other Top Rentals**
+   2–3 concise bullets — one line each, naming the property and one standout detail (fiber Wi-Fi, steps to Parque Lleras, below market, etc.). Cards render below.
+
+   **Not a Good Fit** (only if the tool response included considered_but_rejected rows)
+   One line introducing why these were considered but set aside. The rejection table renders below — don't repeat its contents.
+
+   **Follow-up**
+   One short refining question ("Want me to widen the budget?" / "Should I include Envigado?" / "Any specific amenities?").
+
+5. Keep total length under 180 words. The UI renders the actual listing cards, the pins, the rejection table — your job is the narrative glue.
+
+6. Respond in the user's language (English or Spanish). Default to English; switch fully if the user writes in Spanish.
+
+7. If the user didn't provide dates, travelers, or budget, pick reasonable defaults (current month, 1 traveler, any budget) and disclose them in "What I Searched For". Never refuse to search for missing info — assume and disclose.`;
+
+  return (basePrompts[tab] || basePrompts.concierge) + sessionBlock + universalGuardrails;
 };
 
-// Initialize Supabase client
-function getSupabaseClient(authHeader: string | null) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-}
-
-// Type alias for Supabase client
-type SupabaseClientType = ReturnType<typeof getSupabaseClient>;
-
-// Extract user ID from JWT
-async function getUserIdFromAuth(authHeader: string | null, supabase: SupabaseClientType): Promise<string | null> {
-  if (!authHeader) return null;
-  
-  try {
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user } } = await supabase.auth.getUser(token);
-    return user?.id || null;
-  } catch {
-    return null;
-  }
-}
+// Type alias for Supabase client (uses shared helpers from _shared/supabase-clients.ts)
+type SupabaseClientType = ReturnType<typeof getUserClient>;
 
 // Tool execution functions
-async function executeSearchRestaurants(params: Record<string, unknown>, supabase: SupabaseClientType) {
-  let query = supabase
-    .from("restaurants")
-    .select("id, name, description, cuisine_types, price_level, rating, rating_count, address, city, phone, website, primary_image_url")
-    .eq("is_active", true);
-
-  if (params.cuisine) {
-    query = query.contains("cuisine_types", [params.cuisine as string]);
-  }
-  if (params.price_level) {
-    query = query.eq("price_level", params.price_level);
-  }
-  if (params.city) {
-    query = query.ilike("city", `%${params.city}%`);
-  }
-
-  const limit = (params.limit as number) || 5;
-  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-}
-
 async function executeSearchApartments(params: Record<string, unknown>, supabase: SupabaseClientType) {
   let query = supabase
     .from("apartments")
-    .select("id, title, description, neighborhood, price_monthly, price_daily, bedrooms, bathrooms, amenities, rating, images")
+    .select("id, title, description, neighborhood, price_monthly, price_daily, bedrooms, bathrooms, amenities, rating, images, verified, source_url, latitude, longitude")
     .eq("status", "active");
 
   if (params.neighborhood) {
@@ -453,63 +376,98 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
   }
 
   const limit = (params.limit as number) || 5;
-  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
+  // Over-fetch so we can surface "Not a Good Fit" transparency rows.
+  const overfetch = limit + 5;
+  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(overfetch);
 
   const { data, error } = await query;
   if (error) throw error;
-  return data || [];
-}
 
-async function executeSearchCars(params: Record<string, unknown>, supabase: SupabaseClientType) {
-  let query = supabase
-    .from("car_rentals")
-    .select("id, make, model, year, vehicle_type, price_daily, transmission, features, rating, images")
-    .eq("status", "active");
+  const all = data ?? [];
+  const listings = all.slice(0, limit);
+  const rejectedCandidates = all.slice(limit, limit + 3);
+  const topRating = (listings[0]?.rating as number | null | undefined) ?? null;
+  const topPrice = (listings[0]?.price_monthly as number | null | undefined) ?? null;
 
-  if (params.vehicle_type) {
-    query = query.ilike("vehicle_type", `%${params.vehicle_type}%`);
-  }
-  if (params.max_price_daily) {
-    query = query.lte("price_daily", params.max_price_daily);
-  }
-  if (params.transmission) {
-    query = query.eq("transmission", params.transmission);
-  }
+  // Compose human-readable rejection reasons by comparing against the
+  // top pick. For V1 we surface rating + price gaps; real production
+  // reasons (wrong neighborhood, bad freshness, scam-flagged) come online
+  // once the multi-source ingestion lands.
+  const considered_but_rejected = rejectedCandidates.map((l) => {
+    const reasons: string[] = [];
+    const lRating = l.rating as number | null | undefined;
+    if (lRating != null && topRating != null && lRating < topRating) {
+      reasons.push(`${lRating}★ vs top pick's ${topRating}★`);
+    }
+    const lPrice = l.price_monthly as number | null | undefined;
+    if (lPrice != null && topPrice != null && lPrice > topPrice) {
+      reasons.push(
+        `$${Number(lPrice).toLocaleString()}/mo vs top pick's $${Number(topPrice).toLocaleString()}/mo`,
+      );
+    }
+    return {
+      listing_summary: `${l.title} — ${l.neighborhood}`,
+      reason: reasons.join("; ") || "Didn't rank in the top picks",
+    };
+  });
 
-  const limit = (params.limit as number) || 5;
-  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-}
-
-async function executeSearchEvents(params: Record<string, unknown>, supabase: SupabaseClientType) {
-  let query = supabase
-    .from("events")
-    .select("id, name, description, event_type, event_start_time, event_end_time, ticket_price_min, ticket_price_max, address, city, rating, primary_image_url")
-    .eq("is_active", true)
-    .gte("event_start_time", new Date().toISOString());
-
-  if (params.event_type) {
-    query = query.ilike("event_type", `%${params.event_type}%`);
-  }
-  if (params.date_from) {
-    query = query.gte("event_start_time", params.date_from);
-  }
-  if (params.date_to) {
-    query = query.lte("event_start_time", params.date_to);
-  }
-  if (params.free_only) {
-    query = query.or("ticket_price_min.is.null,ticket_price_min.eq.0");
+  // Translate tool params → ApartmentFilters shape consumed by /apartments?q=
+  const filters: Record<string, unknown> = {};
+  if (params.neighborhood) filters.neighborhoods = [params.neighborhood];
+  if (params.bedrooms) filters.bedrooms = [params.bedrooms];
+  if (params.min_price || params.max_price) {
+    filters.priceRange = {
+      min: (params.min_price as number) ?? 0,
+      max: (params.max_price as number) ?? 10000,
+    };
   }
 
-  const limit = (params.limit as number) || 5;
-  query = query.order("event_start_time", { ascending: true }).limit(limit);
+  // Inline listing data for chat cards. Narrower than full Apartment type
+  // to keep SSE payload small (only fields the card component needs).
+  const inlineListings = listings.map((l) => ({
+    id: l.id,
+    title: l.title,
+    neighborhood: l.neighborhood,
+    price_monthly: l.price_monthly,
+    price_daily: l.price_daily,
+    bedrooms: l.bedrooms,
+    bathrooms: l.bathrooms,
+    rating: l.rating,
+    amenities: l.amenities,
+    images: l.images,
+    verified: l.verified,
+    source_url: l.source_url,
+    description: l.description,
+    latitude: l.latitude,
+    longitude: l.longitude,
+  }));
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  // Return the "action envelope" shape so the client can render inline
+  // rental cards, the "See all on the map →" button, AND the "Not a Good
+  // Fit" transparency table.
+  return {
+    success: true,
+    total_count: listings.length,
+    considered: all.length,
+    listings,
+    considered_but_rejected,
+    filters_applied: params,
+    actions: listings.length > 0
+      ? [{
+          type: "OPEN_RENTALS_RESULTS",
+          payload: {
+            filters,
+            listing_ids: listings.map((l) => l.id),
+            listings: inlineListings,
+            considered_but_rejected,
+            considered: all.length,
+          },
+        }]
+      : [],
+    message: listings.length > 0
+      ? `Found ${listings.length} apartments${params.neighborhood ? ` in ${params.neighborhood}` : ""}.`
+      : "No apartments matched those criteria. Try widening the price range or a different neighborhood.",
+  };
 }
 
 async function executeGetUserTrips(params: Record<string, unknown>, supabase: SupabaseClientType, userId: string | null) {
@@ -584,19 +542,27 @@ function executeCreateBookingPreview(params: Record<string, unknown>, userId: st
   };
 }
 
-// Execute rentals search by calling the rentals Edge Function
-async function executeRentalsSearch(params: Record<string, unknown>) {
+// Execute rentals search by calling the rentals Edge Function.
+// Forwards the caller's auth header so the rentals function can validate the JWT
+// (rentals fn runs supabase.auth.getUser(token), which rejects the service_role key with 401).
+// Falls back to anon key when the caller is unauthenticated (public searches allowed).
+async function executeRentalsSearch(
+  params: Record<string, unknown>,
+  authHeader: string | null,
+) {
   console.log("Executing rentals_search with params:", params);
-  
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const forwardedAuth = authHeader ?? `Bearer ${anonKey}`;
+
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/rentals`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Authorization": forwardedAuth,
+        "apikey": anonKey,
       },
       body: JSON.stringify({
         action: "search",
@@ -631,19 +597,25 @@ async function executeRentalsSearch(params: Record<string, unknown>) {
   }
 }
 
-// Execute rentals intake for conversational criteria collection
-async function executeRentalsIntake(params: Record<string, unknown>) {
+// Execute rentals intake for conversational criteria collection.
+// Same auth-forwarding rule as executeRentalsSearch.
+async function executeRentalsIntake(
+  params: Record<string, unknown>,
+  authHeader: string | null,
+) {
   console.log("Executing rentals_intake with params:", params);
-  
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const forwardedAuth = authHeader ?? `Bearer ${anonKey}`;
+
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/rentals`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Authorization": forwardedAuth,
+        "apikey": anonKey,
       },
       body: JSON.stringify({
         action: "intake",
@@ -677,201 +649,396 @@ async function executeRentalsIntake(params: Record<string, unknown>) {
   }
 }
 
-// Execute a tool call
+// Execute a tool call via the registry. Adding a new tool = add an entry to
+// TOOLS above; no changes here. Errors are swallowed into a safe response so
+// Gemini's tool-response handling stays sane.
 async function executeTool(
-  toolName: string, 
-  params: Record<string, unknown>, 
+  toolName: string,
+  params: Record<string, unknown>,
   supabase: SupabaseClientType,
-  userId: string | null
+  userId: string | null,
+  authHeader: string | null,
 ): Promise<unknown> {
   console.log(`Executing tool: ${toolName}`, params);
-  
-  switch (toolName) {
-    case "rentals_search":
-      return executeRentalsSearch(params);
-    case "rentals_intake":
-      return executeRentalsIntake(params);
-    case "search_restaurants":
-      return executeSearchRestaurants(params, supabase);
-    case "search_apartments":
-      return executeSearchApartments(params, supabase);
-    case "search_cars":
-      return executeSearchCars(params, supabase);
-    case "search_events":
-      return executeSearchEvents(params, supabase);
-    case "get_user_trips":
-      return executeGetUserTrips(params, supabase, userId);
-    case "get_user_bookings":
-      return executeGetUserBookings(params, supabase, userId);
-    case "create_booking_preview":
-      return executeCreateBookingPreview(params, userId);
-    default:
-      return { error: `Unknown tool: ${toolName}` };
-  }
+  return dispatchTool(TOOLS, toolName, {
+    params,
+    supabase,
+    userId,
+    authHeader,
+  });
 }
 
-serve(async (req) => {
+function parseToolArguments(args: string | undefined): Record<string, unknown> {
+  const parsed = safeJsonParse(args ?? "{}");
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {};
+}
+
+Deno.serve(async (req) => {
+  const jr = (body: Record<string, unknown>, status = 200) =>
+    jsonResponse(body, status, req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(req) });
+  }
+  if (req.method !== "POST") {
+    return jr(errorBody("METHOD_NOT_ALLOWED", "Use POST"), 405);
+  }
+
+  const startTime = Date.now();
+  const authHeader = req.headers.get("Authorization");
+  // User client for RLS-scoped queries; service client for logging + internal calls
+  const supabase = authHeader ? getUserClient(authHeader) : getServiceClient();
+  const userId = await getUserId(authHeader);
+
+  // Anonymous-visitor gate: accept a client-generated anon_session_id (UUID)
+  // in the `X-Anon-Session-Id` header so the server can enforce a small free
+  // quota before requiring email sign-in. Tradeoff: clearing localStorage
+  // refreshes the quota (acceptable for MVP; server-signed cookies are the
+  // hardening path). The ANON_MESSAGE_LIMIT * ANON_WINDOW_SECONDS bounds the
+  // Gemini bill at ANON_LIMIT × Gemini cost × unique-visitor count.
+  const ANON_MESSAGE_LIMIT = 3;
+  const ANON_WINDOW_SECONDS = 24 * 60 * 60; // 24h rolling (fixed window)
+  const AUTHED_MESSAGE_LIMIT = 10;
+  const AUTHED_WINDOW_SECONDS = 60; // per minute
+
+  let rateKey: string;
+  let limit: number;
+  let windowSeconds: number;
+  let isAnon = false;
+
+  if (userId) {
+    rateKey = `ai-chat:${userId}`;
+    limit = AUTHED_MESSAGE_LIMIT;
+    windowSeconds = AUTHED_WINDOW_SECONDS;
+  } else {
+    // Try the anon path. Requires X-Anon-Session-Id; anything else is rejected.
+    const anonSessionId = req.headers.get("X-Anon-Session-Id")?.trim();
+    if (!anonSessionId || anonSessionId.length < 8 || anonSessionId.length > 64) {
+      return jr(
+        errorBody(
+          "UNAUTHORIZED",
+          "Please sign in to chat. AI features require authentication.",
+        ),
+        401,
+      );
+    }
+    rateKey = `ai-chat:anon:${anonSessionId}`;
+    limit = ANON_MESSAGE_LIMIT;
+    windowSeconds = ANON_WINDOW_SECONDS;
+    isAnon = true;
+  }
+
+  const rl = await allowRateDurable(getServiceClient(), rateKey, limit, windowSeconds);
+  if (!rl.allowed) {
+    // Differentiate the two exhaustion cases — the client uses the code to
+    // choose between "slow down" toast (authed) and email-gate modal (anon).
+    if (isAnon) {
+      return jr(
+        {
+          success: false,
+          error: {
+            code: "ANON_LIMIT_EXCEEDED",
+            message: `You've used your ${ANON_MESSAGE_LIMIT} free messages. Sign in with email to keep chatting.`,
+            retry_after_seconds: rl.retry_after_seconds,
+          },
+        },
+        402,
+      );
+    }
+    return jr(
+      errorBody(
+        "RATE_LIMIT",
+        `Too many requests. Retry in ${rl.retry_after_seconds}s.`,
+      ),
+      429,
+    );
+  }
+
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return jr(errorBody("BAD_REQUEST", "Invalid JSON body"), 400);
+  }
+
+  const bodyParsed = chatBodySchema.safeParse(raw);
+  if (!bodyParsed.success) {
+    return jr(
+      errorBody("VALIDATION_ERROR", "Invalid request", bodyParsed.error.flatten()),
+      400,
+    );
+  }
+
+  const { messages, tab, conversationId, activeTripContext, sessionData } = bodyParsed.data;
+
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) {
+    return jr(errorBody("SERVER_CONFIG", "GEMINI_API_KEY is not configured"), 500);
   }
 
   try {
-    const { messages, tab = "concierge", conversationId, activeTripContext } = await req.json();
-    const authHeader = req.headers.get("Authorization");
-    
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
-    }
+    const systemPrompt = getSystemPrompt(
+      tab,
+      activeTripContext as Parameters<typeof getSystemPrompt>[1],
+      sessionData ?? null,
+    );
 
-    // Initialize Supabase client
-    const supabase = getSupabaseClient(authHeader);
-    const userId = await getUserIdFromAuth(authHeader, supabase);
-
-    // Get the appropriate system prompt with trip context
-    const systemPrompt = getSystemPrompt(tab, activeTripContext);
-
-    // Prepare messages with system prompt
     const aiMessages = [
-      { role: "system", content: systemPrompt },
+      { role: "system" as const, content: systemPrompt },
       ...messages,
     ];
 
-    console.log(`AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || 'anonymous'}`);
+    console.log(
+      `AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || "anonymous"}`,
+    );
 
-    // First call: Let AI decide if it needs to use tools
-    const initialResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gemini-3-flash-preview",
-        messages: aiMessages,
-        tools: tools,
-        tool_choice: "auto",
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    const initialResponse = await fetchGemini({
+      model: "gemini-3-flash-preview",
+      messages: aiMessages,
+      tools: tools,
+      tool_choice: "auto",
+      temperature: 0.7,
+      max_tokens: 2000,
+    }, 30_000);
 
     if (!initialResponse.ok) {
       const errorText = await initialResponse.text();
       console.error("AI gateway error:", initialResponse.status, errorText);
 
+      // Log error to ai_runs so cost + failure rate stay observable.
+      // Skip for anon (ai_runs.user_id is NOT NULL; anon sessions don't have one).
+      if (userId) {
+        await insertAiRun(getServiceClient(), {
+          user_id: userId,
+          agent_name: "multi_agent_chat",
+          agent_type: "general_concierge",
+          input_data: {
+            tab,
+            conversationId: conversationId ?? null,
+            messageCount: messages.length,
+          },
+          output_data: { upstream_status: initialResponse.status },
+          duration_ms: Date.now() - startTime,
+          status: initialResponse.status === 429 ? "timeout" : "error",
+          model_name: "gemini-3-flash-preview",
+          error_message: errorText.slice(0, 500),
+        });
+      }
+
       if (initialResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jr(
+          errorBody("RATE_LIMIT", "Rate limit exceeded. Please try again later."),
+          429,
         );
       }
 
       if (initialResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jr(
+          errorBody("PAYMENT_REQUIRED", "AI credits exhausted. Please add credits to continue."),
+          402,
         );
       }
 
-      return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jr(errorBody("UPSTREAM_ERROR", "AI gateway error"), 502);
     }
 
     const initialData = await initialResponse.json();
     const assistantMessage = initialData.choices?.[0]?.message;
+    const initialUsage = extractUsage(initialData);
 
-    // Check if AI wants to call tools
+    // Log AI run with real token counts from Gemini's usage block.
+    // Logged via service client so RLS on ai_runs never blocks telemetry
+    // writes. Skip anon (ai_runs.user_id is NOT NULL).
+    if (userId) {
+      await insertAiRun(getServiceClient(), {
+        user_id: userId,
+        agent_name: "multi_agent_chat",
+        agent_type: "general_concierge",
+        input_data: {
+          tab,
+          conversationId: conversationId ?? null,
+          messageCount: messages.length,
+          anon: isAnon,
+        },
+        output_data: {
+          toolCallCount: assistantMessage?.tool_calls?.length ?? 0,
+          streaming: true,
+          phase: "initial_call",
+        },
+        duration_ms: Date.now() - startTime,
+        status: "success",
+        model_name: "gemini-3-flash-preview",
+        input_tokens: initialUsage.input_tokens,
+        output_tokens: initialUsage.output_tokens,
+        total_tokens: initialUsage.total_tokens,
+      });
+    }
+
+    const sseHeaders = {
+      ...getCorsHeaders(req),
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    };
+
     if (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0) {
       console.log(`AI requested ${assistantMessage.tool_calls.length} tool call(s)`);
-      
-      // Execute all tool calls
+
+      // Accumulate actions emitted by tools so we can prepend them as an SSE
+      // sidecar event before Gemini's final text stream begins.
+      const collectedActions: Array<Record<string, unknown>> = [];
+      // Accumulate phase events — each tool call produces a "handoff" phase
+      // with the persona label, followed by a "thinking" phase once results
+      // come back. Streamed to the client alongside actions so the reasoning
+      // trace renders above the final AI message.
+      const collectedPhases: Array<Record<string, unknown>> = [];
+
       const toolResults = await Promise.all(
-        assistantMessage.tool_calls.map(async (toolCall: { id: string; function: { name: string; arguments: string } }) => {
-          const params = JSON.parse(toolCall.function.arguments || "{}");
-          const result = await executeTool(toolCall.function.name, params, supabase, userId);
-          return {
-            tool_call_id: toolCall.id,
-            role: "tool" as const,
-            content: JSON.stringify(result),
-          };
-        })
+        assistantMessage.tool_calls.map(
+          async (toolCall: {
+            id: string;
+            function: { name: string; arguments: string };
+          }) => {
+            const params = parseToolArguments(toolCall.function.arguments);
+            const agentLabel = AGENT_LABELS[toolCall.function.name] ?? "Concierge";
+            collectedPhases.push({
+              phase: "handoff",
+              agent_label: agentLabel,
+              message: `Handing off to ${agentLabel}…`,
+            });
+            const result = await executeTool(
+              toolCall.function.name,
+              params,
+              supabase,
+              userId,
+              authHeader,
+            );
+            // After the tool returns, narrate a compact summary using the
+            // response envelope fields (total_count, considered, etc).
+            const narration = phaseNarrationFor(toolCall.function.name, result, agentLabel);
+            if (narration) collectedPhases.push(narration);
+            // Extract structured actions from the tool envelope (if any)
+            if (
+              result && typeof result === "object" && !Array.isArray(result) &&
+              Array.isArray((result as { actions?: unknown }).actions)
+            ) {
+              for (const a of (result as { actions: Record<string, unknown>[] }).actions) {
+                collectedActions.push(a);
+              }
+            }
+            return {
+              tool_call_id: toolCall.id,
+              role: "tool" as const,
+              content: JSON.stringify(result),
+            };
+          },
+        ),
       );
 
-      // Second call: Let AI process tool results and generate final response
-      const messagesWithTools = [
-        ...aiMessages,
-        assistantMessage,
-        ...toolResults,
-      ];
+      const messagesWithTools = [...aiMessages, assistantMessage, ...toolResults];
 
-      const finalResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gemini-3-flash-preview",
-          messages: messagesWithTools,
-          stream: true,
-          temperature: 0.7,
-          max_tokens: 2000,
-        }),
-      });
-
-      if (!finalResponse.ok) {
-        throw new Error("Failed to get final AI response after tool execution");
-      }
-
-      // Stream the final response back
-      return new Response(finalResponse.body, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
-        },
-      });
-    }
-
-    // No tool calls needed - stream a simple response
-    // Re-request with streaming enabled
-    const streamResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+      const finalResponse = await fetchGeminiStream({
         model: "gemini-3-flash-preview",
-        messages: aiMessages,
-        stream: true,
+        messages: messagesWithTools,
         temperature: 0.7,
         max_tokens: 2000,
-      }),
-    });
+      }, 30_000);
 
-    if (!streamResponse.ok) {
-      throw new Error("Failed to stream AI response");
+      if (!finalResponse.ok) {
+        const t = await finalResponse.text();
+        console.error("Final stream error:", finalResponse.status, t);
+        return jr(
+          errorBody("UPSTREAM_ERROR", "Failed to get final AI response after tool execution"),
+          502,
+        );
+      }
+
+      // Prepend SSE sidecar events (phases + actions) before piping Gemini's
+      // stream. The client parser (useChat.ts) looks for `phase` or
+      // `mdeai_actions` on any data event and dispatches them independently
+      // of Gemini's `choices[].delta.content` chunks.
+      if ((collectedPhases.length > 0 || collectedActions.length > 0) && finalResponse.body) {
+        const encoder = new TextEncoder();
+        const merged = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            // 1) Phase events in order — reasoning trace
+            for (const p of collectedPhases) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(p)}\n\n`));
+            }
+            // 2) Actions sidecar — inline cards + "See all →" button
+            if (collectedActions.length > 0) {
+              controller.enqueue(encoder.encode(
+                `data: ${JSON.stringify({ mdeai_actions: collectedActions })}\n\n`,
+              ));
+            }
+            // 3) Then Gemini's normal content stream
+            const reader = finalResponse.body!.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                controller.enqueue(value);
+              }
+            } finally {
+              controller.close();
+              reader.releaseLock();
+            }
+          },
+        });
+        return new Response(merged, { headers: sseHeaders });
+      }
+
+      return new Response(finalResponse.body, { headers: sseHeaders });
     }
 
-    // Stream the response back
-    return new Response(streamResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+    // No tool calls — convert the already-received response to SSE format
+    // instead of making a redundant second streaming call.
+    const content = assistantMessage?.content || "";
+    console.log(`No tool calls — returning direct response (${content.length} chars)`);
+
+    const encoder = new TextEncoder();
+    const sseBody = new ReadableStream({
+      start(controller) {
+        // Emit the content in a single SSE chunk matching OpenAI format
+        const chunk = {
+          choices: [{ delta: { content }, index: 0, finish_reason: null }],
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        // Send the done signal
+        const doneChunk = {
+          choices: [{ delta: {}, index: 0, finish_reason: "stop" }],
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneChunk)}\n\n`));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
       },
     });
+
+    return new Response(sseBody, { headers: sseHeaders });
   } catch (error) {
     console.error("Chat error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    // Best-effort error log; never throws since insertAiRun swallows errors.
+    // Skip anon (ai_runs.user_id is NOT NULL).
+    if (userId) {
+      await insertAiRun(getServiceClient(), {
+        user_id: userId,
+        agent_name: "multi_agent_chat",
+        agent_type: "general_concierge",
+        input_data: {
+          tab,
+          conversationId: conversationId ?? null,
+          messageCount: messages.length,
+        },
+        output_data: { phase: "exception" },
+        duration_ms: Date.now() - startTime,
+        status: "error",
+        model_name: "gemini-3-flash-preview",
+        error_message: errMsg.slice(0, 500),
+      });
+    }
+    return jr(errorBody("INTERNAL", errMsg), 500);
   }
 });

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
@@ -10,8 +11,36 @@ import { useApartments, useNeighborhoods } from "@/hooks/useApartments";
 import type { ApartmentFilters, Apartment } from "@/types/listings";
 import type { SelectedItem } from "@/context/ThreePanelContext";
 
+/**
+ * Parse the `?q=` URL param emitted by the chat's OPEN_RENTALS_RESULTS action.
+ * Payload shape: `encodeURIComponent(JSON.stringify({ neighborhoods, bedrooms, priceRange, ... }))`.
+ * Returns an empty object on parse failure so the page still renders.
+ */
+function parseFiltersFromQuery(raw: string | null): ApartmentFilters {
+  if (!raw) return {};
+  try {
+    const decoded = decodeURIComponent(raw);
+    const parsed = JSON.parse(decoded);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as ApartmentFilters;
+    }
+  } catch {
+    /* fall through to empty filters */
+  }
+  return {};
+}
+
 function ApartmentsContent() {
-  const [filters, setFilters] = useState<ApartmentFilters>({});
+  const [searchParams] = useSearchParams();
+  // Initial filters come from ?q= if present (chat hand-off), else empty.
+  const initialFilters = useMemo(
+    () => parseFiltersFromQuery(searchParams.get("q")),
+    // We only care about the first read — subsequent filter changes update
+    // local state, not the URL. (Bidirectional sync is a follow-up.)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const [filters, setFilters] = useState<ApartmentFilters>(initialFilters);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, isLoading, error } = useApartments(filters);
   const { data: neighborhoods = [] } = useNeighborhoods();
