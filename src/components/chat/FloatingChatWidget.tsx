@@ -25,11 +25,15 @@ export function FloatingChatWidget() {
     messages,
     isLoading,
     isStreaming,
+    error,
+    pendingActions,
     fetchConversations,
     sendMessage,
     cancelStream,
+    retryLastMessage,
     setCurrentConversation,
     setMessages,
+    setPendingActions,
   } = useChat(activeTab);
 
   // Fetch conversations when tab changes (only if logged in)
@@ -120,7 +124,20 @@ export function FloatingChatWidget() {
               </div>
             </ScrollArea>
           ) : (
-            <ChatMessageList messages={messages} isStreaming={isStreaming} />
+            <ChatMessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              isLoading={isLoading}
+              error={error}
+              onRetry={retryLastMessage}
+              pendingActions={pendingActions}
+              onActionDispatched={() => {
+                // Close the floating widget after the user accepts an action
+                // (e.g. clicks "See all on the map →") so they see the page.
+                setIsOpen(false);
+                setPendingActions([]);
+              }}
+            />
           )}
         </div>
 

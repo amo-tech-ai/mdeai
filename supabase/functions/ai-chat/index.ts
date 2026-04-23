@@ -290,7 +290,7 @@ type SupabaseClientType = ReturnType<typeof getUserClient>;
 async function executeSearchApartments(params: Record<string, unknown>, supabase: SupabaseClientType) {
   let query = supabase
     .from("apartments")
-    .select("id, title, description, neighborhood, price_monthly, price_daily, bedrooms, bathrooms, amenities, rating, images")
+    .select("id, title, description, neighborhood, price_monthly, price_daily, bedrooms, bathrooms, amenities, rating, images, verified, source_url")
     .eq("status", "active");
 
   if (params.neighborhood) {
@@ -311,7 +311,37 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
 
   const { data, error } = await query;
   if (error) throw error;
-  return data || [];
+
+  const listings = data ?? [];
+
+  // Translate tool params → ApartmentFilters shape consumed by /apartments?q=
+  const filters: Record<string, unknown> = {};
+  if (params.neighborhood) filters.neighborhoods = [params.neighborhood];
+  if (params.bedrooms) filters.bedrooms = [params.bedrooms];
+  if (params.min_price || params.max_price) {
+    filters.priceRange = {
+      min: (params.min_price as number) ?? 0,
+      max: (params.max_price as number) ?? 10000,
+    };
+  }
+
+  // Return the "action envelope" shape so the client can render a
+  // "See all N on the map →" button that navigates to /apartments?q=...
+  return {
+    success: true,
+    total_count: listings.length,
+    listings,
+    filters_applied: params,
+    actions: listings.length > 0
+      ? [{
+          type: "OPEN_RENTALS_RESULTS",
+          payload: { filters, listing_ids: listings.map((l) => l.id) },
+        }]
+      : [],
+    message: listings.length > 0
+      ? `Found ${listings.length} apartments${params.neighborhood ? ` in ${params.neighborhood}` : ""}.`
+      : "No apartments matched those criteria. Try widening the price range or a different neighborhood.",
+  };
 }
 
 async function executeGetUserTrips(params: Record<string, unknown>, supabase: SupabaseClientType, userId: string | null) {
@@ -688,6 +718,10 @@ Deno.serve(async (req) => {
     if (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0) {
       console.log(`AI requested ${assistantMessage.tool_calls.length} tool call(s)`);
 
+      // Accumulate actions emitted by tools so we can prepend them as an SSE
+      // sidecar event before Gemini's final text stream begins.
+      const collectedActions: Array<Record<string, unknown>> = [];
+
       const toolResults = await Promise.all(
         assistantMessage.tool_calls.map(
           async (toolCall: {
@@ -702,6 +736,15 @@ Deno.serve(async (req) => {
               userId,
               authHeader,
             );
+            // Extract structured actions from the tool envelope (if any)
+            if (
+              result && typeof result === "object" && !Array.isArray(result) &&
+              Array.isArray((result as { actions?: unknown }).actions)
+            ) {
+              for (const a of (result as { actions: Record<string, unknown>[] }).actions) {
+                collectedActions.push(a);
+              }
+            }
             return {
               tool_call_id: toolCall.id,
               role: "tool" as const,
@@ -727,6 +770,34 @@ Deno.serve(async (req) => {
           errorBody("UPSTREAM_ERROR", "Failed to get final AI response after tool execution"),
           502,
         );
+      }
+
+      // If any tool produced actions, prepend an SSE sidecar event with them
+      // before piping Gemini's stream. The client parser (useChat.ts) looks
+      // for `mdeai_actions` on any data event and dispatches them.
+      if (collectedActions.length > 0 && finalResponse.body) {
+        const encoder = new TextEncoder();
+        const merged = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            // 1) Sidecar first — client stores this to render a "See all N →" button
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ mdeai_actions: collectedActions })}\n\n`,
+            ));
+            // 2) Then Gemini's normal content stream
+            const reader = finalResponse.body!.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                controller.enqueue(value);
+              }
+            } finally {
+              controller.close();
+              reader.releaseLock();
+            }
+          },
+        });
+        return new Response(merged, { headers: sseHeaders });
       }
 
       return new Response(finalResponse.body, { headers: sseHeaders });

@@ -1,6 +1,23 @@
 // Chat tab types
 export type ChatTab = 'concierge' | 'trips' | 'explore' | 'bookings';
 
+// ─── Structured chat actions ─────────────────────────────────────────────
+// Tools in supabase/functions/ai-chat/index.ts emit an `actions[]` array in
+// their response envelope. The edge function prepends these as an SSE
+// sidecar event (`{ mdeai_actions: [...] }`) before Gemini's text stream.
+// The chat UI consumes them to render affordances like "See all N results →"
+// that navigate the user to a full results page.
+
+export interface OpenRentalsResultsAction {
+  type: 'OPEN_RENTALS_RESULTS';
+  payload: {
+    filters: Record<string, unknown>;
+    listing_ids?: string[];
+  };
+}
+
+export type ChatAction = OpenRentalsResultsAction;
+
 export interface ChatMessage {
   id: string;
   conversation_id: string;

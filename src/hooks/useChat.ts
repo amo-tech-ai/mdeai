@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripContext } from '@/context/TripContext';
-import { ChatMessage, Conversation, ChatTab, tabToAgentType } from '@/types/chat';
+import { ChatMessage, Conversation, ChatTab, ChatAction, tabToAgentType } from '@/types/chat';
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
@@ -16,6 +16,10 @@ export function useChat(activeTab: ChatTab) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Structured actions emitted by tools (e.g. OPEN_RENTALS_RESULTS). The UI
+  // renders these as affordances (buttons) under the latest assistant message.
+  // Cleared on every new send.
+  const [pendingActions, setPendingActions] = useState<ChatAction[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFailedMessageRef = useRef<string | null>(null);
 
@@ -132,6 +136,8 @@ export function useChat(activeTab: ChatTab) {
       return;
     }
     setError(null);
+    // Clear previous turn's action affordances — the next tool call will emit its own.
+    setPendingActions([]);
 
     // Create conversation if none exists
     let conversation = currentConversation;
@@ -273,6 +279,10 @@ export function useChat(activeTab: ChatTab) {
 
           try {
             const parsed = JSON.parse(jsonStr);
+            // Structured sidecar from edge function: tool emitted action(s)
+            if (parsed && Array.isArray(parsed.mdeai_actions)) {
+              setPendingActions(prev => [...prev, ...(parsed.mdeai_actions as ChatAction[])]);
+            }
             const deltaContent = parsed.choices?.[0]?.delta?.content;
             if (deltaContent) {
               assistantContent += deltaContent;
@@ -393,6 +403,7 @@ export function useChat(activeTab: ChatTab) {
     isLoading,
     isStreaming,
     error,
+    pendingActions,
     fetchConversations,
     createConversation,
     selectConversation,
@@ -402,5 +413,6 @@ export function useChat(activeTab: ChatTab) {
     archiveConversation,
     setCurrentConversation,
     setMessages,
+    setPendingActions,
   };
 }
