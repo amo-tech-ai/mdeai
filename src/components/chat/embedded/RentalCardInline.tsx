@@ -14,6 +14,8 @@ interface RentalCardInlineProps {
   onSave?: (id: string) => void;
   onAddToTrip?: (id: string) => void;
   saved?: boolean;
+  /** Social-proof save count from apartment_save_counts RPC (Week 2 Tue). */
+  saveCount?: number;
 }
 
 /**
@@ -32,6 +34,7 @@ export function RentalCardInline({
   onSave,
   onAddToTrip,
   saved = false,
+  saveCount = 0,
 }: RentalCardInlineProps) {
   const [imgError, setImgError] = useState(false);
   const img = !imgError && listing.images?.[0] ? listing.images[0] : apartmentPlaceholder;
@@ -104,6 +107,15 @@ export function RentalCardInline({
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
                   {sourceLabel}
                 </Badge>
+              )}
+              {saveCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[11px] text-rose-600"
+                  aria-label={`Saved by ${saveCount} ${saveCount === 1 ? 'nomad' : 'nomads'}`}
+                >
+                  <Heart className="w-3 h-3 fill-rose-500 text-rose-500" />
+                  {saveCount === 1 ? 'Saved by 1 nomad' : `Saved by ${saveCount} nomads`}
+                </span>
               )}
             </div>
           </div>
