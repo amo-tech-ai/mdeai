@@ -1,10 +1,22 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { getCorsHeaders, errorBody, jsonResponse } from "../_shared/http.ts";
+import { allowRate } from "../_shared/rate-limit.ts";
+import { insertAiRun, extractUsage } from "../_shared/ai-runs.ts";
+import { safeJsonParse } from "../_shared/json.ts";
+import { getUserClient, getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
+import { fetchGemini, fetchGeminiStream } from "../_shared/gemini.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const chatBodySchema = z.object({
+  messages: z.array(
+    z.object({
+      role: z.string().max(32),
+      content: z.string().max(500_000),
+    }),
+  ).min(1).max(50),
+  tab: z.enum(["concierge", "trips", "explore", "bookings"]).optional().default("concierge"),
+  conversationId: z.string().uuid().optional().nullable(),
+  activeTripContext: z.record(z.unknown()).optional().nullable(),
+});
 
 // Tool definitions for AI function calling
 const tools = [
@@ -80,34 +92,6 @@ const tools = [
   {
     type: "function",
     function: {
-      name: "search_restaurants",
-      parameters: {
-        type: "object",
-        properties: {
-          cuisine: {
-            type: "string",
-            description: "Type of cuisine (e.g., 'Colombian', 'Italian', 'Seafood', 'Mexican')"
-          },
-          price_level: {
-            type: "integer",
-            description: "Price level from 1 (cheap) to 4 (expensive)"
-          },
-          city: {
-            type: "string",
-            description: "City to search in (default: Medellín)"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "search_apartments",
       description: "Search for apartment rentals in Medellín by neighborhood, price range, or amenities.",
       parameters: {
@@ -133,69 +117,6 @@ const tools = [
             type: "array",
             items: { type: "string" },
             description: "Required amenities (e.g., ['WiFi', 'Pool', 'Gym'])"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_cars",
-      description: "Search for car rentals in Medellín by vehicle type, price, or features.",
-      parameters: {
-        type: "object",
-        properties: {
-          vehicle_type: {
-            type: "string",
-            description: "Type of vehicle (e.g., 'sedan', 'SUV', 'luxury', 'economy')"
-          },
-          max_price_daily: {
-            type: "number",
-            description: "Maximum daily rental price in USD"
-          },
-          transmission: {
-            type: "string",
-            enum: ["automatic", "manual"],
-            description: "Transmission type"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
-        },
-        required: []
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_events",
-      description: "Search for upcoming events in Medellín by type, date range, or keywords.",
-      parameters: {
-        type: "object",
-        properties: {
-          event_type: {
-            type: "string",
-            description: "Type of event (e.g., 'concert', 'festival', 'cultural', 'nightlife')"
-          },
-          date_from: {
-            type: "string",
-            description: "Start date in ISO format (YYYY-MM-DD)"
-          },
-          date_to: {
-            type: "string",
-            description: "End date in ISO format (YYYY-MM-DD)"
-          },
-          free_only: {
-            type: "boolean",
-            description: "Only show free events"
           },
           limit: {
             type: "integer",
@@ -304,135 +225,66 @@ When adding items to trips, use this trip ID: ${tripContext.id}`
     : '';
 
   const basePrompts: Record<string, string> = {
-    concierge: `You are the I Love Medellín AI Concierge - a friendly, knowledgeable local guide for Medellín, Colombia.
+    concierge: `You are the mdeai.co AI Concierge — a friendly, knowledgeable local guide for Medellín rentals.
 
-You have access to tools to search the database for real-time information about:
-- Restaurants (use search_restaurants)
-- Apartments (use search_apartments)
-- Car rentals (use search_cars)
-- Events (use search_events)
+Primary job: help people find an apartment to rent in Medellín. Use tools:
+- rentals_search / rentals_intake — find verified apartment rentals with filters, freshness, map pins
+- search_apartments — quick direct lookup by neighborhood, price, bedrooms, amenities
+- get_user_trips / get_user_bookings — recall the user's existing trips/bookings when they ask
+- create_booking_preview — propose a booking for user approval (never auto-confirm)
 
-When users ask for recommendations, USE THE TOOLS to search the database and provide real results.
-Format results nicely with names, prices, ratings, and key details.
+When users ask for recommendations, USE THE TOOLS to search the database and give real results.
 
-Your expertise covers:
-- Neighborhoods and their characteristics (El Poblado, Laureles, Envigado, etc.)
-- Safety tips and practical advice for visitors
-- Colombian culture, customs, and etiquette
-- Budget planning and cost of living
-- Transportation options
+You can also answer local questions about:
+- Neighborhoods (El Poblado, Laureles, Envigado, Provenza, Belén, Sabaneta)
+- Safety, commute, Wi-Fi quality, expat/nomad areas
+- Colombian culture, weather, cost of living
 
-Be warm, helpful, and conversational. Provide specific, actionable advice.${tripInfo}`,
+Be warm, helpful, conversational. Specific, actionable advice.${tripInfo}`,
 
-    trips: `You are an expert Trip Planner for Medellín, Colombia. Help users create amazing itineraries.
+    trips: `You are an mdeai.co Trip Planner. Help users add apartments and notes to their Medellín trips.
 
-You have access to tools:
-- get_user_trips: View user's existing trips
-- search_restaurants, search_apartments, search_cars, search_events: Find places to add to trips
-- create_booking_preview: Prepare bookings for user approval
+Tools:
+- get_user_trips — view existing trips
+- rentals_search / search_apartments — find apartments to add
+- create_booking_preview — prepare a booking for user approval
 
-When creating itineraries:
-- Search for real places using the tools
-- Be specific with timing and locations
-- Include meal recommendations from actual restaurants
-- Consider travel time between locations
-- Suggest alternatives for different weather conditions${tripInfo}`,
+Be specific with timing, neighborhoods, and budget. If you don't have the tool for something (e.g., a restaurant reservation), say so and offer to help with rentals or neighborhoods instead.${tripInfo}`,
 
-    explore: `You are a Discovery Agent for Medellín, Colombia. Help users find amazing places.
+    explore: `You are the mdeai.co Discovery Agent for Medellín rentals.
 
-You MUST use the search tools to find real places:
-- search_restaurants: Find restaurants by cuisine, price, location
-- search_apartments: Find apartments by neighborhood, price, amenities
-- search_cars: Find car rentals by type, price
-- search_events: Find upcoming events
+You MUST use the rental tools for real listings:
+- rentals_search / rentals_intake — composite-scored listings with verification + filters
+- search_apartments — direct query by neighborhood/price/bedrooms/amenities
 
-When recommending places:
-- ALWAYS search the database first to get real listings
-- Include the neighborhood
-- Mention price range ($ to $$$$)
-- Note ratings and reviews
-- Suggest best times to visit${tripInfo}`,
+For each recommendation include: neighborhood, monthly price (USD), bedrooms, and one standout detail (Wi-Fi Mbps, walkability, amenities). Ask a refining follow-up.${tripInfo}`,
 
-    bookings: `You are a Booking Assistant for Medellín, Colombia. Help users manage reservations.
+    bookings: `You are the mdeai.co Booking Assistant. Help users manage rental bookings.
 
-You have access to tools:
-- get_user_bookings: View existing bookings
-- search_restaurants, search_apartments, search_cars, search_events: Find bookable resources
-- create_booking_preview: Create booking previews for user approval
+Tools:
+- get_user_bookings — view existing bookings
+- rentals_search / search_apartments — find bookable apartments
+- create_booking_preview — show a booking preview for user approval
 
-IMPORTANT: When creating bookings:
-1. First search for the resource to get its ID
-2. Use create_booking_preview to show the user what will be booked
-3. WAIT for user confirmation before any actual booking
-4. Never create bookings without explicit user approval
-
-When helping with bookings:
-- Confirm dates, times, and party size
-- Mention pricing when relevant
-- Note any requirements (deposits, ID, etc.)
-- Provide next steps clearly${tripInfo}`,
+IMPORTANT: Always use create_booking_preview and WAIT for explicit user confirmation before any booking action. Never book without confirmation.${tripInfo}`,
   };
 
-  return basePrompts[tab] || basePrompts.concierge;
+  const universalGuardrails = `
+
+🛑 RESPONSE RULES (ALWAYS FOLLOW):
+1. NEVER respond with an empty message. If you have nothing to say, say "Let me know a bit more about what you're looking for."
+2. If a tool returns an error, say so in one short sentence and suggest a next step (e.g., "I couldn't reach the rentals database — try rephrasing, or I can help with neighborhoods, safety, or getting around instead.").
+3. If a tool returns no results ([] or total_count=0), tell the user plainly, propose 1–2 ways to widen the search, and offer help in adjacent areas.
+4. When results are returned, summarize the top 3 with names, prices, neighborhoods, and one standout detail each. Then ask a refining question ("cheaper?", "closer to X?", "more bedrooms?").
+5. Respond in the user's language (English or Spanish). Default to English.`;
+
+  return (basePrompts[tab] || basePrompts.concierge) + universalGuardrails;
 };
 
-// Initialize Supabase client
-function getSupabaseClient(authHeader: string | null) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-}
-
-// Type alias for Supabase client
-type SupabaseClientType = ReturnType<typeof getSupabaseClient>;
-
-// Extract user ID from JWT
-async function getUserIdFromAuth(authHeader: string | null, supabase: SupabaseClientType): Promise<string | null> {
-  if (!authHeader) return null;
-  
-  try {
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user } } = await supabase.auth.getUser(token);
-    return user?.id || null;
-  } catch {
-    return null;
-  }
-}
+// Type alias for Supabase client (uses shared helpers from _shared/supabase-clients.ts)
+type SupabaseClientType = ReturnType<typeof getUserClient>;
 
 // Tool execution functions
-async function executeSearchRestaurants(params: Record<string, unknown>, supabase: SupabaseClientType) {
-  let query = supabase
-    .from("restaurants")
-    .select("id, name, description, cuisine_types, price_level, rating, rating_count, address, city, phone, website, primary_image_url")
-    .eq("is_active", true);
-
-  if (params.cuisine) {
-    query = query.contains("cuisine_types", [params.cuisine as string]);
-  }
-  if (params.price_level) {
-    query = query.eq("price_level", params.price_level);
-  }
-  if (params.city) {
-    query = query.ilike("city", `%${params.city}%`);
-  }
-
-  const limit = (params.limit as number) || 5;
-  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-}
-
 async function executeSearchApartments(params: Record<string, unknown>, supabase: SupabaseClientType) {
   let query = supabase
     .from("apartments")
@@ -454,58 +306,6 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
 
   const limit = (params.limit as number) || 5;
   query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-}
-
-async function executeSearchCars(params: Record<string, unknown>, supabase: SupabaseClientType) {
-  let query = supabase
-    .from("car_rentals")
-    .select("id, make, model, year, vehicle_type, price_daily, transmission, features, rating, images")
-    .eq("status", "active");
-
-  if (params.vehicle_type) {
-    query = query.ilike("vehicle_type", `%${params.vehicle_type}%`);
-  }
-  if (params.max_price_daily) {
-    query = query.lte("price_daily", params.max_price_daily);
-  }
-  if (params.transmission) {
-    query = query.eq("transmission", params.transmission);
-  }
-
-  const limit = (params.limit as number) || 5;
-  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-}
-
-async function executeSearchEvents(params: Record<string, unknown>, supabase: SupabaseClientType) {
-  let query = supabase
-    .from("events")
-    .select("id, name, description, event_type, event_start_time, event_end_time, ticket_price_min, ticket_price_max, address, city, rating, primary_image_url")
-    .eq("is_active", true)
-    .gte("event_start_time", new Date().toISOString());
-
-  if (params.event_type) {
-    query = query.ilike("event_type", `%${params.event_type}%`);
-  }
-  if (params.date_from) {
-    query = query.gte("event_start_time", params.date_from);
-  }
-  if (params.date_to) {
-    query = query.lte("event_start_time", params.date_to);
-  }
-  if (params.free_only) {
-    query = query.or("ticket_price_min.is.null,ticket_price_min.eq.0");
-  }
-
-  const limit = (params.limit as number) || 5;
-  query = query.order("event_start_time", { ascending: true }).limit(limit);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -584,19 +384,27 @@ function executeCreateBookingPreview(params: Record<string, unknown>, userId: st
   };
 }
 
-// Execute rentals search by calling the rentals Edge Function
-async function executeRentalsSearch(params: Record<string, unknown>) {
+// Execute rentals search by calling the rentals Edge Function.
+// Forwards the caller's auth header so the rentals function can validate the JWT
+// (rentals fn runs supabase.auth.getUser(token), which rejects the service_role key with 401).
+// Falls back to anon key when the caller is unauthenticated (public searches allowed).
+async function executeRentalsSearch(
+  params: Record<string, unknown>,
+  authHeader: string | null,
+) {
   console.log("Executing rentals_search with params:", params);
-  
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const forwardedAuth = authHeader ?? `Bearer ${anonKey}`;
+
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/rentals`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Authorization": forwardedAuth,
+        "apikey": anonKey,
       },
       body: JSON.stringify({
         action: "search",
@@ -631,19 +439,25 @@ async function executeRentalsSearch(params: Record<string, unknown>) {
   }
 }
 
-// Execute rentals intake for conversational criteria collection
-async function executeRentalsIntake(params: Record<string, unknown>) {
+// Execute rentals intake for conversational criteria collection.
+// Same auth-forwarding rule as executeRentalsSearch.
+async function executeRentalsIntake(
+  params: Record<string, unknown>,
+  authHeader: string | null,
+) {
   console.log("Executing rentals_intake with params:", params);
-  
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const forwardedAuth = authHeader ?? `Bearer ${anonKey}`;
+
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/rentals`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseServiceKey}`,
+        "Authorization": forwardedAuth,
+        "apikey": anonKey,
       },
       body: JSON.stringify({
         action: "intake",
@@ -679,26 +493,21 @@ async function executeRentalsIntake(params: Record<string, unknown>) {
 
 // Execute a tool call
 async function executeTool(
-  toolName: string, 
-  params: Record<string, unknown>, 
+  toolName: string,
+  params: Record<string, unknown>,
   supabase: SupabaseClientType,
-  userId: string | null
+  userId: string | null,
+  authHeader: string | null,
 ): Promise<unknown> {
   console.log(`Executing tool: ${toolName}`, params);
-  
+
   switch (toolName) {
     case "rentals_search":
-      return executeRentalsSearch(params);
+      return executeRentalsSearch(params, authHeader);
     case "rentals_intake":
-      return executeRentalsIntake(params);
-    case "search_restaurants":
-      return executeSearchRestaurants(params, supabase);
+      return executeRentalsIntake(params, authHeader);
     case "search_apartments":
       return executeSearchApartments(params, supabase);
-    case "search_cars":
-      return executeSearchCars(params, supabase);
-    case "search_events":
-      return executeSearchEvents(params, supabase);
     case "get_user_trips":
       return executeGetUserTrips(params, supabase, userId);
     case "get_user_bookings":
@@ -710,168 +519,253 @@ async function executeTool(
   }
 }
 
-serve(async (req) => {
+function parseToolArguments(args: string | undefined): Record<string, unknown> {
+  const parsed = safeJsonParse(args ?? "{}");
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {};
+}
+
+Deno.serve(async (req) => {
+  const jr = (body: Record<string, unknown>, status = 200) =>
+    jsonResponse(body, status, req);
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(req) });
+  }
+  if (req.method !== "POST") {
+    return jr(errorBody("METHOD_NOT_ALLOWED", "Use POST"), 405);
+  }
+
+  const startTime = Date.now();
+  const authHeader = req.headers.get("Authorization");
+  // User client for RLS-scoped queries; service client for logging + internal calls
+  const supabase = authHeader ? getUserClient(authHeader) : getServiceClient();
+  const userId = await getUserId(authHeader);
+
+  // Auth gate: anonymous usage would let attackers burn GEMINI_API_KEY tokens.
+  // Clients without a valid user JWT must sign in before chatting.
+  if (!userId) {
+    return jr(
+      errorBody(
+        "UNAUTHORIZED",
+        "Please sign in to chat. AI features require authentication.",
+      ),
+      401,
+    );
+  }
+
+  const rateKey = `ai-chat:${userId}`;
+  if (!allowRate(rateKey, 10, 60_000)) {
+    return jr(errorBody("RATE_LIMIT", "Too many requests"), 429);
+  }
+
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return jr(errorBody("BAD_REQUEST", "Invalid JSON body"), 400);
+  }
+
+  const bodyParsed = chatBodySchema.safeParse(raw);
+  if (!bodyParsed.success) {
+    return jr(
+      errorBody("VALIDATION_ERROR", "Invalid request", bodyParsed.error.flatten()),
+      400,
+    );
+  }
+
+  const { messages, tab, conversationId, activeTripContext } = bodyParsed.data;
+
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) {
+    return jr(errorBody("SERVER_CONFIG", "GEMINI_API_KEY is not configured"), 500);
   }
 
   try {
-    const { messages, tab = "concierge", conversationId, activeTripContext } = await req.json();
-    const authHeader = req.headers.get("Authorization");
-    
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
-    }
+    const systemPrompt = getSystemPrompt(tab, activeTripContext as Parameters<typeof getSystemPrompt>[1]);
 
-    // Initialize Supabase client
-    const supabase = getSupabaseClient(authHeader);
-    const userId = await getUserIdFromAuth(authHeader, supabase);
-
-    // Get the appropriate system prompt with trip context
-    const systemPrompt = getSystemPrompt(tab, activeTripContext);
-
-    // Prepare messages with system prompt
     const aiMessages = [
-      { role: "system", content: systemPrompt },
+      { role: "system" as const, content: systemPrompt },
       ...messages,
     ];
 
-    console.log(`AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || 'anonymous'}`);
+    console.log(
+      `AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || "anonymous"}`,
+    );
 
-    // First call: Let AI decide if it needs to use tools
-    const initialResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gemini-3-flash-preview",
-        messages: aiMessages,
-        tools: tools,
-        tool_choice: "auto",
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    const initialResponse = await fetchGemini({
+      model: "gemini-3-flash-preview",
+      messages: aiMessages,
+      tools: tools,
+      tool_choice: "auto",
+      temperature: 0.7,
+      max_tokens: 2000,
+    }, 30_000);
 
     if (!initialResponse.ok) {
       const errorText = await initialResponse.text();
       console.error("AI gateway error:", initialResponse.status, errorText);
 
+      // Log error to ai_runs so cost + failure rate stay observable.
+      await insertAiRun(getServiceClient(), {
+        user_id: userId,
+        agent_name: "multi_agent_chat",
+        agent_type: "general_concierge",
+        input_data: {
+          tab,
+          conversationId: conversationId ?? null,
+          messageCount: messages.length,
+        },
+        output_data: { upstream_status: initialResponse.status },
+        duration_ms: Date.now() - startTime,
+        status: initialResponse.status === 429 ? "timeout" : "error",
+        model_name: "gemini-3-flash-preview",
+        error_message: errorText.slice(0, 500),
+      });
+
       if (initialResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jr(
+          errorBody("RATE_LIMIT", "Rate limit exceeded. Please try again later."),
+          429,
         );
       }
 
       if (initialResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        return jr(
+          errorBody("PAYMENT_REQUIRED", "AI credits exhausted. Please add credits to continue."),
+          402,
         );
       }
 
-      return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jr(errorBody("UPSTREAM_ERROR", "AI gateway error"), 502);
     }
 
     const initialData = await initialResponse.json();
     const assistantMessage = initialData.choices?.[0]?.message;
+    const initialUsage = extractUsage(initialData);
 
-    // Check if AI wants to call tools
+    // Log AI run with real token counts from Gemini's usage block.
+    // Logged via service client so RLS on ai_runs never blocks telemetry writes.
+    await insertAiRun(getServiceClient(), {
+      user_id: userId,
+      agent_name: "multi_agent_chat",
+      agent_type: "general_concierge",
+      input_data: {
+        tab,
+        conversationId: conversationId ?? null,
+        messageCount: messages.length,
+      },
+      output_data: {
+        toolCallCount: assistantMessage?.tool_calls?.length ?? 0,
+        streaming: true,
+        phase: "initial_call",
+      },
+      duration_ms: Date.now() - startTime,
+      status: "success",
+      model_name: "gemini-3-flash-preview",
+      input_tokens: initialUsage.input_tokens,
+      output_tokens: initialUsage.output_tokens,
+      total_tokens: initialUsage.total_tokens,
+    });
+
+    const sseHeaders = {
+      ...getCorsHeaders(req),
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    };
+
     if (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0) {
       console.log(`AI requested ${assistantMessage.tool_calls.length} tool call(s)`);
-      
-      // Execute all tool calls
+
       const toolResults = await Promise.all(
-        assistantMessage.tool_calls.map(async (toolCall: { id: string; function: { name: string; arguments: string } }) => {
-          const params = JSON.parse(toolCall.function.arguments || "{}");
-          const result = await executeTool(toolCall.function.name, params, supabase, userId);
-          return {
-            tool_call_id: toolCall.id,
-            role: "tool" as const,
-            content: JSON.stringify(result),
-          };
-        })
+        assistantMessage.tool_calls.map(
+          async (toolCall: {
+            id: string;
+            function: { name: string; arguments: string };
+          }) => {
+            const params = parseToolArguments(toolCall.function.arguments);
+            const result = await executeTool(
+              toolCall.function.name,
+              params,
+              supabase,
+              userId,
+              authHeader,
+            );
+            return {
+              tool_call_id: toolCall.id,
+              role: "tool" as const,
+              content: JSON.stringify(result),
+            };
+          },
+        ),
       );
 
-      // Second call: Let AI process tool results and generate final response
-      const messagesWithTools = [
-        ...aiMessages,
-        assistantMessage,
-        ...toolResults,
-      ];
+      const messagesWithTools = [...aiMessages, assistantMessage, ...toolResults];
 
-      const finalResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gemini-3-flash-preview",
-          messages: messagesWithTools,
-          stream: true,
-          temperature: 0.7,
-          max_tokens: 2000,
-        }),
-      });
-
-      if (!finalResponse.ok) {
-        throw new Error("Failed to get final AI response after tool execution");
-      }
-
-      // Stream the final response back
-      return new Response(finalResponse.body, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
-        },
-      });
-    }
-
-    // No tool calls needed - stream a simple response
-    // Re-request with streaming enabled
-    const streamResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+      const finalResponse = await fetchGeminiStream({
         model: "gemini-3-flash-preview",
-        messages: aiMessages,
-        stream: true,
+        messages: messagesWithTools,
         temperature: 0.7,
         max_tokens: 2000,
-      }),
-    });
+      }, 30_000);
 
-    if (!streamResponse.ok) {
-      throw new Error("Failed to stream AI response");
+      if (!finalResponse.ok) {
+        const t = await finalResponse.text();
+        console.error("Final stream error:", finalResponse.status, t);
+        return jr(
+          errorBody("UPSTREAM_ERROR", "Failed to get final AI response after tool execution"),
+          502,
+        );
+      }
+
+      return new Response(finalResponse.body, { headers: sseHeaders });
     }
 
-    // Stream the response back
-    return new Response(streamResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+    // No tool calls — convert the already-received response to SSE format
+    // instead of making a redundant second streaming call.
+    const content = assistantMessage?.content || "";
+    console.log(`No tool calls — returning direct response (${content.length} chars)`);
+
+    const encoder = new TextEncoder();
+    const sseBody = new ReadableStream({
+      start(controller) {
+        // Emit the content in a single SSE chunk matching OpenAI format
+        const chunk = {
+          choices: [{ delta: { content }, index: 0, finish_reason: null }],
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        // Send the done signal
+        const doneChunk = {
+          choices: [{ delta: {}, index: 0, finish_reason: "stop" }],
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneChunk)}\n\n`));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
       },
     });
+
+    return new Response(sseBody, { headers: sseHeaders });
   } catch (error) {
     console.error("Chat error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    // Best-effort error log; never throws since insertAiRun swallows errors.
+    await insertAiRun(getServiceClient(), {
+      user_id: userId,
+      agent_name: "multi_agent_chat",
+      agent_type: "general_concierge",
+      input_data: {
+        tab,
+        conversationId: conversationId ?? null,
+        messageCount: messages.length,
+      },
+      output_data: { phase: "exception" },
+      duration_ms: Date.now() - startTime,
+      status: "error",
+      model_name: "gemini-3-flash-preview",
+      error_message: errMsg.slice(0, 500),
+    });
+    return jr(errorBody("INTERNAL", errMsg), 500);
   }
 });

@@ -6,18 +6,7 @@ import { ChatMessage, Conversation, ChatTab, tabToAgentType } from '@/types/chat
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
-// Use environment variable with fallback for the Supabase URL
-const SUPABASE_URL = 'https://zkwcbyxiwklihegjhuql.supabase.co';
-export interface IntentResult {
-  intent: string;
-  targetAgent: ChatTab;
-  confidence: number;
-  entities: Record<string, unknown>;
-  suggestedResponse?: string;
-  requiresAuth?: boolean;
-  reasoning?: string;
-}
-
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export function useChat(activeTab: ChatTab) {
   const { user } = useAuth();
   const { activeTrip } = useTripContext();
@@ -26,8 +15,9 @@ export function useChat(activeTab: ChatTab) {
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [lastIntent, setLastIntent] = useState<IntentResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFailedMessageRef = useRef<string | null>(null);
 
   // Realtime subscription handler for message updates
   const handleRealtimeEvent = useCallback((event: RealtimeEvent) => {
@@ -134,55 +124,14 @@ export function useChat(activeTab: ChatTab) {
     await fetchMessages(conversation.id);
   }, [fetchMessages]);
 
-  // Route message through AI Router for intent classification
-  const routeMessage = useCallback(async (content: string): Promise<IntentResult | null> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': session?.access_token 
-            ? `Bearer ${session.access_token}` 
-            : `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
-          message: content,
-          currentTab: activeTab,
-          conversationHistory: messages.slice(-6).map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          userContext: {
-            hasActiveTrip: !!activeTrip,
-            hasPendingBookings: false, // Could be enhanced later
-            currentPage: window.location.pathname,
-          },
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          setLastIntent(result.data);
-          return result.data as IntentResult;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Intent routing error:', error);
-      return null;
-    }
-  }, [activeTab, messages, activeTrip]);
-
-  // Send a message with streaming (now includes intent routing)
+  // Send a message with streaming
   const sendMessage = useCallback(async (content: string) => {
-    if (!user || !content.trim()) return;
-
-    // Route the message first to classify intent (non-blocking)
-    routeMessage(content).catch(console.error);
+    if (!content.trim()) return;
+    if (!user) {
+      toast.error('Please sign in to chat');
+      return;
+    }
+    setError(null);
 
     // Create conversation if none exists
     let conversation = currentConversation;
@@ -191,22 +140,33 @@ export function useChat(activeTab: ChatTab) {
       if (!conversation) return;
     }
 
-    // Add user message to UI immediately
+    // Save user message to database FIRST and capture the server-generated UUID.
+    // Matching client + server IDs is what lets the realtime subscription dedupe
+    // correctly (without this, every message renders twice on broadcast).
+    const { data: insertedRow, error: userInsertErr } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversation.id,
+        role: 'user',
+        content,
+      })
+      .select('id, created_at')
+      .single();
+
+    if (userInsertErr) {
+      console.error('Failed to save user message:', userInsertErr);
+      toast.error(userInsertErr.message || 'Failed to send message');
+      return;
+    }
+
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: insertedRow?.id ?? crypto.randomUUID(),
       conversation_id: conversation.id,
       role: 'user',
       content,
-      created_at: new Date().toISOString(),
+      created_at: insertedRow?.created_at ?? new Date().toISOString(),
     };
     setMessages(prev => [...prev, userMessage]);
-
-    // Save user message to database
-    await supabase.from('messages').insert({
-      conversation_id: conversation.id,
-      role: 'user',
-      content,
-    });
 
     // Start streaming response
     setIsLoading(true);
@@ -270,7 +230,21 @@ export function useChat(activeTab: ChatTab) {
           toast.error('AI credits exhausted. Please add credits to continue.');
           throw new Error('Payment required');
         }
-        throw new Error('Failed to get AI response');
+        let detail = 'Failed to get AI response';
+        try {
+          const j = (await response.json()) as {
+            error?: string | { code?: string; message?: string };
+          };
+          if (typeof j?.error === 'object' && j.error?.message) {
+            detail = String(j.error.message);
+          } else if (typeof j?.error === 'string') {
+            detail = j.error;
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+        toast.error(detail);
+        throw new Error(detail);
       }
 
       if (!response.body) throw new Error('No response body');
@@ -318,13 +292,29 @@ export function useChat(activeTab: ChatTab) {
         }
       }
 
+      // Fallback if the model produced no content (empty tool response, etc.)
+      // Never persist empty assistant rows — show a helpful message instead.
+      if (!assistantContent.trim()) {
+        const fallback = "I couldn't find results for that right now. Try rephrasing, or ask me about a specific neighborhood (El Poblado, Laureles, Envigado).";
+        assistantContent = fallback;
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessage.id ? { ...m, content: fallback } : m
+          )
+        );
+      }
+
       // Save assistant message to database
-      await supabase.from('messages').insert({
+      const { error: insertErr } = await supabase.from('messages').insert({
         conversation_id: conversation.id,
         role: 'assistant',
         content: assistantContent,
         agent_name: tabToAgentType[activeTab],
       });
+      if (insertErr) {
+        console.error('Failed to save assistant message:', insertErr);
+        toast.error('Message saved locally only — failed to persist to history');
+      }
 
       // Update conversation
       await supabase
@@ -335,13 +325,15 @@ export function useChat(activeTab: ChatTab) {
         })
         .eq('id', conversation.id);
 
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') {
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
         console.log('Request aborted');
       } else {
-        console.error('Chat error:', error);
-        toast.error('Failed to get response');
-        // Remove failed assistant message
+        console.error('Chat error:', err);
+        const msg = (err as Error).message || 'Failed to get response';
+        setError(msg);
+        lastFailedMessageRef.current = content;
+        // Remove the empty assistant placeholder so user sees the error inline
         setMessages(prev => prev.filter(m => m.id !== assistantMessage.id));
       }
     } finally {
@@ -357,6 +349,23 @@ export function useChat(activeTab: ChatTab) {
       setIsStreaming(false);
     }
   }, []);
+
+  // Retry the last failed message
+  const retryLastMessage = useCallback(() => {
+    if (lastFailedMessageRef.current) {
+      const msg = lastFailedMessageRef.current;
+      lastFailedMessageRef.current = null;
+      setError(null);
+      // Remove the user's failed message so sendMessage re-adds it
+      setMessages(prev => {
+        const lastUserIdx = [...prev].reverse().findIndex(m => m.role === 'user');
+        if (lastUserIdx === -1) return prev;
+        const idx = prev.length - 1 - lastUserIdx;
+        return prev.slice(0, idx);
+      });
+      sendMessage(msg);
+    }
+  }, [sendMessage]);
 
   // Archive a conversation
   const archiveConversation = useCallback(async (conversationId: string) => {
@@ -383,13 +392,13 @@ export function useChat(activeTab: ChatTab) {
     currentConversation,
     isLoading,
     isStreaming,
-    lastIntent,
+    error,
     fetchConversations,
     createConversation,
     selectConversation,
     sendMessage,
-    routeMessage,
     cancelStream,
+    retryLastMessage,
     archiveConversation,
     setCurrentConversation,
     setMessages,
