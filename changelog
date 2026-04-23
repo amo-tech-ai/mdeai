@@ -1,0 +1,178 @@
+# Changelog — mdeai.co
+
+## 2026-04-23 (Week 2 Mon/Tue + CORS fix + PR #1 merged to main)
+
+### Shipped to production
+- **PR #1 merged** → commit `287b1cc` → Vercel deploy on `main` → **`www.mdeai.co` now serves the chat-central canvas** (was the old `Index` marketing page). Verified: production bundle contains `ChatCanvas`, `apartment_save_counts` RPC name, "What are you looking for" welcome headline, "Ask about rentals" placeholder. End-to-end POST from `Origin: https://www.mdeai.co` returns 200 streaming SSE with 10 Laureles listings + phase events.
+
+### `fix(cors)` — unblocks every browser POST to edge functions
+- **`supabase/functions/_shared/http.ts`** — `getCorsHeaders(req)` was missing `Access-Control-Allow-Methods`. Browsers send `OPTIONS` preflight with `Access-Control-Request-Method: POST`, see no `Allow-Methods` in response, silently abort the follow-up POST. Server logs showed `OPTIONS 204` with no matching POST — every anon chat send failed with "Failed to get response."
+- Added `Access-Control-Allow-Methods: POST, GET, OPTIONS`, added `x-anon-session-id` to `Allow-Headers` (so the 3-msg anon gate doesn't trip a second preflight failure), added `Access-Control-Max-Age: 86400` + `Vary: Origin` for Cloudflare/browser cache correctness.
+- **All 10 edge functions redeployed** on `zkwcbyxiwklihegjhuql` (ai-chat, rentals, ai-router, ai-search, ai-trip-planner, ai-optimize-route, ai-suggest-collections, google-directions, rules-engine, p1-crm).
+
+### Week 2 Tue — save + add-to-trip + social proof
+- **New RPC** `public.apartment_save_counts(apartment_ids uuid[])` → migration `supabase/migrations/20260424120000_apartment_save_counts_rpc.sql`. `SECURITY DEFINER`; returns `(apartment_id, save_count)` only (no user_id leakage). Granted to `anon, authenticated`.
+- **`src/hooks/useChatActions.ts`** — owns `savedIds`, `saveCounts`, `trips`; exposes `toggleSave` (optimistic w/ rollback), `addToTrip`, `createTripAndAdd`, `fetchSaveCounts`. Anon users get a friendly sign-in toast instead of RLS errors.
+- **`src/components/chat/AddToTripModal.tsx`** — pick-existing or create-new flow. New-trip form enforces `trips.start_date` / `end_date` NOT NULL and drops the listing in as the first `trip_items` row.
+- **`EmbeddedListings.tsx`** now owns the modal + fires the save-count RPC per batch of listings.
+- **`RentalCardInline.tsx`** renders a rose-tinted **"Saved by N nomads"** badge when `save_count > 0` (social proof moat).
+
+### Week 2 Mon — context chips + `session_data` persistence
+- **`src/components/chat/ChatContextChips.tsx`** — four popover-backed chips above the message list: 📍 neighborhood · 📅 dates · 👥 travelers · 💰 budget. Clear-all button when any chip is set.
+- **`src/hooks/useChat.ts`** — hydrates chips from `conversations.session_data.chat_context` on `selectConversation`; writes-through to Postgres on every edit; seeds `session_data` on brand-new conversations so pre-first-message chip edits aren't lost; sends `sessionData` on every `ai-chat` POST.
+- **`src/types/chat.ts`** — `ChatContext` + `EMPTY_CHAT_CONTEXT` + `hasChatContext()` typed; `Conversation.session_data` typed.
+- **`supabase/functions/ai-chat/index.ts`** — `sessionDataSchema` (strict Zod) + `sessionContextBlock()` injected into the system prompt so Gemini inherits chip values on the next tool call ("inherit unless user's latest message overrides"). Deployed v37 → v38 after CORS fix.
+
+### Known issues / follow-ups
+- **`npm run verify:edge`** fails with "Could not find @supabase/supabase-js in a node_modules folder" on `p1-crm/index.ts`. Pre-existing (not introduced this session); deno check on `ai-chat` + `_shared` passes individually. Needs `deno install` wiring in `scripts/verify-edge-functions.sh`.
+- **Wed/Thu/Fri of Week 2 still pending** on `fix/chat-production-hardening` (new branch will be opened if that one stays deleted; otherwise resumes on it):
+  - Wed — `ChatLeftNav` with chats + saved (N) + trips (N)
+  - Thu — SEO page → chat handoff ("Ask mdeai about this →" CTAs on `/apartments/:id`) + email-gate polish
+  - Fri — affiliate attribution + `outbound_clicks` migration
+
+---
+
+## 2026-04-05 (tasks/notes — rental search strategy)
+
+### Docs
+- **`tasks/notes/06-search.md`** — Rental search strategy (options, meta-search ingest → unified DB, best practices, roadmap); **§ User journey: prompt in chat** — aggregated index (not per-request crawl); step table; **current** vs **best**; **§ Attribution vs ToS** — why link-back is still not automatic permission (search-engine analogy table); links **`03-realestate-search.md`**.
+
+---
+
+## 2026-04-05 (02E — rental payments off-platform)
+
+### tasks/prompts/core
+- **`02E-lead-to-lease-pipeline.md`** — Product rule: **mdeai does not collect rental payments**; landlord/owner handles deposit/rent. **E2-004** booking-create creates records + handoff copy only (no Stripe). **E2-005** Stripe webhook **Deferred**. **E2-009** → BookingConfirmation + landlord handoff (no Stripe checkout). **`tasks/prompts/INDEX.md`** row updated.
+
+---
+
+## 2026-04-05 (CLAUDE.md — task completion rule)
+
+### Docs
+- **`CLAUDE.md`** — New **Task completion & docs** section (changelog + `tasks/todo.md`, success criteria, tests/verify:edge); **Quick commands** includes `npm run verify:edge`; **Git workflow** references tests + verify:edge when edge changes. Points to **`.cursor/rules/task-completion-and-docs.mdc`**.
+
+---
+
+## 2026-04-05 (Task prompts — success criteria)
+
+### tasks/prompts/core
+- All **20** prompt files include **Success criteria (tests · verify · production-ready)** immediately before **Feature success** — shared table: `npm run lint` / `build` / `test` (+ `verify:edge` when edge changes), manual smoke for auth/CORS/payments/idempotency, production-ready gates (security, deploy, rollback/monitoring).
+
+---
+
+## 2026-04-05 (Edge + rentals polish)
+
+### Edge functions (Supabase)
+- **`Deno.serve` everywhere** — removed `std/http` `serve` import from ai-chat, ai-router, ai-search, ai-trip-planner, google-directions, ai-optimize-route, ai-suggest-collections, rules-engine (aligns with Supabase / Deno 2 guidance)
+- **Per-request CORS** — all browser-invoked handlers use `getCorsHeaders(req)` + `jsonResponse(..., req)` (or equivalent); **`OPTIONS` → 204** where updated; Vercel preview / localhost get correct `Access-Control-Allow-Origin` (not only static `mdeai.co`)
+- **`requireCronSecret`** — 403 responses pass `req` into `jsonResponse` for CORS consistency
+- **`ai-optimize-route`** — **`insertAiRun`** on Gemini success / upstream error / parse fallback when JWT user present; uses `_shared/supabase-clients` + `getCorsHeaders` + `okJson` helper
+
+### `rentals` edge function
+- **Backward-compatible API** — `preprocessRentalBody` maps legacy `user_message` + `context.message_history` → `messages[]`, `listing_id` → `id`; search response adds flat **`listings` / `total` / `map_pins` / `facets`** for older callers; intake adds **`status` / `summary`**; verify adds **`freshness_status`**; map pins accept numeric coords as **number or string** from PostgREST
+
+### Frontend (P1 / apartments)
+- **`ApartmentRentActions`** — idempotency key for tour + application **rotates in `useEffect` when dialog opens** (controlled Radix `Dialog` often does not call `onOpenChange(true)` on programmatic open — reused key caused silent server no-ops on second submit)
+
+---
+
+## 2026-04-05 (Security Hardening Session)
+
+### Security Fixes (4 CRITICAL resolved)
+- **verify_jwt = true** on all 10 edge functions (was false on 9/10) → `supabase/config.toml`
+- **CORS locked down** → `_shared/http.ts` rewritten with `getCorsHeaders(req)` and allowed origins list (mdeai.co, medell-n-connect.vercel.app, localhost:8080); wildcard `*` eliminated
+- **Service role key pattern fixed** → new `_shared/supabase-clients.ts` with `getUserClient()` (anon key + JWT) and `getServiceClient()` (admin only); applied to ai-search + ai-router
+- **Gemini timeout helper** → new `_shared/gemini.ts` with 30s `AbortController`; ready for all functions
+- **Frontend hardcoded secrets removed** → 7 files: all `zkwcbyxiwklihegjhuql` URLs → `import.meta.env.VITE_SUPABASE_URL`; 3 files: JWT tokens → `import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY`
+- **Dead code removed** → `useIntentRouter.ts` (orphaned) + `ChatRightPanel.tsx` (orphaned) deleted
+- **Wasted AI call removed** → `useChat.ts` no longer calls ai-router on every message (result was computed but never used; saves ~50% Gemini cost per message)
+
+### Database
+- **Core corrections migration** → `20260405120000_core_phase_corrections.sql` creates: `idempotency_keys`, `notifications`, `agent_audit_log` tables + indexes for showing dedup, application dedup, stripe webhook dedup
+
+### Audits Completed
+- **Full system audit** → `tasks/audit/09-full-system-audit.md` — 25/100 overall, 8 CRITICAL, 10 HIGH vulnerabilities documented; Supabase addendum (§9) with per-function readiness matrix
+- **Prompts audit** → `tasks/audit/08-prompts-audit.md` — 30/100 overall, 13 CRITICAL, 22 HIGH issues; all 65 prompt files reviewed
+- **12 core prompts corrected** → wrong schemas, missing tables, route mismatches, deletion errors fixed in `tasks/prompts/core/`
+
+### Roadmap Updated
+- **Booking + landlord comms** promoted to CORE — host approval workflow, in-app messaging
+- **Planning dashboard** (favorites, compare) promoted to CORE
+- **WhatsApp v1** (lead capture + search + reminders) promoted to CORE (Weeks 7-8)
+- **Agents (E5)** deferred from CORE to ADVANCED — pipeline works without agents
+- New prompt: `08L-wa-apartment-search.md` — WA apartment search via ai-search bridge
+- New prompt: `14A-chatbot-cleanup.md` — chatbot dead code + hardcoded URL fixes
+- CORE phase expanded to 8 weeks (from 6) with 20 prompt files
+
+### Project Organization
+- Prompts reorganized into phase folders: `core/` (20), `advanced/` (41), `production/` (1), `reference/` (4)
+- Originals moved to `tasks/prompts/originals/`
+- `INDEX.md` rewritten with phase sections
+- `tasks/roadmap.md` updated with new RICE scores, dependency map, and weekly schedule
+- **Continuous testing strategy** added to `tasks/progress.md` §10b — 6 gates from build to production deploy
+
+### Files Changed (this session)
+- 14 production files modified/created/deleted
+- 3 new shared helpers: `_shared/gemini.ts`, `_shared/supabase-clients.ts`, updated `_shared/http.ts`
+- 2 files deleted: `useIntentRouter.ts`, `ChatRightPanel.tsx`
+- 1 migration created: `20260405120000_core_phase_corrections.sql`
+- Build passes: `✓ built in 4.08s` (bundle 1,643 kB, 1 kB smaller after dead code removal)
+
+---
+
+## 2026-04-05 (Earlier)
+
+### Project tracking (docs)
+- **`tasks/progress.md`** — Overall ~43%; E2 pipeline 42% (`p1-crm` now covers showings + rental applications + UI); E4 frontend 43%; **Testing** section reflects Vitest (`p1-crm-envelope.test.ts`) + Deno tests under `supabase/functions/tests/`; Dashboard row notes **My rentals** / P1 pipeline
+- **`tasks/todo.md`** — Header refresh; Week 1–2 checkboxes unchanged (seed partial, pipeline tables, `p1-crm` MVP, showing/application UI); still open: Vercel `VITE_*`, E3 hardening, Stripe, **10C** deploy smoke, unused AI wires
+
+### Data foundation & Supabase (Epic 1)
+- **P1 migrations applied** on linked project (`supabase db push`) — `neighborhoods`, `leads`, `showings`, `rental_applications`, `property_verifications`, `payments`
+- **`supabase/seed.sql`** — idempotent demo data: 12 neighborhoods, 5 profiles, 28 apartments (USD), P1 CRM rows, bookings, payments; **`[db.seed]`** in `config.toml`
+- **Types regenerated** — `supabase gen types typescript --linked` → `src/integrations/supabase/database.types.ts` (stdout only; no stderr in file)
+- **`p1-crm` edge function** — JWT + Zod + service-role inserts for `create_lead` / `record_payment`; deployed via CLI (`supabase functions deploy p1-crm --use-api`)
+- **Remote seed** — `supabase db query --linked -f supabase/seed.sql`
+- **`.env.local`** — fixed parse error (stray line broke Supabase CLI)
+- **Cursor rule** — `.cursor/rules/supabase/supabase-cli.mdc` (official CLI docs links, linked-project workflow)
+- **`tasks/notes/01-supa.md`** — CLI checklist + MCP `deploy_edge_function` `files` requirement
+
+### Task System
+- Created 9 epic prompt files (`01E` through `09E`) with 48 total tasks in `tasks/prompts/`
+- Created `tasks/progress.md` — comprehensive progress tracker with 14 sections
+- Created `tasks/todo.md` — prioritized next steps (4-week plan)
+- All prompt files use `##E-name.md` numeric prefix convention
+
+### Audit Findings
+- Identified 8 CRITICAL security issues across all 9 edge functions
+- ~~All 28 database tables confirmed to have 0 rows~~ — **2026-04-05:** seed applied for apartments, profiles, P1 CRM, bookings/payments; restaurants/cars/events still unseeded
+- 3 edge functions (ai-search, ai-trip-planner, rules-engine) deployed but never called from frontend
+- Wrong env var prefix in Vercel (NEXT_PUBLIC_* should be VITE_*)
+- Admin auth guard is non-functional
+
+## 2026-04-03
+
+### Architecture
+- 10 Mermaid diagrams created covering full system architecture
+- Wireframes for 10 key screens documented in `tasks/wireframes/`
+- Task roadmap with RICE scoring across 9 epics
+
+## Prior (Pre-Changelog)
+
+### Features Built (~95% UI complete)
+- 158+ React components across 33 pages with 34 custom hooks
+- 3-panel layout system with responsive mobile support
+- Full listing UIs: apartments, cars, restaurants, events
+- Auth: email/password + Google OAuth with protected routes
+- AI chat: FloatingChatWidget with multi-agent architecture
+- 6 AI edge functions deployed (Gemini Flash/Pro/Lite)
+- Trip planner, bookings, collections, saved places
+- Commerce: Shopify + Gadget integration, `/coffee` route, cart hook
+- Admin dashboard (CRUD for all listing types)
+- Onboarding wizard, notifications UI
+- Static pages: how-it-works, pricing, privacy, terms
+
+### Infrastructure
+- Supabase: 28 tables, RLS on all, pgvector + PostGIS
+- 9 edge functions deployed (all need security hardening)
+- Vercel deployment live at www.mdeai.co
+- Shopify headless dev store + Gadget sync bridge connected
