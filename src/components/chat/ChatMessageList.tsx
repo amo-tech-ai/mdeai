@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ChatActionBar } from './ChatActionBar';
 import { EmbeddedListings } from './embedded/EmbeddedListings';
+import { ChatReasoningTrace, type ReasoningPhase } from './ChatReasoningTrace';
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -16,6 +17,8 @@ interface ChatMessageListProps {
   onRetry?: () => void;
   pendingActions?: ChatAction[];
   onActionDispatched?: (action: ChatAction) => void;
+  /** Reasoning-trace phases for the "Thought for Ns" collapsible. */
+  reasoningPhases?: ReasoningPhase[];
 }
 
 export function ChatMessageList({
@@ -26,6 +29,7 @@ export function ChatMessageList({
   onRetry,
   pendingActions,
   onActionDispatched,
+  reasoningPhases,
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +67,17 @@ export function ChatMessageList({
                   : 'bg-muted/50'
               )}
             >
+              {/* Reasoning trace renders above the latest assistant message's
+                  content so the user sees "Handing off to Rentals Concierge…"
+                  → "Considering 43 matches…" BEFORE the final text arrives. */}
+              {message.role === 'assistant' &&
+                messages[messages.length - 1].id === message.id &&
+                reasoningPhases && reasoningPhases.length > 0 && (
+                  <ChatReasoningTrace
+                    phases={reasoningPhases}
+                    isActive={isStreaming || isLoading}
+                  />
+                )}
               {message.role === 'assistant' ? (
                 <div className="text-sm leading-relaxed prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_h3]:font-semibold">
                   <Markdown>{message.content}</Markdown>

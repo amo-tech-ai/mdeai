@@ -11,6 +11,58 @@ import {
   dispatchTool,
 } from "../_shared/tool-registry.ts";
 
+/**
+ * Human-readable persona per tool, used in the reasoning-trace header.
+ * Mindtrip narrates "Handing off to our hotel agent…"; we do the same
+ * but as a lightweight theater layer over the tool-registry pattern —
+ * one LLM call under the hood, personas on the surface.
+ */
+const AGENT_LABELS: Record<string, string> = {
+  rentals_search: "Rentals Concierge",
+  rentals_intake: "Rentals Concierge",
+  search_apartments: "Rentals Concierge",
+  get_user_trips: "Trip Planner",
+  get_user_bookings: "Booking Assistant",
+  create_booking_preview: "Booking Assistant",
+};
+
+/**
+ * Build a compact "I considered N of M…" phase event from a tool result.
+ * Returns null for tool results that don't fit the standard envelope
+ * (e.g. booking preview, user trips list).
+ */
+function phaseNarrationFor(
+  toolName: string,
+  result: unknown,
+  agentLabel: string,
+): Record<string, unknown> | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const r = result as Record<string, unknown>;
+  if (typeof r.total_count === "number") {
+    const total = r.total_count as number;
+    if (total === 0) {
+      return {
+        phase: "thinking",
+        agent_label: agentLabel,
+        message: "No listings matched those criteria — widening search…",
+      };
+    }
+    return {
+      phase: "thinking",
+      agent_label: agentLabel,
+      message: `Considering ${total} match${total === 1 ? "" : "es"} in the database…`,
+    };
+  }
+  if (r.error) {
+    return {
+      phase: "thinking",
+      agent_label: agentLabel,
+      message: `Tool returned an error: ${String(r.error).slice(0, 80)}`,
+    };
+  }
+  return null;
+}
+
 // Strict caps limit prompt-injection surface and prevent token-burn attacks.
 // Previous 500KB x 50 = 25MB was absurdly permissive.
 const chatBodySchema = z.object({
@@ -220,7 +272,7 @@ type SupabaseClientType = ReturnType<typeof getUserClient>;
 async function executeSearchApartments(params: Record<string, unknown>, supabase: SupabaseClientType) {
   let query = supabase
     .from("apartments")
-    .select("id, title, description, neighborhood, price_monthly, price_daily, bedrooms, bathrooms, amenities, rating, images, verified, source_url")
+    .select("id, title, description, neighborhood, price_monthly, price_daily, bedrooms, bathrooms, amenities, rating, images, verified, source_url, latitude, longitude")
     .eq("status", "active");
 
   if (params.neighborhood) {
@@ -271,6 +323,8 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
     verified: l.verified,
     source_url: l.source_url,
     description: l.description,
+    latitude: l.latitude,
+    longitude: l.longitude,
   }));
 
   // Return the "action envelope" shape so the client can render inline
@@ -664,6 +718,11 @@ Deno.serve(async (req) => {
       // Accumulate actions emitted by tools so we can prepend them as an SSE
       // sidecar event before Gemini's final text stream begins.
       const collectedActions: Array<Record<string, unknown>> = [];
+      // Accumulate phase events — each tool call produces a "handoff" phase
+      // with the persona label, followed by a "thinking" phase once results
+      // come back. Streamed to the client alongside actions so the reasoning
+      // trace renders above the final AI message.
+      const collectedPhases: Array<Record<string, unknown>> = [];
 
       const toolResults = await Promise.all(
         assistantMessage.tool_calls.map(
@@ -672,6 +731,12 @@ Deno.serve(async (req) => {
             function: { name: string; arguments: string };
           }) => {
             const params = parseToolArguments(toolCall.function.arguments);
+            const agentLabel = AGENT_LABELS[toolCall.function.name] ?? "Concierge";
+            collectedPhases.push({
+              phase: "handoff",
+              agent_label: agentLabel,
+              message: `Handing off to ${agentLabel}…`,
+            });
             const result = await executeTool(
               toolCall.function.name,
               params,
@@ -679,6 +744,10 @@ Deno.serve(async (req) => {
               userId,
               authHeader,
             );
+            // After the tool returns, narrate a compact summary using the
+            // response envelope fields (total_count, considered, etc).
+            const narration = phaseNarrationFor(toolCall.function.name, result, agentLabel);
+            if (narration) collectedPhases.push(narration);
             // Extract structured actions from the tool envelope (if any)
             if (
               result && typeof result === "object" && !Array.isArray(result) &&
@@ -715,18 +784,25 @@ Deno.serve(async (req) => {
         );
       }
 
-      // If any tool produced actions, prepend an SSE sidecar event with them
-      // before piping Gemini's stream. The client parser (useChat.ts) looks
-      // for `mdeai_actions` on any data event and dispatches them.
-      if (collectedActions.length > 0 && finalResponse.body) {
+      // Prepend SSE sidecar events (phases + actions) before piping Gemini's
+      // stream. The client parser (useChat.ts) looks for `phase` or
+      // `mdeai_actions` on any data event and dispatches them independently
+      // of Gemini's `choices[].delta.content` chunks.
+      if ((collectedPhases.length > 0 || collectedActions.length > 0) && finalResponse.body) {
         const encoder = new TextEncoder();
         const merged = new ReadableStream<Uint8Array>({
           async start(controller) {
-            // 1) Sidecar first — client stores this to render a "See all N →" button
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({ mdeai_actions: collectedActions })}\n\n`,
-            ));
-            // 2) Then Gemini's normal content stream
+            // 1) Phase events in order — reasoning trace
+            for (const p of collectedPhases) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(p)}\n\n`));
+            }
+            // 2) Actions sidecar — inline cards + "See all →" button
+            if (collectedActions.length > 0) {
+              controller.enqueue(encoder.encode(
+                `data: ${JSON.stringify({ mdeai_actions: collectedActions })}\n\n`,
+              ));
+            }
+            // 3) Then Gemini's normal content stream
             const reader = finalResponse.body!.getReader();
             try {
               while (true) {

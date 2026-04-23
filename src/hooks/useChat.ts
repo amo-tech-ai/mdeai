@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripContext } from '@/context/TripContext';
 import { ChatMessage, Conversation, ChatTab, ChatAction, tabToAgentType } from '@/types/chat';
+import type { ReasoningPhase } from '@/components/chat/ChatReasoningTrace';
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
@@ -20,6 +21,9 @@ export function useChat(activeTab: ChatTab) {
   // renders these as affordances (buttons) under the latest assistant message.
   // Cleared on every new send.
   const [pendingActions, setPendingActions] = useState<ChatAction[]>([]);
+  // Reasoning-trace phases streamed from edge function SSE sidecar events.
+  // Drives the "Thought for Ns" collapsible — cleared on every new send.
+  const [reasoningPhases, setReasoningPhases] = useState<ReasoningPhase[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFailedMessageRef = useRef<string | null>(null);
 
@@ -136,8 +140,10 @@ export function useChat(activeTab: ChatTab) {
       return;
     }
     setError(null);
-    // Clear previous turn's action affordances — the next tool call will emit its own.
+    // Clear previous turn's action affordances + reasoning trace —
+    // the next tool call will emit its own.
     setPendingActions([]);
+    setReasoningPhases([]);
 
     // Create conversation if none exists
     let conversation = currentConversation;
@@ -283,6 +289,15 @@ export function useChat(activeTab: ChatTab) {
             if (parsed && Array.isArray(parsed.mdeai_actions)) {
               setPendingActions(prev => [...prev, ...(parsed.mdeai_actions as ChatAction[])]);
             }
+            // Reasoning-trace phase event (handoff / thinking / ranking / etc)
+            if (parsed && typeof parsed.phase === 'string' && typeof parsed.message === 'string') {
+              setReasoningPhases(prev => [...prev, {
+                phase: parsed.phase,
+                agent_label: parsed.agent_label,
+                message: parsed.message,
+                ts: Date.now(),
+              }]);
+            }
             const deltaContent = parsed.choices?.[0]?.delta?.content;
             if (deltaContent) {
               assistantContent += deltaContent;
@@ -404,6 +419,7 @@ export function useChat(activeTab: ChatTab) {
     isStreaming,
     error,
     pendingActions,
+    reasoningPhases,
     fetchConversations,
     createConversation,
     selectConversation,
@@ -414,5 +430,6 @@ export function useChat(activeTab: ChatTab) {
     setCurrentConversation,
     setMessages,
     setPendingActions,
+    setReasoningPhases,
   };
 }

@@ -27,6 +27,8 @@ export interface RentalInlineListing {
   verified?: boolean | null;
   source_url?: string | null;
   description?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface OpenRentalsResultsAction {
