@@ -255,8 +255,26 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
     };
   }
 
-  // Return the "action envelope" shape so the client can render a
-  // "See all N on the map →" button that navigates to /apartments?q=...
+  // Inline listing data for chat cards. Narrower than full Apartment type
+  // to keep SSE payload small (only fields the card component needs).
+  const inlineListings = listings.map((l) => ({
+    id: l.id,
+    title: l.title,
+    neighborhood: l.neighborhood,
+    price_monthly: l.price_monthly,
+    price_daily: l.price_daily,
+    bedrooms: l.bedrooms,
+    bathrooms: l.bathrooms,
+    rating: l.rating,
+    amenities: l.amenities,
+    images: l.images,
+    verified: l.verified,
+    source_url: l.source_url,
+    description: l.description,
+  }));
+
+  // Return the "action envelope" shape so the client can render inline
+  // rental cards AND the "See all on the map →" button.
   return {
     success: true,
     total_count: listings.length,
@@ -265,7 +283,11 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
     actions: listings.length > 0
       ? [{
           type: "OPEN_RENTALS_RESULTS",
-          payload: { filters, listing_ids: listings.map((l) => l.id) },
+          payload: {
+            filters,
+            listing_ids: listings.map((l) => l.id),
+            listings: inlineListings,
+          },
         }]
       : [],
     message: listings.length > 0

@@ -6,6 +6,7 @@ import { ChatMessage, ChatAction } from '@/types/chat';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ChatActionBar } from './ChatActionBar';
+import { EmbeddedListings } from './embedded/EmbeddedListings';
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -79,16 +80,21 @@ export function ChatMessageList({
                   {message.agent_name.replace(/_/g, ' ')}
                 </p>
               )}
-              {/* Structured action affordances (e.g. "See all on the map →")
-                  render under the latest assistant message once the stream ends. */}
+              {/* Inline listing cards + structured action affordances (e.g.
+                  "See all on the map →") render under the latest assistant
+                  message once the stream ends. Cards come from the tool
+                  response payload; the button navigates to /apartments?q=… */}
               {message.role === 'assistant' &&
                 !isStreaming &&
                 messages[messages.length - 1].id === message.id &&
                 pendingActions && pendingActions.length > 0 && (
-                  <ChatActionBar
-                    actions={pendingActions}
-                    onActionDispatched={onActionDispatched}
-                  />
+                  <>
+                    <EmbeddedListings actions={pendingActions} />
+                    <ChatActionBar
+                      actions={pendingActions}
+                      onActionDispatched={onActionDispatched}
+                    />
+                  </>
                 )}
             </div>
 

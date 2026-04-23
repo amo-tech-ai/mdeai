@@ -8,11 +8,35 @@ export type ChatTab = 'concierge' | 'trips' | 'explore' | 'bookings';
 // The chat UI consumes them to render affordances like "See all N results →"
 // that navigate the user to a full results page.
 
+/**
+ * Minimal rental data surfaced inline in chat cards.
+ * The full `Apartment` type (src/types/listings.ts) is used on detail pages;
+ * chat-inline uses this narrower shape to keep SSE payloads small.
+ */
+export interface RentalInlineListing {
+  id: string;
+  title: string;
+  neighborhood: string;
+  price_monthly?: number | null;
+  price_daily?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  rating?: number | null;
+  amenities?: string[] | null;
+  images?: string[] | null;
+  verified?: boolean | null;
+  source_url?: string | null;
+  description?: string | null;
+}
+
 export interface OpenRentalsResultsAction {
   type: 'OPEN_RENTALS_RESULTS';
   payload: {
     filters: Record<string, unknown>;
+    /** Listing IDs — legacy field, retained for the "See all on map →" button. */
     listing_ids?: string[];
+    /** Full listing data for inline card rendering. Added Day 2. */
+    listings?: RentalInlineListing[];
   };
 }
 
