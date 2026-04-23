@@ -12,7 +12,6 @@ import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
-import DashboardRentals from "./pages/DashboardRentals";
 import Onboarding from "./pages/Onboarding";
 import Explore from "./pages/Explore";
 import Apartments from "./pages/Apartments";
@@ -88,14 +87,6 @@ const App = () => (
                 <Dashboard />
               </ProtectedRoute>
             } />
-            <Route
-              path="/dashboard/rentals"
-              element={
-                <ProtectedRoute>
-                  <DashboardRentals />
-                </ProtectedRoute>
-              }
-            />
             <Route path="/onboarding" element={<Onboarding />} />
             {/* Marketing Routes */}
             <Route path="/how-it-works" element={<HowItWorks />} />
