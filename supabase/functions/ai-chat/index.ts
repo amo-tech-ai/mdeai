@@ -5,6 +5,11 @@ import { insertAiRun, extractUsage } from "../_shared/ai-runs.ts";
 import { safeJsonParse } from "../_shared/json.ts";
 import { getUserClient, getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
 import { fetchGemini, fetchGeminiStream } from "../_shared/gemini.ts";
+import {
+  type ToolExecutor,
+  toolsArrayFromRegistry,
+  dispatchTool,
+} from "../_shared/tool-registry.ts";
 
 // Strict caps limit prompt-injection surface and prevent token-burn attacks.
 // Previous 500KB x 50 = 25MB was absurdly permissive.
@@ -20,199 +25,124 @@ const chatBodySchema = z.object({
   activeTripContext: z.record(z.unknown()).optional().nullable(),
 });
 
-// Tool definitions for AI function calling
-const tools = [
-  // Rentals tools - integrated with rentals Edge Function
-  {
-    type: "function",
-    function: {
+/**
+ * Tool registry — one entry per capability. Add a new vertical here with
+ * { definition, execute } and it shows up in Gemini's tool list and the
+ * dispatcher automatically. See tasks/CHAT-CENTRAL-PLAN.md §3.
+ *
+ * Executor functions are declared later in this file; TypeScript hoists
+ * function declarations so forward-references work.
+ */
+const TOOLS: Record<string, ToolExecutor> = {
+  rentals_search: {
+    definition: {
       name: "rentals_search",
       description: "Search for apartment rentals in Medellín. Use this when users want to find an apartment, rental, or housing. Returns listings with freshness verification, map pins, and available filters.",
       parameters: {
         type: "object",
         properties: {
-          neighborhoods: {
-            type: "array",
-            items: { type: "string" },
-            description: "Neighborhood names (e.g., ['El Poblado', 'Laureles', 'Envigado'])"
-          },
-          bedrooms_min: {
-            type: "integer",
-            description: "Minimum number of bedrooms (0 for studio)"
-          },
-          budget_min: {
-            type: "number",
-            description: "Minimum monthly price in USD"
-          },
-          budget_max: {
-            type: "number",
-            description: "Maximum monthly price in USD"
-          },
-          furnished: {
-            type: "boolean",
-            description: "Whether apartment should be furnished"
-          },
-          amenities: {
-            type: "array",
-            items: { type: "string" },
-            description: "Required amenities (e.g., ['wifi', 'parking', 'gym', 'pool', 'ac'])"
-          },
-          pets: {
-            type: "boolean",
-            description: "Whether pets are allowed"
-          },
-          verified_only: {
-            type: "boolean",
-            description: "Only show verified/active listings"
-          }
+          neighborhoods: { type: "array", items: { type: "string" }, description: "Neighborhood names (e.g., ['El Poblado', 'Laureles', 'Envigado'])" },
+          bedrooms_min: { type: "integer", description: "Minimum number of bedrooms (0 for studio)" },
+          budget_min: { type: "number", description: "Minimum monthly price in USD" },
+          budget_max: { type: "number", description: "Maximum monthly price in USD" },
+          furnished: { type: "boolean", description: "Whether apartment should be furnished" },
+          amenities: { type: "array", items: { type: "string" }, description: "Required amenities (e.g., ['wifi', 'parking', 'gym', 'pool', 'ac'])" },
+          pets: { type: "boolean", description: "Whether pets are allowed" },
+          verified_only: { type: "boolean", description: "Only show verified/active listings" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeRentalsSearch(ctx.params, ctx.authHeader),
   },
-  {
-    type: "function",
-    function: {
+  rentals_intake: {
+    definition: {
       name: "rentals_intake",
       description: "Collect rental search criteria through conversation. Use this when user mentions wanting an apartment but hasn't provided enough details. Returns either next questions to ask or a complete filter_json when ready to search.",
       parameters: {
         type: "object",
         properties: {
-          user_message: {
-            type: "string",
-            description: "The user's latest message about their rental needs"
-          },
-          collected_criteria: {
-            type: "object",
-            description: "Criteria collected so far from previous messages"
-          }
+          user_message: { type: "string", description: "The user's latest message about their rental needs" },
+          collected_criteria: { type: "object", description: "Criteria collected so far from previous messages" },
         },
-        required: ["user_message"]
-      }
-    }
+        required: ["user_message"],
+      },
+    },
+    execute: (ctx) => executeRentalsIntake(ctx.params, ctx.authHeader),
   },
-  {
-    type: "function",
-    function: {
+  search_apartments: {
+    definition: {
       name: "search_apartments",
       description: "Search for apartment rentals in Medellín by neighborhood, price range, or amenities.",
       parameters: {
         type: "object",
         properties: {
-          neighborhood: {
-            type: "string",
-            description: "Neighborhood name (e.g., 'El Poblado', 'Laureles', 'Envigado')"
-          },
-          min_price: {
-            type: "number",
-            description: "Minimum monthly price in USD"
-          },
-          max_price: {
-            type: "number",
-            description: "Maximum monthly price in USD"
-          },
-          bedrooms: {
-            type: "integer",
-            description: "Number of bedrooms"
-          },
-          amenities: {
-            type: "array",
-            items: { type: "string" },
-            description: "Required amenities (e.g., ['WiFi', 'Pool', 'Gym'])"
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of results to return (default: 5)"
-          }
+          neighborhood: { type: "string", description: "Neighborhood name (e.g., 'El Poblado', 'Laureles', 'Envigado')" },
+          min_price: { type: "number", description: "Minimum monthly price in USD" },
+          max_price: { type: "number", description: "Maximum monthly price in USD" },
+          bedrooms: { type: "integer", description: "Number of bedrooms" },
+          amenities: { type: "array", items: { type: "string" }, description: "Required amenities (e.g., ['WiFi', 'Pool', 'Gym'])" },
+          limit: { type: "integer", description: "Maximum number of results to return (default: 5)" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeSearchApartments(ctx.params, ctx.supabase),
   },
-  {
-    type: "function",
-    function: {
+  get_user_trips: {
+    definition: {
       name: "get_user_trips",
       description: "Get the user's saved trips and itineraries.",
       parameters: {
         type: "object",
         properties: {
-          status: {
-            type: "string",
-            enum: ["planning", "active", "completed"],
-            description: "Filter by trip status"
-          }
+          status: { type: "string", enum: ["planning", "active", "completed"], description: "Filter by trip status" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeGetUserTrips(ctx.params, ctx.supabase, ctx.userId),
   },
-  {
-    type: "function",
-    function: {
+  get_user_bookings: {
+    definition: {
       name: "get_user_bookings",
       description: "Get the user's current and upcoming bookings.",
       parameters: {
         type: "object",
         properties: {
-          booking_type: {
-            type: "string",
-            enum: ["apartment", "car", "restaurant", "event"],
-            description: "Filter by booking type"
-          },
-          status: {
-            type: "string",
-            enum: ["pending", "confirmed", "cancelled"],
-            description: "Filter by booking status"
-          }
+          booking_type: { type: "string", enum: ["apartment", "car", "restaurant", "event"], description: "Filter by booking type" },
+          status: { type: "string", enum: ["pending", "confirmed", "cancelled"], description: "Filter by booking status" },
         },
-        required: []
-      }
-    }
+        required: [],
+      },
+    },
+    execute: (ctx) => executeGetUserBookings(ctx.params, ctx.supabase, ctx.userId),
   },
-  {
-    type: "function",
-    function: {
+  create_booking_preview: {
+    definition: {
       name: "create_booking_preview",
       description: "Create a preview of a booking that the user can review before confirming. Returns booking details for user approval.",
       parameters: {
         type: "object",
         properties: {
-          booking_type: {
-            type: "string",
-            enum: ["apartment", "car", "restaurant", "event"],
-            description: "Type of booking"
-          },
-          resource_id: {
-            type: "string",
-            description: "ID of the resource to book (apartment, car, restaurant, or event)"
-          },
-          resource_title: {
-            type: "string",
-            description: "Name/title of the resource being booked"
-          },
-          start_date: {
-            type: "string",
-            description: "Start date in ISO format (YYYY-MM-DD)"
-          },
-          end_date: {
-            type: "string",
-            description: "End date in ISO format (YYYY-MM-DD), optional for single-day bookings"
-          },
-          party_size: {
-            type: "integer",
-            description: "Number of people (for restaurants/events)"
-          },
-          special_requests: {
-            type: "string",
-            description: "Any special requests or notes"
-          }
+          booking_type: { type: "string", enum: ["apartment", "car", "restaurant", "event"], description: "Type of booking" },
+          resource_id: { type: "string", description: "ID of the resource to book (apartment, car, restaurant, or event)" },
+          resource_title: { type: "string", description: "Name/title of the resource being booked" },
+          start_date: { type: "string", description: "Start date in ISO format (YYYY-MM-DD)" },
+          end_date: { type: "string", description: "End date in ISO format (YYYY-MM-DD), optional for single-day bookings" },
+          party_size: { type: "integer", description: "Number of people (for restaurants/events)" },
+          special_requests: { type: "string", description: "Any special requests or notes" },
         },
-        required: ["booking_type", "resource_id", "resource_title", "start_date"]
-      }
-    }
-  }
-];
+        required: ["booking_type", "resource_id", "resource_title", "start_date"],
+      },
+    },
+    // Sync function — still return the expected Promise-compatible shape.
+    execute: (ctx) => Promise.resolve(executeCreateBookingPreview(ctx.params, ctx.userId)),
+  },
+};
+
+// Gemini request format derived from the registry — single source of truth.
+const tools = toolsArrayFromRegistry(TOOLS);
 
 // System prompts for each tab/agent type - enhanced with tool awareness
 const getSystemPrompt = (tab: string, tripContext?: { id: string; title: string; start_date: string; end_date: string; destination?: string } | null): string => {
@@ -523,7 +453,9 @@ async function executeRentalsIntake(
   }
 }
 
-// Execute a tool call
+// Execute a tool call via the registry. Adding a new tool = add an entry to
+// TOOLS above; no changes here. Errors are swallowed into a safe response so
+// Gemini's tool-response handling stays sane.
 async function executeTool(
   toolName: string,
   params: Record<string, unknown>,
@@ -532,23 +464,12 @@ async function executeTool(
   authHeader: string | null,
 ): Promise<unknown> {
   console.log(`Executing tool: ${toolName}`, params);
-
-  switch (toolName) {
-    case "rentals_search":
-      return executeRentalsSearch(params, authHeader);
-    case "rentals_intake":
-      return executeRentalsIntake(params, authHeader);
-    case "search_apartments":
-      return executeSearchApartments(params, supabase);
-    case "get_user_trips":
-      return executeGetUserTrips(params, supabase, userId);
-    case "get_user_bookings":
-      return executeGetUserBookings(params, supabase, userId);
-    case "create_booking_preview":
-      return executeCreateBookingPreview(params, userId);
-    default:
-      return { error: `Unknown tool: ${toolName}` };
-  }
+  return dispatchTool(TOOLS, toolName, {
+    params,
+    supabase,
+    userId,
+    authHeader,
+  });
 }
 
 function parseToolArguments(args: string | undefined): Record<string, unknown> {
