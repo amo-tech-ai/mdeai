@@ -80,24 +80,36 @@ function resolveAllowOrigin(origin: string | null): string {
 /**
  * Build CORS headers for a given request.
  * Use this in both OPTIONS preflight and actual responses.
+ *
+ * Access-Control-Allow-Methods is REQUIRED on preflight — without it
+ * browsers silently abort the follow-up POST (server logs show OPTIONS
+ * 204 with no matching POST). X-Anon-Session-Id is added to Allow-Headers
+ * for the anon-visitor 3-message gate.
  */
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin");
   return {
     "Access-Control-Allow-Origin": resolveAllowOrigin(origin),
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
+      "authorization, x-client-info, apikey, content-type, x-anon-session-id",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
   };
 }
 
 /**
  * @deprecated Use getCorsHeaders(req) instead — static headers break www/preview/localhost.
- * Kept for backward compatibility during migration.
+ * Kept for backward compatibility during migration. Full Methods + Vary set so
+ * accidental use doesn't silently kill browser POSTs.
  */
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGINS[0],
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-anon-session-id",
+  "Access-Control-Max-Age": "86400",
+  "Vary": "Origin",
 };
 
 export function jsonResponse(
