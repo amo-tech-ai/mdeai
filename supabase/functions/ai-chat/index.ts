@@ -1,6 +1,6 @@
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { getCorsHeaders, errorBody, jsonResponse } from "../_shared/http.ts";
-import { allowRate } from "../_shared/rate-limit.ts";
+import { allowRateDurable } from "../_shared/rate-limit.ts";
 import { insertAiRun, extractUsage } from "../_shared/ai-runs.ts";
 import { safeJsonParse } from "../_shared/json.ts";
 import { getUserClient, getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
@@ -558,8 +558,15 @@ Deno.serve(async (req) => {
   }
 
   const rateKey = `ai-chat:${userId}`;
-  if (!allowRate(rateKey, 10, 60_000)) {
-    return jr(errorBody("RATE_LIMIT", "Too many requests"), 429);
+  const rl = await allowRateDurable(getServiceClient(), rateKey, 10, 60);
+  if (!rl.allowed) {
+    return jr(
+      errorBody(
+        "RATE_LIMIT",
+        `Too many requests. Retry in ${rl.retry_after_seconds}s.`,
+      ),
+      429,
+    );
   }
 
   let raw: unknown;
