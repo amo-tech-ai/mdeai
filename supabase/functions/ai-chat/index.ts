@@ -6,13 +6,15 @@ import { safeJsonParse } from "../_shared/json.ts";
 import { getUserClient, getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
 import { fetchGemini, fetchGeminiStream } from "../_shared/gemini.ts";
 
+// Strict caps limit prompt-injection surface and prevent token-burn attacks.
+// Previous 500KB x 50 = 25MB was absurdly permissive.
 const chatBodySchema = z.object({
   messages: z.array(
     z.object({
-      role: z.string().max(32),
-      content: z.string().max(500_000),
+      role: z.enum(["user", "assistant", "system", "tool"]),
+      content: z.string().min(1).max(8_000),
     }),
-  ).min(1).max(50),
+  ).min(1).max(20),
   tab: z.enum(["concierge", "trips", "explore", "bookings"]).optional().default("concierge"),
   conversationId: z.string().uuid().optional().nullable(),
   activeTripContext: z.record(z.unknown()).optional().nullable(),
