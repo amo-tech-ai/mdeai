@@ -23,6 +23,10 @@ declare global {
   interface Window {
     google?: typeof google;
     __mdeaiMapScriptPromise?: Promise<void>;
+    /** Google Maps auth-failure callback — set before script load. */
+    gm_authFailure?: () => void;
+    /** Latched truthy when gm_authFailure fires — components read + fall back. */
+    __mdeaiMapAuthFailed?: boolean;
   }
 }
 
@@ -35,9 +39,27 @@ const MAP_ID = 'mdeai-chat-map';
  * Load the Google Maps script exactly once per tab. Stores the Promise on
  * `window.__mdeaiMapScriptPromise` so multiple ChatMap mounts share the same
  * load and never double-append the <script> tag.
+ *
+ * Adds `loading=async` per Google's recommended pattern — silences the
+ * "loaded directly without loading=async" warning and lets the API defer
+ * non-critical work.
+ *
+ * Installs `window.gm_authFailure` so ApiNotActivatedMapError / RefererNotAllowed
+ * / InvalidKey surface as a flag we can check instead of crashing inside
+ * the Maps API internals.
  */
 function loadGoogleMaps(apiKey: string): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
+  if (!window.gm_authFailure) {
+    window.gm_authFailure = () => {
+      window.__mdeaiMapAuthFailed = true;
+      console.warn(
+        '[ChatMap] Google Maps auth failed (likely ApiNotActivatedMapError or referrer restriction). Enable Maps JavaScript API in Google Cloud + whitelist the hostname.',
+      );
+      // Fire a custom event so mounted components can react without polling.
+      window.dispatchEvent(new Event('mdeai:map-auth-failed'));
+    };
+  }
   if (window.google?.maps?.Map) return Promise.resolve();
   if (window.__mdeaiMapScriptPromise) return window.__mdeaiMapScriptPromise;
 
@@ -50,7 +72,7 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
     }
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker&v=weekly`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker&v=weekly&loading=async`;
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
@@ -64,17 +86,19 @@ function FallbackPinList({
   pins,
   highlightedPinId,
   setHighlightedPinId,
+  reason,
 }: {
   pins: MapPin[];
   highlightedPinId: string | null;
   setHighlightedPinId: (id: string | null) => void;
+  reason?: string;
 }) {
   return (
     <aside className="h-full overflow-y-auto bg-muted/10 border-l border-border">
       <div className="sticky top-0 bg-background/80 backdrop-blur border-b border-border px-4 py-3 z-10">
         <h2 className="text-sm font-semibold">{pins.length} on the map</h2>
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          Interactive map pending Google Maps key
+          {reason ?? 'Interactive map pending Google Maps key'}
         </p>
       </div>
       <ul className="divide-y divide-border">
@@ -138,10 +162,22 @@ export function ChatMap() {
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
+  // If a prior mount already tripped gm_authFailure, skip straight to the
+  // fallback UI — no point loading the script again just to crash.
+  const [authFailed, setAuthFailed] = useState<boolean>(
+    typeof window !== 'undefined' && !!window.__mdeaiMapAuthFailed,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => setAuthFailed(true);
+    window.addEventListener('mdeai:map-auth-failed', handler);
+    return () => window.removeEventListener('mdeai:map-auth-failed', handler);
+  }, []);
+
   // Load Google Maps script (once per tab). Re-runs only on apiKey change,
   // which never happens after initial mount.
   useEffect(() => {
-    if (!apiKey) return;
+    if (!apiKey || authFailed) return;
     let cancelled = false;
     loadGoogleMaps(apiKey)
       .then(() => !cancelled && setMapReady(true))
@@ -149,11 +185,11 @@ export function ChatMap() {
     return () => {
       cancelled = true;
     };
-  }, [apiKey]);
+  }, [apiKey, authFailed]);
 
   // Initialize map once script + container are ready.
   useEffect(() => {
-    if (!mapReady || !containerRef.current || mapRef.current) return;
+    if (!mapReady || authFailed || !containerRef.current || mapRef.current) return;
     try {
       mapRef.current = new google.maps.Map(containerRef.current, {
         center: MEDELLIN_CENTER,
@@ -171,7 +207,7 @@ export function ChatMap() {
       console.error('ChatMap init failed:', err);
       setMapError(err instanceof Error ? err.message : String(err));
     }
-  }, [mapReady]);
+  }, [mapReady, authFailed]);
 
   // Create / update marker content. Uses a plain div so we can keep the
   // mdeai visual language (emoji + title pill) without MapID-bound custom
@@ -205,79 +241,100 @@ export function ChatMap() {
   // markers keyed by pin.id lets us update content-only (no churn) for
   // highlight changes, which we handle in a separate effect below.
   useEffect(() => {
-    if (!mapRef.current || !mapReady) return;
+    if (!mapRef.current || !mapReady || authFailed) return;
     const map = mapRef.current;
     const pinsWithCoords = pins.filter(
       (p) => p.latitude != null && p.longitude != null,
     );
 
-    // Remove markers that are no longer in the current set.
-    const nextIds = new Set(pinsWithCoords.map((p) => p.id));
-    for (const [id, marker] of markersRef.current) {
-      if (!nextIds.has(id)) {
-        marker.map = null;
-        markersRef.current.delete(id);
+    try {
+      // Remove markers that are no longer in the current set.
+      const nextIds = new Set(pinsWithCoords.map((p) => p.id));
+      for (const [id, marker] of markersRef.current) {
+        if (!nextIds.has(id)) {
+          marker.map = null;
+          markersRef.current.delete(id);
+        }
       }
-    }
 
-    // Add / update markers for the current set.
-    for (const pin of pinsWithCoords) {
-      const isHot = pin.id === highlightedPinId;
-      const existing = markersRef.current.get(pin.id);
-      if (existing) {
-        existing.position = { lat: pin.latitude!, lng: pin.longitude! };
-        existing.content = makeContent(pin, isHot);
-      } else {
-        const marker = new google.maps.marker.AdvancedMarkerElement({
-          map,
-          position: { lat: pin.latitude!, lng: pin.longitude! },
-          content: makeContent(pin, isHot),
-          zIndex: isHot ? 1000 : 1,
-        });
-        marker.addListener('click', () => {
-          setHighlightedPinId(pin.id);
-        });
-        markersRef.current.set(pin.id, marker);
+      // Add / update markers for the current set.
+      for (const pin of pinsWithCoords) {
+        const isHot = pin.id === highlightedPinId;
+        const existing = markersRef.current.get(pin.id);
+        if (existing) {
+          existing.position = { lat: pin.latitude!, lng: pin.longitude! };
+          existing.content = makeContent(pin, isHot);
+        } else {
+          const marker = new google.maps.marker.AdvancedMarkerElement({
+            map,
+            position: { lat: pin.latitude!, lng: pin.longitude! },
+            content: makeContent(pin, isHot),
+            zIndex: isHot ? 1000 : 1,
+          });
+          marker.addListener('click', () => {
+            setHighlightedPinId(pin.id);
+          });
+          markersRef.current.set(pin.id, marker);
+        }
       }
-    }
 
-    // Fit bounds to current pins so the map auto-frames results.
-    if (pinsWithCoords.length > 1) {
-      const bounds = new google.maps.LatLngBounds();
-      for (const p of pinsWithCoords) {
-        bounds.extend({ lat: p.latitude!, lng: p.longitude! });
+      // Fit bounds to current pins so the map auto-frames results.
+      if (pinsWithCoords.length > 1) {
+        const bounds = new google.maps.LatLngBounds();
+        for (const p of pinsWithCoords) {
+          bounds.extend({ lat: p.latitude!, lng: p.longitude! });
+        }
+        map.fitBounds(bounds, { top: 56, right: 56, bottom: 56, left: 56 });
+      } else if (pinsWithCoords.length === 1) {
+        const p = pinsWithCoords[0];
+        map.setCenter({ lat: p.latitude!, lng: p.longitude! });
+        map.setZoom(15);
       }
-      map.fitBounds(bounds, { top: 56, right: 56, bottom: 56, left: 56 });
-    } else if (pinsWithCoords.length === 1) {
-      const p = pinsWithCoords[0];
-      map.setCenter({ lat: p.latitude!, lng: p.longitude! });
-      map.setZoom(15);
+    } catch (err) {
+      // Don't crash the React tree if Maps internals throw (e.g. a later
+      // auth check trips after the initial Map() succeeded, or an SDK
+      // bug between marker versions). Flip to fallback and surface it.
+      console.error('ChatMap marker render failed:', err);
+      setMapError(err instanceof Error ? err.message : String(err));
     }
     // `highlightedPinId` intentionally omitted — handled in the next effect
     // to avoid re-creating markers on every hover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pins, mapReady, makeContent, setHighlightedPinId]);
+  }, [pins, mapReady, authFailed, makeContent, setHighlightedPinId]);
 
   // Update marker content when highlight changes (no marker churn).
   useEffect(() => {
-    if (!mapReady) return;
-    for (const pin of pins) {
-      const marker = markersRef.current.get(pin.id);
-      if (!marker) continue;
-      const isHot = pin.id === highlightedPinId;
-      marker.content = makeContent(pin, isHot);
-      marker.zIndex = isHot ? 1000 : 1;
+    if (!mapReady || authFailed) return;
+    try {
+      for (const pin of pins) {
+        const marker = markersRef.current.get(pin.id);
+        if (!marker) continue;
+        const isHot = pin.id === highlightedPinId;
+        marker.content = makeContent(pin, isHot);
+        marker.zIndex = isHot ? 1000 : 1;
+      }
+    } catch (err) {
+      console.error('ChatMap highlight update failed:', err);
     }
-  }, [highlightedPinId, pins, mapReady, makeContent]);
+  }, [highlightedPinId, pins, mapReady, authFailed, makeContent]);
 
-  if (!apiKey) {
-    return pins.length === 0 ? (
-      <EmptyState />
-    ) : (
+  // Fall back to the pin list when:
+  //   - no API key at all (local dev / missing env)
+  //   - auth failed at runtime (gm_authFailure — usually ApiNotActivatedMapError
+  //     or a referrer restriction on the Google Cloud key)
+  // Never throw out of the component — the chat itself still works.
+  if (!apiKey || authFailed) {
+    if (pins.length === 0) return <EmptyState />;
+    return (
       <FallbackPinList
         pins={pins}
         highlightedPinId={highlightedPinId}
         setHighlightedPinId={setHighlightedPinId}
+        reason={
+          authFailed
+            ? 'Map unavailable — enable Maps JavaScript API on the key'
+            : 'Interactive map pending Google Maps key'
+        }
       />
     );
   }
