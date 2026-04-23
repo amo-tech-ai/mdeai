@@ -31,6 +31,16 @@ export interface RentalInlineListing {
   longitude?: number | null;
 }
 
+/**
+ * "Not a Good Fit" row — powers the rejection-transparency table.
+ * Surfaces WHY an AI considered-then-skipped a particular listing so the
+ * user can trust the shortlist and override if their weights differ.
+ */
+export interface ConsideredButRejected {
+  listing_summary: string;
+  reason: string;
+}
+
 export interface OpenRentalsResultsAction {
   type: 'OPEN_RENTALS_RESULTS';
   payload: {
@@ -39,6 +49,10 @@ export interface OpenRentalsResultsAction {
     listing_ids?: string[];
     /** Full listing data for inline card rendering. Added Day 2. */
     listings?: RentalInlineListing[];
+    /** Rejection-transparency rows for the "Not a Good Fit" table. Day 4. */
+    considered_but_rejected?: ConsideredButRejected[];
+    /** How many matches the tool considered (for "12 of 72" narration). Day 4. */
+    considered?: number;
   };
 }
 

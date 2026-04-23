@@ -256,11 +256,37 @@ IMPORTANT: Always use create_booking_preview and WAIT for explicit user confirma
   const universalGuardrails = `
 
 🛑 RESPONSE RULES (ALWAYS FOLLOW):
-1. NEVER respond with an empty message. If you have nothing to say, say "Let me know a bit more about what you're looking for."
-2. If a tool returns an error, say so in one short sentence and suggest a next step (e.g., "I couldn't reach the rentals database — try rephrasing, or I can help with neighborhoods, safety, or getting around instead.").
-3. If a tool returns no results ([] or total_count=0), tell the user plainly, propose 1–2 ways to widen the search, and offer help in adjacent areas.
-4. When results are returned, summarize the top 3 with names, prices, neighborhoods, and one standout detail each. Then ask a refining question ("cheaper?", "closer to X?", "more bedrooms?").
-5. Respond in the user's language (English or Spanish). Default to English.`;
+
+1. NEVER respond with an empty message. If you have nothing to say, ask a clarifying question.
+
+2. If a tool returns an error, say so in one short sentence and suggest a next step.
+
+3. If a tool returns no results (total_count=0), tell the user plainly, propose 1–2 ways to widen the search, and offer help in adjacent areas.
+
+4. When a rental search returns results, structure your reply EXACTLY as these sections (markdown headings):
+
+   **What I Searched For**
+   - Location: [neighborhoods searched]
+   - Criteria: [bedrooms / price range / amenities — whatever is relevant]
+   - Dates: [if provided; if not, explicitly say "no dates specified — showing current inventory"]
+
+   **Best Option**
+   One sentence naming the top pick and why it stands out. The card itself renders below your text — don't repeat all its details.
+
+   **Other Top Rentals**
+   2–3 concise bullets — one line each, naming the property and one standout detail (fiber Wi-Fi, steps to Parque Lleras, below market, etc.). Cards render below.
+
+   **Not a Good Fit** (only if the tool response included considered_but_rejected rows)
+   One line introducing why these were considered but set aside. The rejection table renders below — don't repeat its contents.
+
+   **Follow-up**
+   One short refining question ("Want me to widen the budget?" / "Should I include Envigado?" / "Any specific amenities?").
+
+5. Keep total length under 180 words. The UI renders the actual listing cards, the pins, the rejection table — your job is the narrative glue.
+
+6. Respond in the user's language (English or Spanish). Default to English; switch fully if the user writes in Spanish.
+
+7. If the user didn't provide dates, travelers, or budget, pick reasonable defaults (current month, 1 traveler, any budget) and disclose them in "What I Searched For". Never refuse to search for missing info — assume and disclose.`;
 
   return (basePrompts[tab] || basePrompts.concierge) + universalGuardrails;
 };
@@ -289,12 +315,40 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
   }
 
   const limit = (params.limit as number) || 5;
-  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
+  // Over-fetch so we can surface "Not a Good Fit" transparency rows.
+  const overfetch = limit + 5;
+  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(overfetch);
 
   const { data, error } = await query;
   if (error) throw error;
 
-  const listings = data ?? [];
+  const all = data ?? [];
+  const listings = all.slice(0, limit);
+  const rejectedCandidates = all.slice(limit, limit + 3);
+  const topRating = (listings[0]?.rating as number | null | undefined) ?? null;
+  const topPrice = (listings[0]?.price_monthly as number | null | undefined) ?? null;
+
+  // Compose human-readable rejection reasons by comparing against the
+  // top pick. For V1 we surface rating + price gaps; real production
+  // reasons (wrong neighborhood, bad freshness, scam-flagged) come online
+  // once the multi-source ingestion lands.
+  const considered_but_rejected = rejectedCandidates.map((l) => {
+    const reasons: string[] = [];
+    const lRating = l.rating as number | null | undefined;
+    if (lRating != null && topRating != null && lRating < topRating) {
+      reasons.push(`${lRating}★ vs top pick's ${topRating}★`);
+    }
+    const lPrice = l.price_monthly as number | null | undefined;
+    if (lPrice != null && topPrice != null && lPrice > topPrice) {
+      reasons.push(
+        `$${Number(lPrice).toLocaleString()}/mo vs top pick's $${Number(topPrice).toLocaleString()}/mo`,
+      );
+    }
+    return {
+      listing_summary: `${l.title} — ${l.neighborhood}`,
+      reason: reasons.join("; ") || "Didn't rank in the top picks",
+    };
+  });
 
   // Translate tool params → ApartmentFilters shape consumed by /apartments?q=
   const filters: Record<string, unknown> = {};
@@ -328,11 +382,14 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
   }));
 
   // Return the "action envelope" shape so the client can render inline
-  // rental cards AND the "See all on the map →" button.
+  // rental cards, the "See all on the map →" button, AND the "Not a Good
+  // Fit" transparency table.
   return {
     success: true,
     total_count: listings.length,
+    considered: all.length,
     listings,
+    considered_but_rejected,
     filters_applied: params,
     actions: listings.length > 0
       ? [{
@@ -341,6 +398,8 @@ async function executeSearchApartments(params: Record<string, unknown>, supabase
             filters,
             listing_ids: listings.map((l) => l.id),
             listings: inlineListings,
+            considered_but_rejected,
+            considered: all.length,
           },
         }]
       : [],

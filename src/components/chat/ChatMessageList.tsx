@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ChatActionBar } from './ChatActionBar';
 import { EmbeddedListings } from './embedded/EmbeddedListings';
 import { ChatReasoningTrace, type ReasoningPhase } from './ChatReasoningTrace';
+import { NotAFitTable } from './NotAFitTable';
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -95,16 +96,28 @@ export function ChatMessageList({
                   {message.agent_name.replace(/_/g, ' ')}
                 </p>
               )}
-              {/* Inline listing cards + structured action affordances (e.g.
-                  "See all on the map →") render under the latest assistant
-                  message once the stream ends. Cards come from the tool
-                  response payload; the button navigates to /apartments?q=… */}
+              {/* Inline listing cards + rejection-transparency table +
+                  structured action affordances (e.g. "See all on the map →")
+                  render under the latest assistant message once the stream
+                  ends. Cards come from the tool response payload; the
+                  button navigates to /apartments?q=… */}
               {message.role === 'assistant' &&
                 !isStreaming &&
                 messages[messages.length - 1].id === message.id &&
                 pendingActions && pendingActions.length > 0 && (
                   <>
                     <EmbeddedListings actions={pendingActions} />
+                    {/* Rejection-transparency: render a "Not a Good Fit"
+                        table whenever any action carried rejected rows. */}
+                    {pendingActions
+                      .flatMap((a) =>
+                        a.type === 'OPEN_RENTALS_RESULTS' && a.payload.considered_but_rejected
+                          ? [a.payload.considered_but_rejected]
+                          : [],
+                      )
+                      .flatMap((rows, i) => (
+                        <NotAFitTable key={i} rows={rows} />
+                      ))}
                     <ChatActionBar
                       actions={pendingActions}
                       onActionDispatched={onActionDispatched}
