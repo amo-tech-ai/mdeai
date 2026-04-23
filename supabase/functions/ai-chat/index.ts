@@ -631,21 +631,61 @@ Deno.serve(async (req) => {
   const supabase = authHeader ? getUserClient(authHeader) : getServiceClient();
   const userId = await getUserId(authHeader);
 
-  // Auth gate: anonymous usage would let attackers burn GEMINI_API_KEY tokens.
-  // Clients without a valid user JWT must sign in before chatting.
-  if (!userId) {
-    return jr(
-      errorBody(
-        "UNAUTHORIZED",
-        "Please sign in to chat. AI features require authentication.",
-      ),
-      401,
-    );
+  // Anonymous-visitor gate: accept a client-generated anon_session_id (UUID)
+  // in the `X-Anon-Session-Id` header so the server can enforce a small free
+  // quota before requiring email sign-in. Tradeoff: clearing localStorage
+  // refreshes the quota (acceptable for MVP; server-signed cookies are the
+  // hardening path). The ANON_MESSAGE_LIMIT * ANON_WINDOW_SECONDS bounds the
+  // Gemini bill at ANON_LIMIT × Gemini cost × unique-visitor count.
+  const ANON_MESSAGE_LIMIT = 3;
+  const ANON_WINDOW_SECONDS = 24 * 60 * 60; // 24h rolling (fixed window)
+  const AUTHED_MESSAGE_LIMIT = 10;
+  const AUTHED_WINDOW_SECONDS = 60; // per minute
+
+  let rateKey: string;
+  let limit: number;
+  let windowSeconds: number;
+  let isAnon = false;
+
+  if (userId) {
+    rateKey = `ai-chat:${userId}`;
+    limit = AUTHED_MESSAGE_LIMIT;
+    windowSeconds = AUTHED_WINDOW_SECONDS;
+  } else {
+    // Try the anon path. Requires X-Anon-Session-Id; anything else is rejected.
+    const anonSessionId = req.headers.get("X-Anon-Session-Id")?.trim();
+    if (!anonSessionId || anonSessionId.length < 8 || anonSessionId.length > 64) {
+      return jr(
+        errorBody(
+          "UNAUTHORIZED",
+          "Please sign in to chat. AI features require authentication.",
+        ),
+        401,
+      );
+    }
+    rateKey = `ai-chat:anon:${anonSessionId}`;
+    limit = ANON_MESSAGE_LIMIT;
+    windowSeconds = ANON_WINDOW_SECONDS;
+    isAnon = true;
   }
 
-  const rateKey = `ai-chat:${userId}`;
-  const rl = await allowRateDurable(getServiceClient(), rateKey, 10, 60);
+  const rl = await allowRateDurable(getServiceClient(), rateKey, limit, windowSeconds);
   if (!rl.allowed) {
+    // Differentiate the two exhaustion cases — the client uses the code to
+    // choose between "slow down" toast (authed) and email-gate modal (anon).
+    if (isAnon) {
+      return jr(
+        {
+          success: false,
+          error: {
+            code: "ANON_LIMIT_EXCEEDED",
+            message: `You've used your ${ANON_MESSAGE_LIMIT} free messages. Sign in with email to keep chatting.`,
+            retry_after_seconds: rl.retry_after_seconds,
+          },
+        },
+        402,
+      );
+    }
     return jr(
       errorBody(
         "RATE_LIMIT",
@@ -703,21 +743,24 @@ Deno.serve(async (req) => {
       console.error("AI gateway error:", initialResponse.status, errorText);
 
       // Log error to ai_runs so cost + failure rate stay observable.
-      await insertAiRun(getServiceClient(), {
-        user_id: userId,
-        agent_name: "multi_agent_chat",
-        agent_type: "general_concierge",
-        input_data: {
-          tab,
-          conversationId: conversationId ?? null,
-          messageCount: messages.length,
-        },
-        output_data: { upstream_status: initialResponse.status },
-        duration_ms: Date.now() - startTime,
-        status: initialResponse.status === 429 ? "timeout" : "error",
-        model_name: "gemini-3-flash-preview",
-        error_message: errorText.slice(0, 500),
-      });
+      // Skip for anon (ai_runs.user_id is NOT NULL; anon sessions don't have one).
+      if (userId) {
+        await insertAiRun(getServiceClient(), {
+          user_id: userId,
+          agent_name: "multi_agent_chat",
+          agent_type: "general_concierge",
+          input_data: {
+            tab,
+            conversationId: conversationId ?? null,
+            messageCount: messages.length,
+          },
+          output_data: { upstream_status: initialResponse.status },
+          duration_ms: Date.now() - startTime,
+          status: initialResponse.status === 429 ? "timeout" : "error",
+          model_name: "gemini-3-flash-preview",
+          error_message: errorText.slice(0, 500),
+        });
+      }
 
       if (initialResponse.status === 429) {
         return jr(
@@ -741,28 +784,32 @@ Deno.serve(async (req) => {
     const initialUsage = extractUsage(initialData);
 
     // Log AI run with real token counts from Gemini's usage block.
-    // Logged via service client so RLS on ai_runs never blocks telemetry writes.
-    await insertAiRun(getServiceClient(), {
-      user_id: userId,
-      agent_name: "multi_agent_chat",
-      agent_type: "general_concierge",
-      input_data: {
-        tab,
-        conversationId: conversationId ?? null,
-        messageCount: messages.length,
-      },
-      output_data: {
-        toolCallCount: assistantMessage?.tool_calls?.length ?? 0,
-        streaming: true,
-        phase: "initial_call",
-      },
-      duration_ms: Date.now() - startTime,
-      status: "success",
-      model_name: "gemini-3-flash-preview",
-      input_tokens: initialUsage.input_tokens,
-      output_tokens: initialUsage.output_tokens,
-      total_tokens: initialUsage.total_tokens,
-    });
+    // Logged via service client so RLS on ai_runs never blocks telemetry
+    // writes. Skip anon (ai_runs.user_id is NOT NULL).
+    if (userId) {
+      await insertAiRun(getServiceClient(), {
+        user_id: userId,
+        agent_name: "multi_agent_chat",
+        agent_type: "general_concierge",
+        input_data: {
+          tab,
+          conversationId: conversationId ?? null,
+          messageCount: messages.length,
+          anon: isAnon,
+        },
+        output_data: {
+          toolCallCount: assistantMessage?.tool_calls?.length ?? 0,
+          streaming: true,
+          phase: "initial_call",
+        },
+        duration_ms: Date.now() - startTime,
+        status: "success",
+        model_name: "gemini-3-flash-preview",
+        input_tokens: initialUsage.input_tokens,
+        output_tokens: initialUsage.output_tokens,
+        total_tokens: initialUsage.total_tokens,
+      });
+    }
 
     const sseHeaders = {
       ...getCorsHeaders(req),
@@ -909,21 +956,24 @@ Deno.serve(async (req) => {
     console.error("Chat error:", error);
     const errMsg = error instanceof Error ? error.message : "Unknown error";
     // Best-effort error log; never throws since insertAiRun swallows errors.
-    await insertAiRun(getServiceClient(), {
-      user_id: userId,
-      agent_name: "multi_agent_chat",
-      agent_type: "general_concierge",
-      input_data: {
-        tab,
-        conversationId: conversationId ?? null,
-        messageCount: messages.length,
-      },
-      output_data: { phase: "exception" },
-      duration_ms: Date.now() - startTime,
-      status: "error",
-      model_name: "gemini-3-flash-preview",
-      error_message: errMsg.slice(0, 500),
-    });
+    // Skip anon (ai_runs.user_id is NOT NULL).
+    if (userId) {
+      await insertAiRun(getServiceClient(), {
+        user_id: userId,
+        agent_name: "multi_agent_chat",
+        agent_type: "general_concierge",
+        input_data: {
+          tab,
+          conversationId: conversationId ?? null,
+          messageCount: messages.length,
+        },
+        output_data: { phase: "exception" },
+        duration_ms: Date.now() - startTime,
+        status: "error",
+        model_name: "gemini-3-flash-preview",
+        error_message: errMsg.slice(0, 500),
+      });
+    }
     return jr(errorBody("INTERNAL", errMsg), 500);
   }
 });

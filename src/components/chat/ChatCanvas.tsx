@@ -3,6 +3,7 @@ import { Sparkles, DollarSign, Heart, MapPin, Calendar } from 'lucide-react';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
 import { ChatMap } from './ChatMap';
+import { EmailGateModal } from './EmailGateModal';
 import { LeftPanel } from '@/components/layout/LeftPanel';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { MapProvider, useMapContext, type MapPin as MapPinData } from '@/context/MapContext';
@@ -71,6 +72,8 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   const [activeTab] = useState<ChatTab>(defaultTab);
   const { user } = useAuth();
   const { setPins, clearPins } = useMapContext();
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const [emailGateRetry, setEmailGateRetry] = useState<number | undefined>(undefined);
 
   const {
     messages,
@@ -84,7 +87,12 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     cancelStream,
     retryLastMessage,
     setPendingActions,
-  } = useChat(activeTab);
+  } = useChat(activeTab, {
+    onAnonLimitExceeded: (retry) => {
+      setEmailGateRetry(retry);
+      setEmailGateOpen(true);
+    },
+  });
 
   useEffect(() => {
     if (user) fetchConversations();
@@ -227,6 +235,14 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
         </main>
         <MobileNav />
       </div>
+
+      {/* Anonymous-quota email gate — opens when the edge function returns
+          402 ANON_LIMIT_EXCEEDED. Magic-link sign-in resumes the session. */}
+      <EmailGateModal
+        open={emailGateOpen}
+        onOpenChange={setEmailGateOpen}
+        retryAfterSeconds={emailGateRetry}
+      />
     </div>
   );
 }
