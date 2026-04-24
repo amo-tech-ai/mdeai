@@ -217,9 +217,11 @@ export function ChatMap() {
   // Install the inline bootstrap (seeds google.maps.importLibrary). This
   // MUST happen before any `importLibrary()` call. Safe to call multiple
   // times — the helper no-ops after the first install.
+  // `loading: 'async'` silences the "loaded directly without loading=async"
+  // console warning and lets the API defer non-critical work.
   useEffect(() => {
     if (!apiKey || authFailed) return;
-    installMapsBootstrap({ key: apiKey, v: 'weekly' });
+    installMapsBootstrap({ key: apiKey, v: 'weekly', loading: 'async' });
   }, [apiKey, authFailed]);
 
   // Expose the Map + AdvancedMarkerElement constructors once importLibrary
