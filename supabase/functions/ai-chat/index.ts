@@ -806,6 +806,10 @@ Deno.serve(async (req) => {
     if (!initialResponse.ok) {
       const errorText = await initialResponse.text();
       console.error("AI gateway error:", initialResponse.status, errorText);
+      // Diag: snip a short prefix of the upstream body so 502 / UPSTREAM_ERROR
+      // responses carry enough to triage (auth, quota, safety block, model
+      // name typo, etc.) without leaking the whole payload.
+      const upstreamSnippet = errorText.slice(0, 240);
 
       // Log error to ai_runs so cost + failure rate stay observable.
       // Skip for anon (ai_runs.user_id is NOT NULL; anon sessions don't have one).
@@ -841,7 +845,13 @@ Deno.serve(async (req) => {
         );
       }
 
-      return jr(errorBody("UPSTREAM_ERROR", "AI gateway error"), 502);
+      return jr(
+        errorBody("UPSTREAM_ERROR", "AI gateway error", {
+          upstream_status: initialResponse.status,
+          upstream_body: upstreamSnippet,
+        }),
+        502,
+      );
     }
 
     const initialData = await initialResponse.json();

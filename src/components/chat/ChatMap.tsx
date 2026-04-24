@@ -187,26 +187,53 @@ export function ChatMap() {
     };
   }, [apiKey, authFailed]);
 
+  // Expose the Map + AdvancedMarkerElement constructors once importLibrary
+  // resolves. With `loading=async`, `google.maps.Map` is NOT available
+  // until you await the library import (you get "is not a constructor"
+  // otherwise). We then stash these refs for marker creation below.
+  const MapCtorRef = useRef<typeof google.maps.Map | null>(null);
+  const MarkerCtorRef = useRef<typeof google.maps.marker.AdvancedMarkerElement | null>(null);
+  const [librariesReady, setLibrariesReady] = useState(false);
+
   // Initialize map once script + container are ready.
   useEffect(() => {
     if (!mapReady || authFailed || !containerRef.current || mapRef.current) return;
-    try {
-      mapRef.current = new google.maps.Map(containerRef.current, {
-        center: MEDELLIN_CENTER,
-        zoom: 13,
-        mapId: MAP_ID,
-        disableDefaultUI: false,
-        zoomControl: true,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        gestureHandling: 'greedy',
-        clickableIcons: false,
-      });
-    } catch (err) {
-      console.error('ChatMap init failed:', err);
-      setMapError(err instanceof Error ? err.message : String(err));
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        // `importLibrary` is the required entrypoint when using loading=async.
+        // It returns the real constructors; `google.maps.Map` on the root
+        // namespace is a stub until these resolve.
+        const mapsLib = (await google.maps.importLibrary('maps')) as google.maps.MapsLibrary;
+        const markerLib = (await google.maps.importLibrary(
+          'marker',
+        )) as google.maps.MarkerLibrary;
+        if (cancelled) return;
+        MapCtorRef.current = mapsLib.Map;
+        MarkerCtorRef.current = markerLib.AdvancedMarkerElement;
+
+        mapRef.current = new mapsLib.Map(containerRef.current!, {
+          center: MEDELLIN_CENTER,
+          zoom: 13,
+          mapId: MAP_ID,
+          disableDefaultUI: false,
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          gestureHandling: 'greedy',
+          clickableIcons: false,
+        });
+        setLibrariesReady(true);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('ChatMap init failed:', err);
+        setMapError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [mapReady, authFailed]);
 
   // Create / update marker content. Uses a plain div so we can keep the
@@ -241,8 +268,10 @@ export function ChatMap() {
   // markers keyed by pin.id lets us update content-only (no churn) for
   // highlight changes, which we handle in a separate effect below.
   useEffect(() => {
-    if (!mapRef.current || !mapReady || authFailed) return;
+    if (!mapRef.current || !librariesReady || authFailed) return;
     const map = mapRef.current;
+    const MarkerCtor = MarkerCtorRef.current;
+    if (!MarkerCtor) return;
     const pinsWithCoords = pins.filter(
       (p) => p.latitude != null && p.longitude != null,
     );
@@ -265,7 +294,7 @@ export function ChatMap() {
           existing.position = { lat: pin.latitude!, lng: pin.longitude! };
           existing.content = makeContent(pin, isHot);
         } else {
-          const marker = new google.maps.marker.AdvancedMarkerElement({
+          const marker = new MarkerCtor({
             map,
             position: { lat: pin.latitude!, lng: pin.longitude! },
             content: makeContent(pin, isHot),
@@ -279,6 +308,8 @@ export function ChatMap() {
       }
 
       // Fit bounds to current pins so the map auto-frames results.
+      // LatLngBounds is on the base namespace once `importLibrary('maps')`
+      // has resolved (which gated our `librariesReady` flag).
       if (pinsWithCoords.length > 1) {
         const bounds = new google.maps.LatLngBounds();
         for (const p of pinsWithCoords) {
@@ -300,11 +331,11 @@ export function ChatMap() {
     // `highlightedPinId` intentionally omitted — handled in the next effect
     // to avoid re-creating markers on every hover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pins, mapReady, authFailed, makeContent, setHighlightedPinId]);
+  }, [pins, librariesReady, authFailed, makeContent, setHighlightedPinId]);
 
   // Update marker content when highlight changes (no marker churn).
   useEffect(() => {
-    if (!mapReady || authFailed) return;
+    if (!librariesReady || authFailed) return;
     try {
       for (const pin of pins) {
         const marker = markersRef.current.get(pin.id);
@@ -316,7 +347,7 @@ export function ChatMap() {
     } catch (err) {
       console.error('ChatMap highlight update failed:', err);
     }
-  }, [highlightedPinId, pins, mapReady, authFailed, makeContent]);
+  }, [highlightedPinId, pins, librariesReady, authFailed, makeContent]);
 
   // Fall back to the pin list when:
   //   - no API key at all (local dev / missing env)
@@ -351,7 +382,7 @@ export function ChatMap() {
       )}
 
       {/* Empty-until-you-chat helper — only when the map has loaded but no pins */}
-      {mapReady && pins.length === 0 && (
+      {librariesReady && pins.length === 0 && (
         <div className="absolute inset-0 flex items-end justify-center p-6 pointer-events-none">
           <div className="bg-background/95 backdrop-blur rounded-xl px-4 py-3 shadow-lg border border-border max-w-xs text-center">
             <p className="text-sm">Pins appear here as you chat.</p>
