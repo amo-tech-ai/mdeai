@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils';
 declare global {
   interface Window {
     google?: typeof google;
-    __mdeaiMapScriptPromise?: Promise<void>;
     /** Google Maps auth-failure callback — set before script load. */
     gm_authFailure?: () => void;
     /** Latched truthy when gm_authFailure fires — components read + fall back. */
@@ -36,50 +35,92 @@ const MEDELLIN_CENTER = { lat: 6.2442, lng: -75.5812 };
 const MAP_ID = 'mdeai-chat-map';
 
 /**
- * Load the Google Maps script exactly once per tab. Stores the Promise on
- * `window.__mdeaiMapScriptPromise` so multiple ChatMap mounts share the same
- * load and never double-append the <script> tag.
+ * Install Google's inline bootstrap loader.
  *
- * Adds `loading=async` per Google's recommended pattern — silences the
- * "loaded directly without loading=async" warning and lets the API defer
- * non-critical work.
+ * The key insight (from
+ * https://developers.google.com/maps/documentation/javascript/load-maps-js-api):
+ * `google.maps.importLibrary(...)` is ONLY installed when you use the inline
+ * bootstrap pattern. A plain `<script src=".../js?...&loading=async">` tag
+ * does NOT install importLibrary; calling it throws "is not a function".
  *
- * Installs `window.gm_authFailure` so ApiNotActivatedMapError / RefererNotAllowed
- * / InvalidKey surface as a flag we can check instead of crashing inside
- * the Maps API internals.
+ * This helper is a typed port of Google's minified IIFE: it seeds
+ * `google.maps.importLibrary` as a lazy shim that (on first call) injects
+ * the real Maps API script, and — once the script executes — the real
+ * `importLibrary` overwrites our shim. Subsequent awaits resolve to the
+ * requested library's real constructors (Map, AdvancedMarkerElement, …).
+ *
+ * Also installs `window.gm_authFailure` so ApiNotActivatedMapError /
+ * RefererNotAllowed / InvalidKey surface as a flag we can fall back on
+ * instead of crashing inside the Maps API internals.
  */
-function loadGoogleMaps(apiKey: string): Promise<void> {
-  if (typeof window === 'undefined') return Promise.resolve();
+type BootstrapConfig = {
+  key: string;
+  v: string;
+  libraries?: string;
+  loading?: string;
+};
+
+function installMapsBootstrap(config: BootstrapConfig): void {
+  if (typeof window === 'undefined') return;
+
   if (!window.gm_authFailure) {
     window.gm_authFailure = () => {
       window.__mdeaiMapAuthFailed = true;
       console.warn(
-        '[ChatMap] Google Maps auth failed (likely ApiNotActivatedMapError or referrer restriction). Enable Maps JavaScript API in Google Cloud + whitelist the hostname.',
+        '[ChatMap] Google Maps auth failed (ApiNotActivatedMapError / referrer / invalid key). Enable Maps JavaScript API + whitelist the hostname on the key.',
       );
-      // Fire a custom event so mounted components can react without polling.
       window.dispatchEvent(new Event('mdeai:map-auth-failed'));
     };
   }
-  if (window.google?.maps?.Map) return Promise.resolve();
-  if (window.__mdeaiMapScriptPromise) return window.__mdeaiMapScriptPromise;
 
-  window.__mdeaiMapScriptPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.getElementById('google-maps-script') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Maps script failed')));
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker&v=weekly&loading=async`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Maps script failed'));
-    document.head.appendChild(script);
-  });
-  return window.__mdeaiMapScriptPromise;
+  const w = window as unknown as { google?: { maps?: Record<string, unknown> } };
+  w.google = w.google || {};
+  w.google.maps = w.google.maps || {};
+  const mapsNs = w.google.maps;
+
+  // If the real importLibrary is already installed (prior mount) — we're done.
+  if (typeof mapsNs.importLibrary === 'function' && !mapsNs.__mdeai_shim__) return;
+
+  const libsToLoad = new Set<string>();
+  let loadPromise: Promise<void> | null = null;
+
+  const ensureLoaded = (): Promise<void> => {
+    if (loadPromise) return loadPromise;
+    loadPromise = new Promise<void>((resolve, reject) => {
+      const params = new URLSearchParams();
+      params.set('libraries', Array.from(libsToLoad).join(','));
+      for (const [k, v] of Object.entries(config)) {
+        if (v == null) continue;
+        // camelCase → snake_case (Google's convention: `v` stays, `loading` stays, `key` stays)
+        const snake = k.replace(/[A-Z]/g, (ch) => '_' + ch.toLowerCase());
+        params.set(snake, String(v));
+      }
+      params.set('callback', 'google.maps.__mdeai_cb__');
+      mapsNs.__mdeai_cb__ = resolve;
+
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
+      script.async = true;
+      script.onerror = () => reject(new Error('Google Maps script failed to load'));
+      document.head.append(script);
+    });
+    return loadPromise;
+  };
+
+  // Install our shim. Google's real importLibrary (installed by the loaded
+  // script) will OVERWRITE this function, so subsequent calls go to the
+  // real one. The recursive `mapsNs.importLibrary(...)` at the end re-enters
+  // the now-real function.
+  mapsNs.__mdeai_shim__ = true;
+  mapsNs.importLibrary = (libName: string, ...rest: unknown[]) => {
+    libsToLoad.add(libName);
+    return ensureLoaded().then(() => {
+      // At this point the Maps API has loaded and replaced importLibrary
+      // with the real one. Re-call via mapsNs to pick up the new function.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (mapsNs.importLibrary as any)(libName, ...rest);
+    });
+  };
 }
 
 function FallbackPinList({
@@ -159,7 +200,6 @@ export function ChatMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
-  const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
   // If a prior mount already tripped gm_authFailure, skip straight to the
@@ -174,40 +214,36 @@ export function ChatMap() {
     return () => window.removeEventListener('mdeai:map-auth-failed', handler);
   }, []);
 
-  // Load Google Maps script (once per tab). Re-runs only on apiKey change,
-  // which never happens after initial mount.
+  // Install the inline bootstrap (seeds google.maps.importLibrary). This
+  // MUST happen before any `importLibrary()` call. Safe to call multiple
+  // times — the helper no-ops after the first install.
   useEffect(() => {
     if (!apiKey || authFailed) return;
-    let cancelled = false;
-    loadGoogleMaps(apiKey)
-      .then(() => !cancelled && setMapReady(true))
-      .catch((err) => !cancelled && setMapError(String(err)));
-    return () => {
-      cancelled = true;
-    };
+    installMapsBootstrap({ key: apiKey, v: 'weekly' });
   }, [apiKey, authFailed]);
 
   // Expose the Map + AdvancedMarkerElement constructors once importLibrary
-  // resolves. With `loading=async`, `google.maps.Map` is NOT available
-  // until you await the library import (you get "is not a constructor"
-  // otherwise). We then stash these refs for marker creation below.
+  // resolves. We don't use `google.maps.Map` on the root namespace directly
+  // because with the bootstrap loader it isn't populated until the library
+  // is imported — we use whatever importLibrary returns.
   const MapCtorRef = useRef<typeof google.maps.Map | null>(null);
   const MarkerCtorRef = useRef<typeof google.maps.marker.AdvancedMarkerElement | null>(null);
   const [librariesReady, setLibrariesReady] = useState(false);
 
-  // Initialize map once script + container are ready.
+  // Initialize map once container is ready + bootstrap has been installed.
   useEffect(() => {
-    if (!mapReady || authFailed || !containerRef.current || mapRef.current) return;
+    if (!apiKey || authFailed || !containerRef.current || mapRef.current) return;
     let cancelled = false;
     (async () => {
       try {
-        // `importLibrary` is the required entrypoint when using loading=async.
-        // It returns the real constructors; `google.maps.Map` on the root
-        // namespace is a stub until these resolve.
-        const mapsLib = (await google.maps.importLibrary('maps')) as google.maps.MapsLibrary;
-        const markerLib = (await google.maps.importLibrary(
-          'marker',
-        )) as google.maps.MarkerLibrary;
+        // Request both libraries in parallel so our shim adds both to
+        // `libsToLoad` before `ensureLoaded()` triggers — the single
+        // script URL will include `libraries=maps,marker` (one network
+        // round-trip instead of a lazy second load).
+        const [mapsLib, markerLib] = (await Promise.all([
+          google.maps.importLibrary('maps'),
+          google.maps.importLibrary('marker'),
+        ])) as [google.maps.MapsLibrary, google.maps.MarkerLibrary];
         if (cancelled) return;
         MapCtorRef.current = mapsLib.Map;
         MarkerCtorRef.current = markerLib.AdvancedMarkerElement;
@@ -234,7 +270,7 @@ export function ChatMap() {
     return () => {
       cancelled = true;
     };
-  }, [mapReady, authFailed]);
+  }, [apiKey, authFailed]);
 
   // Create / update marker content. Uses a plain div so we can keep the
   // mdeai visual language (emoji + title pill) without MapID-bound custom
