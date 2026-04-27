@@ -1,5 +1,6 @@
 /// <reference types="@types/google.maps" />
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapPin as MapPinIcon } from 'lucide-react';
 import { useMapContext, PIN_CATEGORY_CONFIG, type MapPin } from '@/context/MapContext';
 import { cn } from '@/lib/utils';
@@ -127,11 +128,13 @@ function FallbackPinList({
   pins,
   highlightedPinId,
   setHighlightedPinId,
+  onPinClick,
   reason,
 }: {
   pins: MapPin[];
   highlightedPinId: string | null;
   setHighlightedPinId: (id: string | null) => void;
+  onPinClick: (pin: MapPin, openInNewTab?: boolean) => void;
   reason?: string;
 }) {
   return (
@@ -151,6 +154,17 @@ function FallbackPinList({
               key={pin.id}
               onMouseEnter={() => setHighlightedPinId(pin.id)}
               onMouseLeave={() => setHighlightedPinId(null)}
+              onClick={(e) =>
+                onPinClick(pin, e.metaKey || e.ctrlKey || e.button === 1)
+              }
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onPinClick(pin);
+                }
+              }}
               className={cn(
                 'flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors',
                 isHot ? 'bg-accent' : 'hover:bg-accent/40',
@@ -196,6 +210,30 @@ function EmptyState() {
 export function ChatMap() {
   const { pins, highlightedPinId, setHighlightedPinId } = useMapContext();
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const navigate = useNavigate();
+
+  /**
+   * Map a pin to its detail route. Today every pin is a `rental` so the
+   * route is `/apartments/:id`; restaurants/events/attractions plug in
+   * here as the verticals ship.
+   */
+  const pinDetailPath = useCallback((pin: MapPin): string | null => {
+    if (pin.category === 'rental') return `/apartments/${pin.id}`;
+    return null;
+  }, []);
+
+  const navigateToPin = useCallback(
+    (pin: MapPin, openInNewTab = false) => {
+      const path = pinDetailPath(pin);
+      if (!path) return;
+      if (openInNewTab) {
+        window.open(path, '_blank', 'noopener,noreferrer');
+      } else {
+        navigate(path);
+      }
+    },
+    [navigate, pinDetailPath],
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -338,8 +376,14 @@ export function ChatMap() {
             content: makeContent(pin, isHot),
             zIndex: isHot ? 1000 : 1,
           });
-          marker.addListener('click', () => {
+          // Click → set highlight + navigate to listing detail. Cmd/Ctrl-click
+          // preserves the chat by opening in a new tab — Maps' MouseEvent
+          // exposes the modifier flags via `domEvent`.
+          marker.addListener('click', (event?: { domEvent?: MouseEvent }) => {
+            const native = event?.domEvent;
+            const newTab = !!(native?.metaKey || native?.ctrlKey || native?.button === 1);
             setHighlightedPinId(pin.id);
+            navigateToPin(pin, newTab);
           });
           markersRef.current.set(pin.id, marker);
         }
@@ -369,7 +413,7 @@ export function ChatMap() {
     // `highlightedPinId` intentionally omitted — handled in the next effect
     // to avoid re-creating markers on every hover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pins, librariesReady, authFailed, makeContent, setHighlightedPinId]);
+  }, [pins, librariesReady, authFailed, makeContent, setHighlightedPinId, navigateToPin]);
 
   // Update marker content when highlight changes (no marker churn).
   useEffect(() => {
@@ -399,6 +443,7 @@ export function ChatMap() {
         pins={pins}
         highlightedPinId={highlightedPinId}
         setHighlightedPinId={setHighlightedPinId}
+        onPinClick={navigateToPin}
         reason={
           authFailed
             ? 'Map unavailable — enable Maps JavaScript API on the key'
