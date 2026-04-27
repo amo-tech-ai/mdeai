@@ -1,161 +1,88 @@
 import { Link } from "react-router-dom";
-import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { MAIN_NAV_LINKS } from "@/config/marketingNav";
 import { HeroChatPrompt } from "@/components/home/HeroChatPrompt";
 
-// Hero images
-import skylineImg from "@/assets/hero/medellin-skyline.jpg";
-import guatapeImg from "@/assets/hero/guatape-colors.jpg";
-import beachPalmsImg from "@/assets/hero/beach-palms.jpg";
-import waterfallImg from "@/assets/hero/waterfall.jpg";
-import beachWavesImg from "@/assets/hero/beach-waves.jpg";
-import coffeeFarmImg from "@/assets/hero/coffee-farm.jpg";
-import streetFoodImg from "@/assets/hero/street-food.jpg";
-import colonialStreetImg from "@/assets/hero/colonial-street.jpg";
-
-interface MasonryImageProps {
-  src: string;
-  alt: string;
-  className?: string;
-  delay?: number;
-}
-
-function MasonryImage({ src, alt, className, delay = 0 }: MasonryImageProps) {
-  return (
-    <div
-      className={cn(
-        "group relative overflow-hidden rounded-2xl cursor-pointer animate-fade-in",
-        className
-      )}
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <img
-        src={src}
-        alt={alt}
-        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-        loading="lazy"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-    </div>
-  );
-}
-
+/**
+ * Hero section — chat-window-first.
+ *
+ * The hero is now ONLY the AI concierge prompt + the headline that frames
+ * it. Right-side image masonry was removed per design feedback ("the hero
+ * section needs to be a chat window"). Marketing visual depth lives in
+ * the sections below the hero (Discover, AI Features, Popular in Medellín).
+ *
+ * Layout (centered, single column):
+ *   ┌──────────────────────────────────────────┐
+ *   │           [I ❤ Medellín]                  │
+ *   │                                          │
+ *   │      Your Next Adventure Starts          │
+ *   │           Here in Colombia               │
+ *   │                                          │
+ *   │   Your guide to discovering cities,      │
+ *   │   experiences, and unforgettable trips   │
+ *   │           across Colombia.               │
+ *   │                                          │
+ *   │   ┌──────────────────────────────────┐   │
+ *   │   │  ● AI CONCIERGE READY            │   │
+ *   │   │  [textarea: Find top rentals…]   │   │
+ *   │   │  [chip] [chip] [chip]            │   │
+ *   │   │  Press Enter      [Start →]      │   │
+ *   │   │  AI suggests. You decide. — …    │   │
+ *   │   └──────────────────────────────────┘   │
+ *   └──────────────────────────────────────────┘
+ */
 export function HeroSection() {
   return (
     <section className="relative py-12 md:py-16 lg:py-20 bg-secondary/50">
       <div className="container mx-auto px-4 lg:px-8">
-        {/* Main container with white background */}
-        <div className="bg-card rounded-3xl shadow-elevated p-6 md:p-10 lg:p-12">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-            {/* Left Column - Content */}
-            <div className="lg:col-span-5 space-y-6">
-              {/* Brand */}
-              <div className="animate-fade-in space-y-4">
-                <BrandLogo variant="hero" />
-                {/*
-                  In-hero quick nav: visible below lg where the fixed header hides center links
-                  (md only shows hamburger + Sign in). Desktop uses SiteHeader center nav.
-                */}
-                <nav
-                  className="flex flex-wrap gap-x-4 gap-y-2 border-b border-border/50 pb-4 lg:hidden"
-                  aria-label="Sections"
-                >
-                  {MAIN_NAV_LINKS.map(({ to, label }) => (
-                    <Link
-                      key={to}
-                      to={to}
-                      className="text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                    >
-                      {label}
-                    </Link>
-                  ))}
-                </nav>
-              </div>
-
-              {/* Main headline */}
-              <h1
-                className="font-display text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight animate-fade-in"
-                style={{ animationDelay: "100ms" }}
+        {/* Centered card — replaces the previous 2-column grid. The card
+            background, padding, and shadow give the chat window the
+            visual weight the page needs without the right-side masonry. */}
+        <div className="bg-card rounded-3xl shadow-elevated p-6 md:p-10 lg:p-12 max-w-4xl mx-auto">
+          <div className="space-y-6 text-center">
+            {/* Brand */}
+            <div className="animate-fade-in flex flex-col items-center space-y-4">
+              <BrandLogo variant="hero" />
+              {/* Mobile / tablet quick nav (hidden ≥lg where SiteHeader has the links) */}
+              <nav
+                className="flex flex-wrap justify-center gap-x-4 gap-y-2 lg:hidden"
+                aria-label="Sections"
               >
-                Your Next Adventure Starts Here in Colombia
-              </h1>
-
-              {/* Supporting text */}
-              <p
-                className="text-lg md:text-xl text-muted-foreground leading-relaxed animate-fade-in"
-                style={{ animationDelay: "200ms" }}
-              >
-                Your guide to discovering cities, experiences, and unforgettable
-                trips across Colombia.
-              </p>
-
-              {/* AI Concierge prompt — primary entry point.
-                  Replaces the prior "Explore experiences" + "Subscribe"
-                  CTAs. Logged-in users go straight to /chat?send=pending;
-                  anon users round-trip through /signup with the prompt
-                  saved in sessionStorage (see HeroChatPrompt). */}
-              <HeroChatPrompt variant="inline" />
+                {MAIN_NAV_LINKS.map(({ to, label }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    className="text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </nav>
             </div>
 
-            {/* Right Column - Masonry Grid */}
-            <div className="lg:col-span-7">
-              <div className="grid grid-cols-3 gap-3 auto-rows-[120px] md:auto-rows-[140px]">
-                {/* Large image - spans 2 cols, 2 rows */}
-                <MasonryImage
-                  src={skylineImg}
-                  alt="Medellín skyline at golden hour"
-                  className="col-span-2 row-span-2"
-                  delay={400}
-                />
+            {/* Headline */}
+            <h1
+              className="font-display text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight animate-fade-in"
+              style={{ animationDelay: "100ms" }}
+            >
+              Your Next Adventure Starts Here in Colombia
+            </h1>
 
-                {/* Small square */}
-                <MasonryImage
-                  src={guatapeImg}
-                  alt="Colorful buildings in Guatapé"
-                  className="col-span-1 row-span-1"
-                  delay={450}
-                />
+            {/* Supporting text */}
+            <p
+              className="text-lg md:text-xl text-muted-foreground leading-relaxed animate-fade-in max-w-2xl mx-auto"
+              style={{ animationDelay: "200ms" }}
+            >
+              Your guide to discovering cities, experiences, and unforgettable
+              trips across Colombia.
+            </p>
 
-                {/* Tall image */}
-                <MasonryImage
-                  src={beachPalmsImg}
-                  alt="Palm trees and Caribbean sea"
-                  className="col-span-1 row-span-2"
-                  delay={500}
-                />
-
-                {/* Medium images - bottom row */}
-                <MasonryImage
-                  src={waterfallImg}
-                  alt="Tropical waterfall in Colombia"
-                  className="col-span-1 row-span-1"
-                  delay={550}
-                />
-
-                <MasonryImage
-                  src={beachWavesImg}
-                  alt="Sandy beach with waves"
-                  className="col-span-1 row-span-1"
-                  delay={600}
-                />
-
-                {/* Large image - spans 2 cols */}
-                <MasonryImage
-                  src={streetFoodImg}
-                  alt="Colombian street food vendor"
-                  className="col-span-2 row-span-1"
-                  delay={650}
-                />
-
-                {/* Small image */}
-                <MasonryImage
-                  src={colonialStreetImg}
-                  alt="Colonial street in Cartagena"
-                  className="col-span-1 row-span-1"
-                  delay={700}
-                />
-              </div>
+            {/* AI Concierge chat prompt — the hero's primary affordance.
+                Logged-in users go straight to /chat?send=pending; anon users
+                round-trip through /signup with the prompt saved in
+                sessionStorage. See HeroChatPrompt. */}
+            <div className="text-left max-w-2xl mx-auto pt-2">
+              <HeroChatPrompt variant="inline" />
             </div>
           </div>
         </div>
