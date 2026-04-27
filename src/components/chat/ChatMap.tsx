@@ -1,6 +1,7 @@
 /// <reference types="@types/google.maps" />
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { MapPin as MapPinIcon } from 'lucide-react';
 import { useMapContext, PIN_CATEGORY_CONFIG, type MapPin } from '@/context/MapContext';
 import {
@@ -154,6 +155,11 @@ export function ChatMap() {
     clickHandler: EventListener;
   };
   const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
+  // MarkerClusterer owns on-map rendering once we add markers to it.
+  // We never set `marker.map = …` directly; the clusterer manages
+  // visibility based on viewport + zoom. Without this, ~10+ pins in a
+  // small area become an unreadable mess.
+  const clustererRef = useRef<MarkerClusterer | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
   // If a prior mount already tripped gm_authFailure, skip straight to the
@@ -205,6 +211,22 @@ export function ChatMap() {
           fullscreenControl: false,
           gestureHandling: 'greedy',
           clickableIcons: false,
+        });
+        // One clusterer per map. Default GridAlgorithm clusters by pixel
+        // distance — Mindtrip-style: pins clump into a numbered bubble at
+        // city zoom, fan out as the user zooms in.
+        clustererRef.current = new MarkerClusterer({
+          map: mapRef.current,
+          markers: [],
+          onClusterClick: (_event, cluster) => {
+            trackMapEvent({
+              kind: 'cluster_expand',
+              clusterSize: cluster.markers?.length ?? 0,
+            });
+            // Default behavior (zoom in) is provided by MarkerClusterer
+            // when this handler doesn't preventDefault. We only emit the
+            // telemetry; let it handle the zoom.
+          },
         });
         setLibrariesReady(true);
       } catch (err) {
@@ -272,18 +294,24 @@ export function ChatMap() {
       (p) => p.latitude != null && p.longitude != null,
     );
 
+    const clusterer = clustererRef.current;
     try {
       // Remove markers that are no longer in the current set.
       const nextIds = new Set(pinsWithCoords.map((p) => p.id));
+      const removedMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
       for (const [id, entry] of markersRef.current) {
         if (!nextIds.has(id)) {
           entry.marker.removeEventListener('gmp-click', entry.clickHandler);
-          entry.marker.map = null;
+          removedMarkers.push(entry.marker);
           markersRef.current.delete(id);
         }
       }
+      if (clusterer && removedMarkers.length > 0) {
+        clusterer.removeMarkers(removedMarkers);
+      }
 
       // Add / update markers for the current set.
+      const newMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
       for (const pin of pinsWithCoords) {
         const isHot = pin.id === highlightedPinId;
         const existing = markersRef.current.get(pin.id);
@@ -291,8 +319,10 @@ export function ChatMap() {
           existing.marker.position = { lat: pin.latitude!, lng: pin.longitude! };
           existing.marker.content = makeContent(pin, isHot);
         } else {
+          // NOTE: do NOT pass `map` here — the clusterer owns on-map
+          // visibility. Setting both leaks markers behind clusters when
+          // zoomed out.
           const marker = new MarkerCtor({
-            map,
             position: { lat: pin.latitude!, lng: pin.longitude! },
             content: makeContent(pin, isHot),
             zIndex: isHot ? 1000 : 1,
@@ -329,7 +359,11 @@ export function ChatMap() {
           };
           marker.addEventListener('gmp-click', clickHandler);
           markersRef.current.set(pin.id, { marker, clickHandler });
+          newMarkers.push(marker);
         }
+      }
+      if (clusterer && newMarkers.length > 0) {
+        clusterer.addMarkers(newMarkers);
       }
 
       // Fit bounds to current pins so the map auto-frames results.
@@ -383,18 +417,24 @@ export function ChatMap() {
     }
   }, [highlightedPinId, pins, librariesReady, authFailed, makeContent]);
 
-  // Full unmount cleanup — symmetric to addEventListener('gmp-click').
-  // Without this, listeners leak across navigations (chat → /apartments → chat).
-  // We capture the ref by closure so the cleanup function can iterate it
-  // even after the ref is mutated by a later mount.
+  // Full unmount cleanup — symmetric to addEventListener('gmp-click') +
+  // MarkerClusterer.addMarkers(). Without this, listeners and DOM
+  // marker elements leak across navigations (chat → /apartments → chat).
+  // We capture the refs by closure so the cleanup function can iterate
+  // them even after the refs are mutated by a later mount.
   useEffect(() => {
-    const map = markersRef.current;
+    const markers = markersRef.current;
+    const clustererAtMount = clustererRef.current;
     return () => {
-      for (const { marker, clickHandler } of map.values()) {
+      for (const { marker, clickHandler } of markers.values()) {
         marker.removeEventListener('gmp-click', clickHandler);
-        marker.map = null;
       }
-      map.clear();
+      // Clusterer.clearMarkers() also detaches each marker from the map.
+      // If the ref already changed (StrictMode), fall through to the
+      // current value — both clean up correctly.
+      const c = clustererAtMount ?? clustererRef.current;
+      c?.clearMarkers();
+      markers.clear();
     };
   }, []);
 

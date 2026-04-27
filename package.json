@@ -20,6 +20,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@gadget-client/mdeai": "^1.2.0-development.21",
     "@gadgetinc/react": "^0.21.4",
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@hookform/resolvers": "^3.10.0",
     "@playwright/test": "^1.57.0",
     "@radix-ui/react-accordion": "^1.2.11",
