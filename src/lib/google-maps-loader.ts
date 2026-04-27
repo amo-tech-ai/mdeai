@@ -76,6 +76,11 @@ function installAuthFailureHandler(): void {
   if (window.gm_authFailure) return;
   window.gm_authFailure = () => {
     window.__mdeaiMapAuthFailed = true;
+    // Telemetry first so the alert path runs even if the warn is filtered.
+    // Late-bind the import to avoid a hard dep cycle (loader → telemetry).
+    void import('@/lib/maps-telemetry').then(({ trackMapEvent }) => {
+      trackMapEvent({ kind: 'auth_failed' });
+    });
     console.warn(
       '[google-maps-loader] Auth failed (ApiNotActivatedMapError / referrer / invalid key). Whitelist the hostname + enable Maps JavaScript API on the key.',
     );

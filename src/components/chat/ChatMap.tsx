@@ -8,6 +8,7 @@ import {
   loadGoogleMapsLibrary,
   onMapsAuthFailed,
 } from '@/lib/google-maps-loader';
+import { measureScriptLoad, trackMapEvent } from '@/lib/maps-telemetry';
 import { cn } from '@/lib/utils';
 
 /**
@@ -177,10 +178,17 @@ export function ChatMap() {
     let cancelled = false;
     (async () => {
       try {
-        const [mapsLib, markerLib] = await Promise.all([
-          loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', apiKey),
-          loadGoogleMapsLibrary<google.maps.MarkerLibrary>('marker', apiKey),
-        ]);
+        // measureScriptLoad emits a `script_loaded` telemetry event with
+        // the measured millisecond duration on success, or a
+        // `script_load_failed` event with the error on failure.
+        const [mapsLib, markerLib] = await measureScriptLoad(
+          () =>
+            Promise.all([
+              loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', apiKey),
+              loadGoogleMapsLibrary<google.maps.MarkerLibrary>('marker', apiKey),
+            ]),
+          ['maps', 'marker'],
+        );
         if (cancelled) return;
         if (mapRef.current) return; // StrictMode-safe: another pass beat us
         MapCtorRef.current = mapsLib.Map;
@@ -201,8 +209,10 @@ export function ChatMap() {
         setLibrariesReady(true);
       } catch (err) {
         if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
         console.error('ChatMap init failed:', err);
-        setMapError(err instanceof Error ? err.message : String(err));
+        trackMapEvent({ kind: 'map_init_failed', error: message });
+        setMapError(message);
       }
     })();
     return () => {
@@ -300,6 +310,7 @@ export function ChatMap() {
               domEvent?: MouseEvent | KeyboardEvent;
             };
             const dom = evt.domEvent;
+            const viaKeyboard = dom instanceof KeyboardEvent;
             const newTab = !!(
               dom &&
               'metaKey' in dom &&
@@ -307,6 +318,12 @@ export function ChatMap() {
                 dom.ctrlKey ||
                 (dom instanceof MouseEvent && dom.button === 1))
             );
+            trackMapEvent({
+              kind: 'pin_click',
+              pinId: pin.id,
+              viaKeyboard,
+              newTab,
+            });
             setHighlightedPinId(pin.id);
             navigateToPin(pin, newTab);
           };
@@ -324,17 +341,26 @@ export function ChatMap() {
           bounds.extend({ lat: p.latitude!, lng: p.longitude! });
         }
         map.fitBounds(bounds, { top: 56, right: 56, bottom: 56, left: 56 });
+        trackMapEvent({ kind: 'fitbounds', pinCount: pinsWithCoords.length });
       } else if (pinsWithCoords.length === 1) {
         const p = pinsWithCoords[0];
         map.setCenter({ lat: p.latitude!, lng: p.longitude! });
         map.setZoom(15);
       }
+
+      trackMapEvent({ kind: 'markers_rendered', count: pinsWithCoords.length });
     } catch (err) {
       // Don't crash the React tree if Maps internals throw (e.g. a later
       // auth check trips after the initial Map() succeeded, or an SDK
       // bug between marker versions). Flip to fallback and surface it.
+      const message = err instanceof Error ? err.message : String(err);
       console.error('ChatMap marker render failed:', err);
-      setMapError(err instanceof Error ? err.message : String(err));
+      trackMapEvent({
+        kind: 'marker_render_failed',
+        error: message,
+        pinCount: pinsWithCoords.length,
+      });
+      setMapError(message);
     }
     // `highlightedPinId` intentionally omitted — handled in the next effect
     // to avoid re-creating markers on every hover.
