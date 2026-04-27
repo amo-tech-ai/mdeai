@@ -11,6 +11,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
 import Home from "./pages/Home";
 import Index from "./pages/Index";
+import { ChatCanvas } from "@/components/chat/ChatCanvas";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import Explore from "./pages/Explore";
@@ -78,9 +79,13 @@ const App = () => (
         <AuthProvider>
           <TripProvider>
           <Routes>
-            {/* Chat-as-app canvas — primary interaction surface */}
+            {/* Public marketing homepage — logged-in users get
+                <Navigate to="/chat" replace /> inside <Home>. */}
             <Route path="/" element={<Home />} />
-            {/* Original marketing landing, still reachable */}
+            {/* Chat-as-app — anon (3-msg gate) + authed both supported.
+                Auto-fires saved pending prompt when URL is /chat?send=pending. */}
+            <Route path="/chat" element={<ChatCanvas defaultTab="concierge" />} />
+            {/* Legacy alias; kept reachable. */}
             <Route path="/welcome" element={<Index />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>

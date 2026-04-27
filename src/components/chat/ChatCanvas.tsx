@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, DollarSign, Heart, MapPin, Calendar } from 'lucide-react';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
@@ -12,6 +13,11 @@ import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import type { ChatTab } from '@/types/chat';
 import { Button } from '@/components/ui/button';
+import {
+  clearPendingPrompt,
+  getPendingPrompt,
+  urlSignalsPendingSend,
+} from '@/lib/pending-prompt';
 
 /**
  * Known Medellín neighborhoods + lat/lng centroids. Used to resolve a
@@ -146,6 +152,39 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     if (user) fetchConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Auto-fire any pending prompt saved by <HeroChatPrompt> on the marketing
+  // homepage. Triggered when the URL is /chat?send=pending.
+  //
+  // Guards (4 layers, belt-and-suspenders):
+  //   1. URL must carry `?send=pending` (so direct /chat visits don't fire)
+  //   2. sessionStorage must have a pending prompt
+  //   3. Ref-guard `pendingFiredRef` blocks the second StrictMode pass
+  //   4. URL is `replace`d to `/chat` immediately after firing — refresh
+  //      can never replay the prompt
+  //
+  // The ref MUST be set BEFORE sendMessage so a synchronous re-render in
+  // StrictMode doesn't see a stale value.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pendingFiredRef = useRef(false);
+  useEffect(() => {
+    if (pendingFiredRef.current) return;
+    if (!urlSignalsPendingSend(location.search)) return;
+    const prompt = getPendingPrompt();
+    if (!prompt) {
+      // URL says ?send=pending but storage is empty — clean the URL and
+      // bail. Common when the user pasted the URL into a fresh tab.
+      navigate('/chat', { replace: true });
+      return;
+    }
+    pendingFiredRef.current = true;
+    clearPendingPrompt();
+    void sendMessage(prompt);
+    // Strip the ?send=pending param so a refresh doesn't replay the prompt.
+    navigate('/chat', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   // Populate map pins whenever actions deliver new listings. Uses
   // latitude/longitude from the inline payload; falls back to a "title-only"

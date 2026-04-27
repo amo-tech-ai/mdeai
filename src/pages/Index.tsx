@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { categories } from "@/lib/mockData";
 import { PlaceCard } from "@/components/places/PlaceCard";
 import { HeroSection } from "@/components/home/HeroSection";
+import { HeroChatPrompt } from "@/components/home/HeroChatPrompt";
 import { GetInspiredSlider } from "@/components/home/GetInspiredSlider";
 import { AIFeaturesSection } from "@/components/home/AIFeaturesSection";
 import { useFeaturedPlaces } from "@/hooks/useFeaturedPlaces";
@@ -28,7 +29,12 @@ export default function Index() {
       {/* Spacer for fixed header (matches logo + py-4) */}
       <div className="h-[88px] sm:h-[96px] md:h-[104px]" />
 
-      {/* Hero Section */}
+      {/* Hero AI Prompt — primary entry point.
+          Logged-out → savePendingPrompt + /signup?returnTo=/chat?send=pending
+          Logged-in  → savePendingPrompt + /chat?send=pending  (auto-fires) */}
+      <HeroChatPrompt />
+
+      {/* Hero Section (image masonry) — keeps the marketing visual depth */}
       <HeroSection />
 
       {/* Get Inspired Slider */}
