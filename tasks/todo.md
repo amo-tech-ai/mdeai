@@ -1,10 +1,78 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-23 (Week 2 Mon/Tue shipped + CORS fix + PR #1 merged — chat canvas now live on www.mdeai.co)
+> **Last updated:** 2026-04-24 — Maps Quick Wins #1–#5 shipped + audit verified; production readiness 92/100.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+## DONE 2026-04-24 — Maps stabilization sprint + Quick Wins audit
+
+### Shipped (commits on `fix/chat-production-hardening`)
+- [x] **Singleton Google Maps loader** → `src/lib/google-maps-loader.ts` (commit `e00b872`). Idempotent across StrictMode + remounts. Detects pre-existing `<script id="google-maps-script">` and reuses it. Killed the duplicate-script + `gmp-* already defined` error class.
+- [x] **`gmp-click` migration** + `gmpClickable: true` + symmetric `removeEventListener` cleanup on unmount (ChatMap + GoogleMapView). Killed the deprecation warning + listener leaks.
+- [x] **anon UUID hardening** (`c9ea238`) — `useAnonSession` validates with strict UUID regex + `crypto.randomUUID()` polyfill; `useChat` synthetic anon conversation id is now a pure UUID. Realtime subscription gated on `conversation.user_id === user.id`. Killed `invalid input syntax for type uuid` + `CHANNEL_ERROR`.
+- [x] **CommonJS `require()` panel-context shim removed** (`9b86f72`) — `/apartments/:id` no longer renders blank.
+- [x] **Quick Win #1: Maps SDK `v=quarterly` in prod** (`63d3faf`) — tree-shake-verified; `weekly` channel only in dev.
+- [x] **Quick Win #4: `clearPins()` on conversation change** (`63d3faf`) — pins no longer bleed across conversations.
+- [x] **Quick Win #5: A11y on AdvancedMarkerElement** (`63d3faf`) — `role`, `aria-label`, `aria-current`, `aria-hidden` on emoji.
+- [x] **Quick Win #2: pluggable maps telemetry** (`b054b08`) — 9 event kinds wired (script_loaded, markers_rendered, fitbounds, pin_click, cluster_expand, auth_failed, etc.); 4/4 unit tests; default sink is structured console; replace once at app boot to forward to Sentry/PostHog.
+- [x] **Quick Win #3: MarkerClusterer** (`ae918f7`) — `@googlemaps/markerclusterer ^2.6.2`. Pins cluster to numbered bubbles at city zoom, fan out on zoom-in. Cluster-click telemetry wired.
+- [x] **Booking flow** (`c0caa97`) — multi-step BookingDialog (dates → review → success), ContactHostDialog with pre-filled message, pricing engine (12 unit tests), uses existing `bookings` + `leads` tables (no migration).
+- [x] **Maps audit verified** — 21/21 verification items pass; no critical hidden bugs; production readiness **92/100**.
+
+### Verification table
+| Verified | Result |
+|---|---|
+| Singleton loader; no duplicate scripts; no `gmp-* already defined` | ✅ |
+| `gmp-click` everywhere; `gmpClickable: true` | ✅ |
+| Pin click → `/apartments/:id`; Cmd/Ctrl-click → new tab | ✅ |
+| MarkerClusterer + cluster_expand telemetry | ✅ |
+| `clearPins` on conv switch | ✅ |
+| A11y: tab/Enter/Space/aria-* | ✅ (visible focus = browser default; cosmetic gap only) |
+| Telemetry events fire (9 kinds) | ✅ default sink is `console.debug` — set DevTools to "Verbose" to see them |
+| E2E chat from prod origin | ✅ 200 OK, 9 listings, 2 phase events |
+| Memory leaks across navigation | ✅ unmount cleanup is symmetric |
+
+### Known gaps (informed roadmap, not bugs)
+- [ ] **No Sentry / PostHog sink** — telemetry events fire but go to console only.
+- [ ] **`viewport_idle` telemetry event TYPED but not EMITTED** — wired with "Search this area" feature.
+- [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
+- [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
+- [ ] **`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`.
+
+## NEXT 10 (ranked by Revenue / Growth / UX / Tech / Speed)
+
+| # | Task | Total |
+|---|---|---|
+| 1 | **Wednesday's `ChatLeftNav`** (chats + Saved + Trips counts) | 21 |
+| 2 | **"Search this area" on viewport idle** (debounced bbox → `rentals_search`) | 21 |
+| 3 | **Mobile fullscreen map drawer** (currently zero map on `md:hidden`) | 21 |
+| 4 | **Thursday's SEO page → chat handoff** (`/apartments/:id` "Ask mdeai about this →") | 20 |
+| 5 | **InfoWindow on pin click** (peek before navigating; preserves anon chat) | 19 |
+| 6 | **Sentry SDK + PostHog wired into telemetry sink** | 19 |
+| 7 | **Friday's affiliate attribution + `outbound_clicks`** | 17 |
+| 8 | **Booking dialog polish** (photo gallery + amenity grid in review step) | 16 |
+| 9 | **Custom Cloud Console MapID** (Mindtrip-style muted palette) | 12 |
+| 10 | **`useMarkerLayer` hook** (factor duplication between ChatMap + GoogleMapView) | 11 |
+
+### Recommended sprint order (4 days)
+- **Day 1**: #1 ChatLeftNav + #2 Search this area
+- **Day 2**: #6 Sentry/PostHog wiring + #3 Mobile fullscreen map
+- **Day 3**: #7 Affiliate attribution + #4 SEO handoff
+- **Day 4**: #5 InfoWindow + #8 Booking polish
+
+## Week 2 Remaining (chat-central plan)
+
+- [ ] **Wed — `ChatLeftNav`** (= "Next 10 #1") — sidebar lists recent conversations + "Saved (N)" + "Trips (N)" sections.
+- [ ] **Thu — SEO handoff + email-gate polish** (= "Next 10 #4")
+- [ ] **Fri — Affiliate attribution + `outbound_clicks`** (= "Next 10 #7")
+
+## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`)
+
+- [ ] Logged-in user searches rentals → saves 2 listings (`saved_places` rows exist) → adds 1 to a new trip (`trip_items` row exists) → clicks outbound to Airbnb → click logged to `outbound_clicks` with affiliate tag.
+
+---
 
 ## DONE 2026-04-23 — Week 2 Mon/Tue + CORS fix + production merge
 
