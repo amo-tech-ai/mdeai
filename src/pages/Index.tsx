@@ -28,7 +28,9 @@ export default function Index() {
       {/* Spacer for fixed header (matches logo + py-4) */}
       <div className="h-[88px] sm:h-[96px] md:h-[104px]" />
 
-      {/* Hero Section */}
+      {/* Hero Section — left column embeds <HeroChatPrompt variant="inline">
+          (the AI concierge prompt that drives the auth handoff to /chat),
+          right column is the image masonry for marketing depth. */}
       <HeroSection />
 
       {/* Get Inspired Slider */}

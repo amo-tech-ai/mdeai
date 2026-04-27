@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { MAIN_NAV_LINKS } from "@/config/marketingNav";
+import { HeroChatPrompt } from "@/components/home/HeroChatPrompt";
 
 // Hero images
 import skylineImg from "@/assets/hero/medellin-skyline.jpg";
@@ -91,37 +90,12 @@ export function HeroSection() {
                 trips across Colombia.
               </p>
 
-              {/* CTAs */}
-              <div
-                className="flex flex-col sm:flex-row gap-4 pt-2 animate-fade-in"
-                style={{ animationDelay: "300ms" }}
-              >
-                <Link to="/explore">
-                  <Button
-                    size="lg"
-                    className="w-full sm:w-auto rounded-full bg-rose-500 hover:bg-rose-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-8"
-                  >
-                    Explore experiences
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto rounded-full border-muted-foreground/30 text-foreground hover:bg-muted/50 px-8"
-                >
-                  Subscribe
-                </Button>
-              </div>
-
-              {/* Trust indicator */}
-              <div
-                className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in"
-                style={{ animationDelay: "400ms" }}
-              >
-                <Check className="w-4 h-4 text-primary" />
-                <span>Free to explore • No credit card required</span>
-              </div>
+              {/* AI Concierge prompt — primary entry point.
+                  Replaces the prior "Explore experiences" + "Subscribe"
+                  CTAs. Logged-in users go straight to /chat?send=pending;
+                  anon users round-trip through /signup with the prompt
+                  saved in sessionStorage (see HeroChatPrompt). */}
+              <HeroChatPrompt variant="inline" />
             </div>
 
             {/* Right Column - Masonry Grid */}

@@ -74,14 +74,22 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     }
   }, []);
 
-  // Subscribe to realtime updates for current conversation
-  const realtimeTopic = currentConversation?.id 
-    ? `conversation:${currentConversation.id}:messages` 
+  // Subscribe to realtime updates for current conversation. We only
+  // subscribe for conversations that actually have a backing Postgres
+  // row — i.e. authed users whose conversation belongs to them. Anon
+  // conversations are pure in-memory (no DB row), so subscribing would
+  // produce CHANNEL_ERROR / TIMED_OUT on the realtime broker.
+  const isOwnConversation =
+    !!user &&
+    !!currentConversation?.id &&
+    currentConversation.user_id === user.id;
+  const realtimeTopic = isOwnConversation
+    ? `conversation:${currentConversation!.id}:messages`
     : '';
 
   useRealtimeChannel({
     topic: realtimeTopic,
-    enabled: !!currentConversation?.id && !!user,
+    enabled: isOwnConversation,
     onEvent: handleRealtimeEvent,
   });
 
@@ -220,7 +228,17 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     // of the flow can key off conversation.id.
     let conversation = currentConversation;
     if (user) {
-      if (!conversation) {
+      // A conversation only "belongs" to the current user when its
+      // user_id matches. Anon conversations carry user_id='anon' (set
+      // in the anon path below) — when an anon user signs in, that
+      // synthetic conversation is no longer valid for DB writes, so
+      // we mint a fresh DB-backed one.
+      const belongsToUser = !!conversation && conversation.user_id === user.id;
+      if (!belongsToUser) {
+        // Drop in-memory anon history so we start clean. The 3-msg
+        // quota was already enforced server-side; nothing important
+        // is lost here.
+        if (conversation) setMessages([]);
         conversation = await createConversation(content.slice(0, 50));
         if (!conversation) return;
         // Carry the pre-conversation chips onto the brand-new DB row so a
@@ -245,11 +263,17 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
         }
       }
     } else {
-      // Anon path: use (or fabricate) a client-only conversation identity.
+      // Anon path: synthesize a client-only conversation. The id MUST be
+      // a real UUID — older builds used `anon-${sid}` which broke
+      // messages.conversation_id (uuid type) and realtime channel subs.
+      // The "anon" marker now lives ONLY on user_id (in-memory sentinel,
+      // never written to DB) and on a `display_label` if a UI surface
+      // wants to show "anon-…" to the user.
       if (!conversation) {
+        const conversationId = anonSessionId ?? crypto.randomUUID();
         conversation = {
-          id: `anon-${anonSessionId}`,
-          user_id: 'anon',
+          id: conversationId,
+          user_id: 'anon', // sentinel; never persisted (anon path skips DB writes)
           title: content.slice(0, 50),
           agent_type: tabToAgentType[activeTab],
           status: 'active',
@@ -544,6 +568,19 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     }
   }, [sendMessage]);
 
+  // Reset to a brand-new chat — clears the active conversation, message
+  // stream, pending actions, reasoning trace, and chips. Used by the
+  // "New chat" button in ChatLeftNav and whenever the user hits `/` fresh.
+  const newChat = useCallback(() => {
+    setCurrentConversation(null);
+    setMessages([]);
+    setPendingActions([]);
+    setReasoningPhases([]);
+    setChatContext(EMPTY_CHAT_CONTEXT);
+    setError(null);
+    lastFailedMessageRef.current = null;
+  }, []);
+
   // Archive a conversation
   const archiveConversation = useCallback(async (conversationId: string) => {
     const { error } = await supabase
@@ -580,6 +617,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     cancelStream,
     retryLastMessage,
     archiveConversation,
+    newChat,
     setCurrentConversation,
     setMessages,
     setPendingActions,

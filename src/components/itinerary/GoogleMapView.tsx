@@ -5,12 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { TripItem, TripItemType } from "@/types/trip";
 import type { DirectionsResult } from "@/hooks/useGoogleDirections";
-
-declare global {
-  interface Window {
-    google?: typeof google;
-  }
-}
+import { loadGoogleMapsLibrary } from "@/lib/google-maps-loader";
 
 interface GoogleMapViewProps {
   items: TripItem[];
@@ -121,34 +116,31 @@ export function GoogleMapView({
     [items]
   );
 
-  // Load Google Maps script
+  // Load Google Maps via the shared singleton loader. Never inject our
+  // own <script> tag — that's the whole reason the loader exists. The
+  // loader is idempotent across components AND React StrictMode remounts.
   useEffect(() => {
-    if (window.google?.maps?.Map) {
-      setIsMapLoaded(true);
-      return;
-    }
-
-    const existingScript = document.getElementById("google-maps-script");
-    if (existingScript) {
-      existingScript.addEventListener("load", () => setIsMapLoaded(true));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker&v=weekly`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => setIsMapLoaded(true);
-    script.onerror = () => setMapError("Failed to load Google Maps");
-    document.head.appendChild(script);
-
+    if (!apiKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Pre-warm the libraries we use so the init effect below doesn't
+        // race the script-load promise.
+        await Promise.all([
+          loadGoogleMapsLibrary("maps", apiKey),
+          loadGoogleMapsLibrary("marker", apiKey),
+        ]);
+        if (!cancelled) setIsMapLoaded(true);
+      } catch (err) {
+        if (!cancelled) setMapError(err instanceof Error ? err.message : "Failed to load Google Maps");
+      }
+    })();
     return () => {
-      // Don't remove the script as it might be used elsewhere
+      cancelled = true;
     };
   }, [apiKey]);
 
-  // Initialize map
+  // Initialize map (StrictMode-safe via the `mapRef.current` guard).
   useEffect(() => {
     if (!isMapLoaded || !mapContainerRef.current || mapRef.current) return;
 
@@ -216,7 +208,15 @@ export function GoogleMapView({
     if (!mapRef.current || !isMapLoaded) return;
 
     // Clear existing markers
-    markersRef.current.forEach((marker) => (marker.map = null));
+    // Clean up listeners + detach existing markers before rebuilding.
+    markersRef.current.forEach((marker) => {
+      const stash = marker as unknown as { __mdeaiClick?: EventListener };
+      if (stash.__mdeaiClick) {
+        marker.removeEventListener('gmp-click', stash.__mdeaiClick);
+        stash.__mdeaiClick = undefined;
+      }
+      marker.map = null;
+    });
     markersRef.current = [];
 
     if (itemsWithCoords.length === 0) return;
@@ -234,11 +234,19 @@ export function GoogleMapView({
         position,
         content: createMarkerContent(item, index, isSelected),
         zIndex: isSelected ? 1000 : index,
+        // Required for the modern `gmp-click` event to fire (also makes
+        // the element keyboard-focusable for a11y).
+        gmpClickable: true,
       });
 
-      marker.addListener("click", () => {
-        onItemSelect?.(item);
-      });
+      // Use the modern `gmp-click` event per Google's recent guidance.
+      // <gmp-advanced-marker> deprecates plain 'click'; using addListener
+      // logs a console warning. The handler is captured separately so we
+      // can removeEventListener on cleanup below.
+      const onClick = () => onItemSelect?.(item);
+      marker.addEventListener("gmp-click", onClick);
+      // Stash the handler on the element for cleanup.
+      (marker as unknown as { __mdeaiClick?: EventListener }).__mdeaiClick = onClick;
 
       markersRef.current.push(marker);
     });

@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, MapPin, Bed, Bath, Wifi, Star, Heart, Share2, Calendar, CheckCircle, XCircle } from "lucide-react";
-import { ThreePanelLayout, usePanelContext } from "@/components/layout/ThreePanelLayout";
+import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -10,10 +10,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useApartment } from "@/hooks/useApartments";
 import { useToggleSave, useIsSaved } from "@/hooks/useSavedPlaces";
 import { useAuth } from "@/hooks/useAuth";
+import { BookingDialog } from "@/components/apartments/BookingDialog";
+import { ContactHostDialog } from "@/components/apartments/ContactHostDialog";
+import type { Apartment } from "@/types/listings";
 import { cn } from "@/lib/utils";
 
 // Right panel content for apartment detail
-function ApartmentDetailRightPanel({ apartment }: { apartment: any }) {
+function ApartmentDetailRightPanel({
+  apartment,
+  onCheckAvailability,
+  onContactHost,
+}: {
+  apartment: Apartment;
+  onCheckAvailability: () => void;
+  onContactHost: () => void;
+}) {
   return (
     <div className="space-y-6">
       {/* Quick Actions */}
@@ -38,11 +49,11 @@ function ApartmentDetailRightPanel({ apartment }: { apartment: any }) {
               <div className="text-xs text-muted-foreground">daily</div>
             </div>
           </div>
-          <Button className="w-full" size="lg">
+          <Button className="w-full" size="lg" onClick={onCheckAvailability}>
             <Calendar className="w-4 h-4 mr-2" />
             Check Availability
           </Button>
-          <Button variant="outline" className="w-full">
+          <Button variant="outline" className="w-full" onClick={onContactHost}>
             Contact Host
           </Button>
         </CardContent>
@@ -98,18 +109,27 @@ function ApartmentDetailRightPanel({ apartment }: { apartment: any }) {
   );
 }
 
-// Inner component that can safely use usePanelContext
-function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: { 
-  apartment: any; 
+// Inner component that can safely use useThreePanelContext (must be inside
+// the ThreePanelLayout's <ThreePanelProvider>).
+function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
+  apartment: Apartment;
   isSaved: boolean | undefined;
   handleSave: () => void;
-  user: any;
+  user: ReturnType<typeof useAuth>["user"];
 }) {
-  const { setRightPanelContent } = usePanelContext();
+  const { setRightPanelContent } = useThreePanelContext();
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
 
   useEffect(() => {
     if (apartment) {
-      setRightPanelContent(<ApartmentDetailRightPanel apartment={apartment} />);
+      setRightPanelContent(
+        <ApartmentDetailRightPanel
+          apartment={apartment}
+          onCheckAvailability={() => setBookingOpen(true)}
+          onContactHost={() => setContactOpen(true)}
+        />,
+      );
     }
     return () => setRightPanelContent(null);
   }, [apartment, setRightPanelContent]);
@@ -293,15 +313,31 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
       </div>
 
       {/* Mobile CTA */}
-      <div className="md:hidden fixed bottom-20 left-0 right-0 p-4 bg-background border-t">
+      <div className="md:hidden fixed bottom-20 left-0 right-0 p-4 bg-background border-t z-30">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="font-bold text-lg">${apartment.price_monthly?.toLocaleString()}/mo</div>
             <p className="text-xs text-muted-foreground">${apartment.price_daily}/night</p>
           </div>
-          <Button size="lg">Check Availability</Button>
+          <Button size="lg" onClick={() => setBookingOpen(true)}>
+            Check Availability
+          </Button>
         </div>
       </div>
+
+      {/* Booking + Contact Host dialogs — portal to document root, so it's
+          fine to mount them here even though the trigger lives in the
+          right panel (different DOM subtree). */}
+      <BookingDialog
+        open={bookingOpen}
+        onOpenChange={setBookingOpen}
+        apartment={apartment}
+      />
+      <ContactHostDialog
+        open={contactOpen}
+        onOpenChange={setContactOpen}
+        apartment={apartment}
+      />
     </div>
   );
 }

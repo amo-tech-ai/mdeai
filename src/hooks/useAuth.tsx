@@ -8,7 +8,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: (redirectTo?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   updatePassword: (password: string) => Promise<{ error: Error | null }>;
@@ -60,11 +60,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const signInWithGoogle = async () => {
+  /**
+   * Sign in via Google OAuth.
+   *
+   * `redirectTo` is the URL Supabase tells Google to send the user back to
+   * after auth. Defaults to the app origin (root). Pass a path like
+   * `/chat?send=pending` to land the user there post-auth — required for
+   * the marketing-homepage prompt-handoff flow (see HeroChatPrompt +
+   * pending-prompt.ts). Always converted to an absolute URL because
+   * Google rejects relative redirectTo values.
+   */
+  const signInWithGoogle = async (redirectTo?: string) => {
+    const absolute =
+      redirectTo && redirectTo.startsWith('/')
+        ? `${window.location.origin}${redirectTo}`
+        : redirectTo || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: absolute,
       },
     });
     return { error };

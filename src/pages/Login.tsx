@@ -19,7 +19,17 @@ export default function Login() {
   const location = useLocation();
   const { toast } = useToast();
 
-  const from = (location.state as any)?.from?.pathname || "/";
+  // `returnTo` precedence:
+  //   1. ?returnTo=… query string (set by HeroChatPrompt after savePendingPrompt)
+  //   2. ProtectedRoute's location.state.from.pathname (existing path)
+  //   3. "/" (default)
+  // Same-origin paths only — never honor an absolute external URL (open-redirect).
+  const params = new URLSearchParams(location.search);
+  const rawReturn = params.get("returnTo");
+  const returnTo =
+    rawReturn && rawReturn.startsWith("/") && !rawReturn.startsWith("//")
+      ? rawReturn
+      : (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,13 +49,16 @@ export default function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
-      navigate(from, { replace: true });
+      navigate(returnTo, { replace: true });
     }
   };
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
-    const { error } = await signInWithGoogle();
+    // Google OAuth round-trips through Google then hits Supabase, then
+    // returns the user to `redirectTo`. Pass our same-origin returnTo so
+    // they land directly on /chat?send=pending after auth.
+    const { error } = await signInWithGoogle(returnTo);
     if (error) {
       toast({
         title: "Google login failed",

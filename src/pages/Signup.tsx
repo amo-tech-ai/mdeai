@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,20 @@ export default function Signup() {
   
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // Same `returnTo` precedence as Login. Used for:
+  //   - Google OAuth redirectTo (so user lands on /chat?send=pending
+  //     directly after the round-trip)
+  //   - the `?returnTo=…` carry-over to /login after email confirmation
+  // Same-origin paths only — never honor an absolute external URL.
+  const params = new URLSearchParams(location.search);
+  const rawReturn = params.get("returnTo");
+  const returnTo =
+    rawReturn && rawReturn.startsWith("/") && !rawReturn.startsWith("//")
+      ? rawReturn
+      : "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,13 +69,22 @@ export default function Signup() {
         title: "Check your email",
         description: "We sent you a confirmation link. Please check your inbox.",
       });
-      navigate("/login");
+      // Carry returnTo over to /login so the user resumes their flow after
+      // confirming. Same-origin paths only (validated above).
+      const target =
+        returnTo && returnTo !== "/"
+          ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+          : "/login";
+      navigate(target);
     }
   };
 
   const handleGoogleSignup = async () => {
     setGoogleLoading(true);
-    const { error } = await signInWithGoogle();
+    // Google round-trips through Supabase and lands on `redirectTo`. Pass
+    // returnTo so an authed user touches down at /chat?send=pending
+    // and the auto-fire effect picks up the saved prompt.
+    const { error } = await signInWithGoogle(returnTo);
     if (error) {
       toast({
         title: "Google signup failed",

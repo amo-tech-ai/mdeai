@@ -14,7 +14,7 @@ import {
   DollarSign,
   ExternalLink,
 } from "lucide-react";
-import { ThreePanelLayout, usePanelContext } from "@/components/layout/ThreePanelLayout";
+import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -130,7 +130,7 @@ function RestaurantDetailContent({
   user: any;
   handleSave: () => void;
 }) {
-  const { setRightPanelContent } = usePanelContext();
+  const { setRightPanelContent } = useThreePanelContext();
 
   useEffect(() => {
     setRightPanelContent(<RestaurantDetailRightPanel restaurant={restaurant} />);
