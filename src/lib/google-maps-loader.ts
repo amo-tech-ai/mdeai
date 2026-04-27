@@ -177,7 +177,12 @@ function installBootstrap(apiKey: string): void {
     state.scriptPromise = new Promise<void>((resolve, reject) => {
       const params = new URLSearchParams();
       params.set('key', apiKey);
-      params.set('v', 'weekly');
+      // Pin to the quarterly channel in production. The weekly channel
+      // ships breaking changes on a rolling basis; pinning means a bad
+      // SDK release week doesn't break the live site without a deploy.
+      // Dev builds stay on weekly so engineers feel changes early.
+      // See: https://developers.google.com/maps/documentation/javascript/versions
+      params.set('v', import.meta.env.PROD ? 'quarterly' : 'weekly');
       params.set('loading', 'async');
       if (libsToLoad.size > 0) {
         params.set('libraries', Array.from(libsToLoad).join(','));

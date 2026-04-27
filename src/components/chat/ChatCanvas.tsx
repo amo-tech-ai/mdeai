@@ -78,6 +78,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
 
   const {
     messages,
+    currentConversation,
     isLoading,
     isStreaming,
     error,
@@ -131,6 +132,15 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   useEffect(() => {
     if (messages.length === 0) clearPins();
   }, [messages.length, clearPins]);
+
+  // Clear pins on conversation switch — opening a different conversation
+  // from ChatLeftNav (or selectConversation) should NOT show the previous
+  // conversation's pins. Without this, pins bleed across conversations.
+  // Note: keying on conversation id (null → new chat also fires this) means
+  // the empty-message effect above is partially redundant but harmless.
+  useEffect(() => {
+    clearPins();
+  }, [currentConversation?.id, clearPins]);
 
   return (
     <div className="min-h-screen bg-background">

@@ -213,6 +213,11 @@ export function ChatMap() {
   // Create / update marker content. Uses a plain div so we can keep the
   // mdeai visual language (emoji + title pill) without MapID-bound custom
   // styles. `isHot` is the hover-highlight from card ↔ pin cross-link.
+  //
+  // A11y: `gmpClickable: true` already makes the marker keyboard-focusable.
+  // We ALSO set `role="button"` and an `aria-label` so screen readers
+  // announce it as "Open <title>, <label>". Decorative emoji is
+  // `aria-hidden`. Enter / Space already triggers gmp-click natively.
   const makeContent = useCallback((pin: MapPin, isHot: boolean) => {
     const cfg = PIN_CATEGORY_CONFIG[pin.category];
     const div = document.createElement('div');
@@ -222,11 +227,18 @@ export function ChatMap() {
       isHot ? 'bg-black text-white scale-110 z-20' : 'bg-white text-gray-900 hover:scale-105',
     ].join(' ');
     div.style.borderColor = isHot ? '#000' : cfg.color;
+    div.setAttribute('role', 'button');
+    div.setAttribute(
+      'aria-label',
+      `Open ${pin.title}${pin.label ? `, ${pin.label}` : ''}`,
+    );
+    if (isHot) div.setAttribute('aria-current', 'true');
 
     const dot = document.createElement('span');
     dot.className = 'w-5 h-5 rounded-full flex items-center justify-center text-[11px]';
     dot.style.background = isHot ? 'rgba(255,255,255,0.15)' : `${cfg.color}20`;
     dot.textContent = cfg.emoji;
+    dot.setAttribute('aria-hidden', 'true');
     div.appendChild(dot);
 
     const label = document.createElement('span');
