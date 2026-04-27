@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin as MapPinIcon } from 'lucide-react';
 import { useMapContext, PIN_CATEGORY_CONFIG, type MapPin } from '@/context/MapContext';
+import {
+  isMapsAuthFailed,
+  loadGoogleMapsLibrary,
+  onMapsAuthFailed,
+} from '@/lib/google-maps-loader';
 import { cn } from '@/lib/utils';
 
 /**
@@ -20,109 +25,10 @@ import { cn } from '@/lib/utils';
  * See: tasks/CHAT-CENTRAL-PLAN.md §3 + Week 2 mid-week upgrade.
  */
 
-declare global {
-  interface Window {
-    google?: typeof google;
-    /** Google Maps auth-failure callback — set before script load. */
-    gm_authFailure?: () => void;
-    /** Latched truthy when gm_authFailure fires — components read + fall back. */
-    __mdeaiMapAuthFailed?: boolean;
-  }
-}
-
 // Medellín fallback center so the map has a reasonable default pose before
 // any pins arrive (vs. staring at the Atlantic or whatever the default is).
 const MEDELLIN_CENTER = { lat: 6.2442, lng: -75.5812 };
 const MAP_ID = 'mdeai-chat-map';
-
-/**
- * Install Google's inline bootstrap loader.
- *
- * The key insight (from
- * https://developers.google.com/maps/documentation/javascript/load-maps-js-api):
- * `google.maps.importLibrary(...)` is ONLY installed when you use the inline
- * bootstrap pattern. A plain `<script src=".../js?...&loading=async">` tag
- * does NOT install importLibrary; calling it throws "is not a function".
- *
- * This helper is a typed port of Google's minified IIFE: it seeds
- * `google.maps.importLibrary` as a lazy shim that (on first call) injects
- * the real Maps API script, and — once the script executes — the real
- * `importLibrary` overwrites our shim. Subsequent awaits resolve to the
- * requested library's real constructors (Map, AdvancedMarkerElement, …).
- *
- * Also installs `window.gm_authFailure` so ApiNotActivatedMapError /
- * RefererNotAllowed / InvalidKey surface as a flag we can fall back on
- * instead of crashing inside the Maps API internals.
- */
-type BootstrapConfig = {
-  key: string;
-  v: string;
-  libraries?: string;
-  loading?: string;
-};
-
-function installMapsBootstrap(config: BootstrapConfig): void {
-  if (typeof window === 'undefined') return;
-
-  if (!window.gm_authFailure) {
-    window.gm_authFailure = () => {
-      window.__mdeaiMapAuthFailed = true;
-      console.warn(
-        '[ChatMap] Google Maps auth failed (ApiNotActivatedMapError / referrer / invalid key). Enable Maps JavaScript API + whitelist the hostname on the key.',
-      );
-      window.dispatchEvent(new Event('mdeai:map-auth-failed'));
-    };
-  }
-
-  const w = window as unknown as { google?: { maps?: Record<string, unknown> } };
-  w.google = w.google || {};
-  w.google.maps = w.google.maps || {};
-  const mapsNs = w.google.maps;
-
-  // If the real importLibrary is already installed (prior mount) — we're done.
-  if (typeof mapsNs.importLibrary === 'function' && !mapsNs.__mdeai_shim__) return;
-
-  const libsToLoad = new Set<string>();
-  let loadPromise: Promise<void> | null = null;
-
-  const ensureLoaded = (): Promise<void> => {
-    if (loadPromise) return loadPromise;
-    loadPromise = new Promise<void>((resolve, reject) => {
-      const params = new URLSearchParams();
-      params.set('libraries', Array.from(libsToLoad).join(','));
-      for (const [k, v] of Object.entries(config)) {
-        if (v == null) continue;
-        // camelCase → snake_case (Google's convention: `v` stays, `loading` stays, `key` stays)
-        const snake = k.replace(/[A-Z]/g, (ch) => '_' + ch.toLowerCase());
-        params.set(snake, String(v));
-      }
-      params.set('callback', 'google.maps.__mdeai_cb__');
-      mapsNs.__mdeai_cb__ = resolve;
-
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-      script.async = true;
-      script.onerror = () => reject(new Error('Google Maps script failed to load'));
-      document.head.append(script);
-    });
-    return loadPromise;
-  };
-
-  // Install our shim. Google's real importLibrary (installed by the loaded
-  // script) will OVERWRITE this function, so subsequent calls go to the
-  // real one. The recursive `mapsNs.importLibrary(...)` at the end re-enters
-  // the now-real function.
-  mapsNs.__mdeai_shim__ = true;
-  mapsNs.importLibrary = (libName: string, ...rest: unknown[]) => {
-    libsToLoad.add(libName);
-    return ensureLoaded().then(() => {
-      // At this point the Maps API has loaded and replaced importLibrary
-      // with the real one. Re-call via mapsNs to pick up the new function.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (mapsNs.importLibrary as any)(libName, ...rest);
-    });
-  };
-}
 
 function FallbackPinList({
   pins,
@@ -237,54 +143,46 @@ export function ChatMap() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
+  // Each marker carries the EventListener we attached, so we can call
+  // `removeEventListener` symmetrically on unmount + when a marker is
+  // dropped between turns. Without this, listeners leak — addEventListener
+  // (unlike the legacy `marker.addListener` API) is not auto-cleaned up
+  // by Google Maps when `marker.map = null`.
+  type MarkerEntry = {
+    marker: google.maps.marker.AdvancedMarkerElement;
+    clickHandler: EventListener;
+  };
+  const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
   const [mapError, setMapError] = useState<string | null>(null);
 
   // If a prior mount already tripped gm_authFailure, skip straight to the
   // fallback UI — no point loading the script again just to crash.
-  const [authFailed, setAuthFailed] = useState<boolean>(
-    typeof window !== 'undefined' && !!window.__mdeaiMapAuthFailed,
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = () => setAuthFailed(true);
-    window.addEventListener('mdeai:map-auth-failed', handler);
-    return () => window.removeEventListener('mdeai:map-auth-failed', handler);
-  }, []);
+  const [authFailed, setAuthFailed] = useState<boolean>(isMapsAuthFailed());
+  useEffect(() => onMapsAuthFailed(() => setAuthFailed(true)), []);
 
-  // Install the inline bootstrap (seeds google.maps.importLibrary). This
-  // MUST happen before any `importLibrary()` call. Safe to call multiple
-  // times — the helper no-ops after the first install.
-  // `loading: 'async'` silences the "loaded directly without loading=async"
-  // console warning and lets the API defer non-critical work.
-  useEffect(() => {
-    if (!apiKey || authFailed) return;
-    installMapsBootstrap({ key: apiKey, v: 'weekly', loading: 'async' });
-  }, [apiKey, authFailed]);
-
-  // Expose the Map + AdvancedMarkerElement constructors once importLibrary
-  // resolves. We don't use `google.maps.Map` on the root namespace directly
-  // because with the bootstrap loader it isn't populated until the library
-  // is imported — we use whatever importLibrary returns.
+  // Expose the Map + AdvancedMarkerElement constructors once `importLibrary`
+  // resolves. The shared loader (src/lib/google-maps-loader.ts) is the
+  // single source of truth — it dedupes against any pre-existing
+  // <script id="google-maps-script"> AND across React StrictMode remounts
+  // so we never inject Maps twice on the page.
   const MapCtorRef = useRef<typeof google.maps.Map | null>(null);
   const MarkerCtorRef = useRef<typeof google.maps.marker.AdvancedMarkerElement | null>(null);
   const [librariesReady, setLibrariesReady] = useState(false);
 
-  // Initialize map once container is ready + bootstrap has been installed.
+  // Initialize map once container is ready. StrictMode-safe: the
+  // `if (mapRef.current) return` guard short-circuits the second pass,
+  // and `cancelled` blocks the async tail from racing the unmount.
   useEffect(() => {
     if (!apiKey || authFailed || !containerRef.current || mapRef.current) return;
     let cancelled = false;
     (async () => {
       try {
-        // Request both libraries in parallel so our shim adds both to
-        // `libsToLoad` before `ensureLoaded()` triggers — the single
-        // script URL will include `libraries=maps,marker` (one network
-        // round-trip instead of a lazy second load).
-        const [mapsLib, markerLib] = (await Promise.all([
-          google.maps.importLibrary('maps'),
-          google.maps.importLibrary('marker'),
-        ])) as [google.maps.MapsLibrary, google.maps.MarkerLibrary];
+        const [mapsLib, markerLib] = await Promise.all([
+          loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', apiKey),
+          loadGoogleMapsLibrary<google.maps.MarkerLibrary>('marker', apiKey),
+        ]);
         if (cancelled) return;
+        if (mapRef.current) return; // StrictMode-safe: another pass beat us
         MapCtorRef.current = mapsLib.Map;
         MarkerCtorRef.current = markerLib.AdvancedMarkerElement;
 
@@ -355,9 +253,10 @@ export function ChatMap() {
     try {
       // Remove markers that are no longer in the current set.
       const nextIds = new Set(pinsWithCoords.map((p) => p.id));
-      for (const [id, marker] of markersRef.current) {
+      for (const [id, entry] of markersRef.current) {
         if (!nextIds.has(id)) {
-          marker.map = null;
+          entry.marker.removeEventListener('gmp-click', entry.clickHandler);
+          entry.marker.map = null;
           markersRef.current.delete(id);
         }
       }
@@ -367,25 +266,40 @@ export function ChatMap() {
         const isHot = pin.id === highlightedPinId;
         const existing = markersRef.current.get(pin.id);
         if (existing) {
-          existing.position = { lat: pin.latitude!, lng: pin.longitude! };
-          existing.content = makeContent(pin, isHot);
+          existing.marker.position = { lat: pin.latitude!, lng: pin.longitude! };
+          existing.marker.content = makeContent(pin, isHot);
         } else {
           const marker = new MarkerCtor({
             map,
             position: { lat: pin.latitude!, lng: pin.longitude! },
             content: makeContent(pin, isHot),
             zIndex: isHot ? 1000 : 1,
+            // gmpClickable enables the `gmp-click` event on this marker
+            // (also makes the element keyboard-focusable for a11y).
+            gmpClickable: true,
           });
-          // Click → set highlight + navigate to listing detail. Cmd/Ctrl-click
-          // preserves the chat by opening in a new tab — Maps' MouseEvent
-          // exposes the modifier flags via `domEvent`.
-          marker.addListener('click', (event?: { domEvent?: MouseEvent }) => {
-            const native = event?.domEvent;
-            const newTab = !!(native?.metaKey || native?.ctrlKey || native?.button === 1);
+          // Use the modern `gmp-click` event per Google's recent guidance:
+          // <gmp-advanced-marker> deprecates plain 'click'. The event's
+          // `domEvent` carries the originating MouseEvent or KeyboardEvent
+          // (Enter/Space) so we still get modifier-key access for
+          // Cmd/Ctrl-click → open in new tab.
+          const clickHandler: EventListener = (event) => {
+            const evt = event as Event & {
+              domEvent?: MouseEvent | KeyboardEvent;
+            };
+            const dom = evt.domEvent;
+            const newTab = !!(
+              dom &&
+              'metaKey' in dom &&
+              (dom.metaKey ||
+                dom.ctrlKey ||
+                (dom instanceof MouseEvent && dom.button === 1))
+            );
             setHighlightedPinId(pin.id);
             navigateToPin(pin, newTab);
-          });
-          markersRef.current.set(pin.id, marker);
+          };
+          marker.addEventListener('gmp-click', clickHandler);
+          markersRef.current.set(pin.id, { marker, clickHandler });
         }
       }
 
@@ -420,16 +334,31 @@ export function ChatMap() {
     if (!librariesReady || authFailed) return;
     try {
       for (const pin of pins) {
-        const marker = markersRef.current.get(pin.id);
-        if (!marker) continue;
+        const entry = markersRef.current.get(pin.id);
+        if (!entry) continue;
         const isHot = pin.id === highlightedPinId;
-        marker.content = makeContent(pin, isHot);
-        marker.zIndex = isHot ? 1000 : 1;
+        entry.marker.content = makeContent(pin, isHot);
+        entry.marker.zIndex = isHot ? 1000 : 1;
       }
     } catch (err) {
       console.error('ChatMap highlight update failed:', err);
     }
   }, [highlightedPinId, pins, librariesReady, authFailed, makeContent]);
+
+  // Full unmount cleanup — symmetric to addEventListener('gmp-click').
+  // Without this, listeners leak across navigations (chat → /apartments → chat).
+  // We capture the ref by closure so the cleanup function can iterate it
+  // even after the ref is mutated by a later mount.
+  useEffect(() => {
+    const map = markersRef.current;
+    return () => {
+      for (const { marker, clickHandler } of map.values()) {
+        marker.removeEventListener('gmp-click', clickHandler);
+        marker.map = null;
+      }
+      map.clear();
+    };
+  }, []);
 
   // Fall back to the pin list when:
   //   - no API key at all (local dev / missing env)
