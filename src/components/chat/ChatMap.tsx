@@ -115,7 +115,23 @@ function EmptyState() {
   );
 }
 
-export function ChatMap() {
+/**
+ * Viewport coordinates emitted to the parent on "Search this area" click.
+ * The parent (ChatCanvas) maps `center` to the nearest known neighborhood
+ * and re-fires the chat search.
+ */
+export interface ViewportSearchPayload {
+  center: { lat: number; lng: number };
+  zoom: number;
+  bounds: { north: number; south: number; east: number; west: number };
+}
+
+export interface ChatMapProps {
+  /** Fires when the user clicks "Search this area". */
+  onViewportSearch?: (payload: ViewportSearchPayload) => void;
+}
+
+export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
   const { pins, highlightedPinId, setHighlightedPinId } = useMapContext();
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
   const navigate = useNavigate();
@@ -438,6 +454,81 @@ export function ChatMap() {
     };
   }, []);
 
+  // "Search this area" — show a floating pill when the user has panned
+  // / zoomed the map after the initial fitBounds. Maps' `idle` event
+  // fires after a viewport change settles; we mark a "fresh-fit" flag
+  // when we programmatically fitBounds, so panning AFTER that flips it
+  // off and reveals the pill.
+  const [showSearchPill, setShowSearchPill] = useState(false);
+  // Latched true after we just programmatically fit bounds; the next
+  // `idle` event is OUR fit (not a user pan), so we ignore it.
+  const justFitRef = useRef(false);
+  useEffect(() => {
+    // When pins change, our marker effect calls fitBounds — we'll see
+    // the resulting `idle` and need to swallow it. Reset the pill so
+    // the user doesn't see "Search this area" for a search they just ran.
+    if (pins.length > 0) {
+      justFitRef.current = true;
+      setShowSearchPill(false);
+    }
+  }, [pins]);
+
+  useEffect(() => {
+    if (!librariesReady || authFailed || !mapRef.current) return;
+    const map = mapRef.current;
+    const listener = map.addListener('idle', () => {
+      // Skip the idle event triggered by our own fitBounds.
+      if (justFitRef.current) {
+        justFitRef.current = false;
+        return;
+      }
+      // Real user pan/zoom completed. Show the pill if a search has
+      // already happened (i.e. we have at least one pin) and the user
+      // has actually moved the map.
+      if (pins.length > 0) {
+        setShowSearchPill(true);
+        const center = map.getCenter();
+        const bounds = map.getBounds();
+        if (center && bounds) {
+          const ne = bounds.getNorthEast();
+          const sw = bounds.getSouthWest();
+          trackMapEvent({
+            kind: 'viewport_idle',
+            bbox: {
+              n: ne.lat(),
+              s: sw.lat(),
+              e: ne.lng(),
+              w: sw.lng(),
+            },
+          });
+        }
+      }
+    });
+    return () => listener.remove();
+  }, [librariesReady, authFailed, pins.length]);
+
+  const handleSearchThisArea = useCallback(() => {
+    if (!mapRef.current || !onViewportSearch) return;
+    const map = mapRef.current;
+    const center = map.getCenter();
+    const bounds = map.getBounds();
+    const zoom = map.getZoom();
+    if (!center || !bounds || zoom == null) return;
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    setShowSearchPill(false);
+    onViewportSearch({
+      center: { lat: center.lat(), lng: center.lng() },
+      zoom,
+      bounds: {
+        north: ne.lat(),
+        south: sw.lat(),
+        east: ne.lng(),
+        west: sw.lng(),
+      },
+    });
+  }, [onViewportSearch]);
+
   // Fall back to the pin list when:
   //   - no API key at all (local dev / missing env)
   //   - auth failed at runtime (gm_authFailure — usually ApiNotActivatedMapError
@@ -469,6 +560,21 @@ export function ChatMap() {
         <div className="absolute top-3 left-3 z-10 bg-background/90 backdrop-blur rounded-full px-3 py-1.5 text-xs font-medium shadow-sm border border-border">
           {pins.length} on the map
         </div>
+      )}
+
+      {/* "Search this area" pill — appears at top-center after the user
+          pans / zooms the map. Click → re-fires the rentals search bound
+          to whatever the current viewport is. The pill auto-hides on
+          click (and on the next pin batch's fitBounds). */}
+      {showSearchPill && onViewportSearch && (
+        <button
+          type="button"
+          onClick={handleSearchThisArea}
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-foreground text-background hover:bg-foreground/90 rounded-full px-4 py-2 text-xs font-semibold shadow-lg border border-border transition-colors animate-in fade-in slide-in-from-top-2"
+          aria-label="Search this area for rentals"
+        >
+          🔍 Search this area
+        </button>
       )}
 
       {/* Empty-until-you-chat helper — only when the map has loaded but no pins */}

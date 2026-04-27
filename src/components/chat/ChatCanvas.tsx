@@ -1,17 +1,57 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Sparkles, DollarSign, Heart, MapPin, Calendar } from 'lucide-react';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
-import { ChatMap } from './ChatMap';
+import { ChatMap, type ViewportSearchPayload } from './ChatMap';
 import { ChatContextChips } from './ChatContextChips';
 import { EmailGateModal } from './EmailGateModal';
-import { LeftPanel } from '@/components/layout/LeftPanel';
+import { ChatLeftNav } from './ChatLeftNav';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { MapProvider, useMapContext, type MapPin as MapPinData } from '@/context/MapContext';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import type { ChatTab } from '@/types/chat';
 import { Button } from '@/components/ui/button';
+
+/**
+ * Known Medellín neighborhoods + lat/lng centroids. Used to resolve a
+ * "Search this area" map viewport → nearest neighborhood, which we then
+ * inject into the chat as a ChatContextChip + sendMessage call.
+ *
+ * Hardcoded for MVP; can swap to a Postgres `neighborhoods` lookup later.
+ */
+const KNOWN_NEIGHBORHOODS: { name: string; lat: number; lng: number }[] = [
+  { name: 'El Poblado', lat: 6.21, lng: -75.567 },
+  { name: 'Provenza', lat: 6.207, lng: -75.567 },
+  { name: 'Laureles', lat: 6.245, lng: -75.59 },
+  { name: 'Envigado', lat: 6.166, lng: -75.581 },
+  { name: 'Sabaneta', lat: 6.151, lng: -75.616 },
+  { name: 'Belén', lat: 6.216, lng: -75.598 },
+  { name: 'La Candelaria', lat: 6.247, lng: -75.569 },
+  { name: 'Estadio', lat: 6.252, lng: -75.589 },
+];
+
+/** Haversine distance in km — sufficient precision for MDE neighborhoods. */
+function nearestNeighborhood(lat: number, lng: number): string {
+  const R = 6371;
+  let best = KNOWN_NEIGHBORHOODS[0];
+  let bestDist = Infinity;
+  for (const n of KNOWN_NEIGHBORHOODS) {
+    const dLat = ((n.lat - lat) * Math.PI) / 180;
+    const dLng = ((n.lng - lng) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat * Math.PI) / 180) *
+        Math.cos((n.lat * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
+    const d = 2 * R * Math.asin(Math.sqrt(a));
+    if (d < bestDist) {
+      bestDist = d;
+      best = n;
+    }
+  }
+  return best.name;
+}
 
 /**
  * Mindtrip-style chat-as-app canvas.
@@ -78,6 +118,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
 
   const {
     messages,
+    conversations,
     currentConversation,
     isLoading,
     isStreaming,
@@ -86,6 +127,9 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     reasoningPhases,
     chatContext,
     fetchConversations,
+    selectConversation,
+    archiveConversation,
+    newChat,
     sendMessage,
     cancelStream,
     retryLastMessage,
@@ -142,12 +186,36 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     clearPins();
   }, [currentConversation?.id, clearPins]);
 
+  // "Search this area" — ChatMap fires this when the user has panned /
+  // zoomed and clicked the floating pill. We:
+  //   1. resolve the viewport center to the nearest known neighborhood
+  //   2. update the neighborhood chip so the user sees the change
+  //   3. fire a sendMessage so Gemini re-runs `rentals_search` for the
+  //      new neighborhood (the chip is in the system prompt as
+  //      sessionData)
+  // Future improvement (60-day plan): add a `bbox` field to sessionData
+  // so the search is precisely viewport-bound, not neighborhood-bound.
+  const handleViewportSearch = useCallback(
+    (payload: ViewportSearchPayload) => {
+      const neighborhood = nearestNeighborhood(payload.center.lat, payload.center.lng);
+      updateChatContext({ ...chatContext, neighborhood });
+      void sendMessage(`Show top rentals in ${neighborhood}`);
+    },
+    [chatContext, updateChatContext, sendMessage],
+  );
+
   return (
     <div className="min-h-screen bg-background">
       {/* Desktop: 3-column canvas */}
       <div className="hidden lg:flex h-screen">
-        <div className="w-[280px] flex-shrink-0 border-r border-border">
-          <LeftPanel />
+        <div className="w-[280px] flex-shrink-0">
+          <ChatLeftNav
+            conversations={conversations}
+            currentConversation={currentConversation}
+            onSelectConversation={selectConversation}
+            onNewChat={newChat}
+            onArchiveConversation={archiveConversation}
+          />
         </div>
         <main className="flex-1 flex flex-col min-w-0">
           <ChatContextChips value={chatContext} onChange={updateChatContext} />
@@ -180,14 +248,21 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
           </div>
         </main>
         <div className="w-[420px] flex-shrink-0">
-          <ChatMap />
+          <ChatMap onViewportSearch={handleViewportSearch} />
         </div>
       </div>
 
       {/* Tablet: 2-column (no map) */}
       <div className="hidden md:flex lg:hidden h-screen">
-        <div className="w-[200px] flex-shrink-0 border-r border-border">
-          <LeftPanel />
+        <div className="w-[200px] flex-shrink-0">
+          <ChatLeftNav
+            conversations={conversations}
+            currentConversation={currentConversation}
+            onSelectConversation={selectConversation}
+            onNewChat={newChat}
+            onArchiveConversation={archiveConversation}
+            compact
+          />
         </div>
         <main className="flex-1 flex flex-col min-w-0">
           <ChatContextChips value={chatContext} onChange={updateChatContext} />
