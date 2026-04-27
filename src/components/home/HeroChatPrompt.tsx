@@ -36,7 +36,18 @@ const SUGGESTIONS = [
 
 const TARGET_PATH = '/chat?send=pending';
 
-export function HeroChatPrompt() {
+interface HeroChatPromptProps {
+  /**
+   * `card` (default) — standalone full-width card with extra chrome. Use when
+   *   rendering as a self-contained section (e.g. above the marketing hero).
+   * `inline` — slim variant designed to live INSIDE the hero's left column
+   *   alongside the headline + image masonry. No outer card wrapper, no
+   *   container padding — inherits the hero's grid spacing.
+   */
+  variant?: 'card' | 'inline';
+}
+
+export function HeroChatPrompt({ variant = 'card' }: HeroChatPromptProps = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -81,23 +92,103 @@ export function HeroChatPrompt() {
     }
   };
 
+  // Shared prompt-input controls (identical for both variants).
+  // Extracted so the JSX layout below can wrap them differently without
+  // duplicating the textarea / suggestion-chips / Start button code.
+  const promptControls = (
+    <>
+      {/* Status pill */}
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        </span>
+        <span className="text-[11px] font-semibold tracking-[0.18em] uppercase text-emerald-700 dark:text-emerald-400">
+          AI Concierge Ready
+        </span>
+      </div>
+
+      {/* Textarea */}
+      <div>
+        <label htmlFor="hero-prompt" className="sr-only">
+          Describe what you're looking for
+        </label>
+        <Textarea
+          id="hero-prompt"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Find top rentals in Laureles under $1,000…"
+          rows={3}
+          className="resize-none text-base leading-relaxed bg-background border-border focus-visible:ring-emerald-500/30"
+          disabled={submitting}
+        />
+      </div>
+
+      {/* Suggested chips */}
+      <div className="flex flex-wrap gap-2">
+        {SUGGESTIONS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setPrompt(s)}
+            disabled={submitting}
+            className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Footer row: helper + Start */}
+      <div className="flex items-center justify-between gap-4 flex-wrap pt-1">
+        <p className="text-xs text-muted-foreground">
+          Press <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">Enter</kbd>{' '}
+          to start
+        </p>
+        <Button
+          onClick={submit}
+          disabled={prompt.trim().length === 0 || submitting}
+          size="lg"
+          className="rounded-full"
+        >
+          Start
+          <ArrowRight className="w-4 h-4 ml-1.5" />
+        </Button>
+      </div>
+    </>
+  );
+
+  // Inline variant — for use INSIDE the hero's left column. No outer card,
+  // no container padding; relies on the parent grid for spacing.
+  if (variant === 'inline') {
+    return (
+      <div
+        aria-labelledby="hero-prompt-heading"
+        className="space-y-4 animate-fade-in"
+        style={{ animationDelay: '300ms' }}
+      >
+        {/* Heading is provided by the parent <HeroSection> as <h1>;
+            we render the prompt label here as a small subhead. */}
+        <h2 id="hero-prompt-heading" className="sr-only">
+          AI concierge prompt
+        </h2>
+        {promptControls}
+        <p className="text-xs text-muted-foreground">
+          AI suggests. You decide. — No credit card required.
+        </p>
+      </div>
+    );
+  }
+
+  // Default `card` variant — standalone full-width card. Kept for use as a
+  // section above other content (e.g. landing pages that aren't the hero).
   return (
     <section
       aria-labelledby="hero-prompt-heading"
       className="container mx-auto px-4 lg:px-8 pt-8 md:pt-12"
     >
-      <div className="mx-auto max-w-3xl bg-card rounded-3xl shadow-elevated p-6 md:p-10 border border-border">
-        {/* Status pill */}
-        <div className="flex items-center gap-2 mb-5">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          <span className="text-[11px] font-semibold tracking-[0.18em] uppercase text-emerald-700 dark:text-emerald-400">
-            AI Concierge Ready
-          </span>
-        </div>
-
+      <div className="mx-auto max-w-3xl bg-card rounded-3xl shadow-elevated p-6 md:p-10 border border-border space-y-5">
         {/* Headline */}
         <h2
           id="hero-prompt-heading"
@@ -105,60 +196,11 @@ export function HeroChatPrompt() {
         >
           What are you looking for in Medellín?
         </h2>
-        <p className="mt-2 text-sm md:text-base text-muted-foreground">
+        <p className="text-sm md:text-base text-muted-foreground">
           Ask for rentals, restaurants, events, or trip plans.
         </p>
-
-        {/* Textarea */}
-        <div className="mt-5">
-          <label htmlFor="hero-prompt" className="sr-only">
-            Describe what you're looking for
-          </label>
-          <Textarea
-            id="hero-prompt"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Find top rentals in Laureles under $1,000…"
-            rows={4}
-            className="resize-none text-base leading-relaxed bg-background/60 border-border focus-visible:ring-emerald-500/30"
-            disabled={submitting}
-          />
-        </div>
-
-        {/* Suggested chips */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setPrompt(s)}
-              disabled={submitting}
-              className="text-xs px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-
-        {/* Footer row: helper + Start */}
-        <div className="mt-6 pt-5 border-t border-border flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-xs text-muted-foreground">
-            Press <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">Enter</kbd>{' '}
-            to start
-          </p>
-          <Button
-            onClick={submit}
-            disabled={prompt.trim().length === 0 || submitting}
-            size="lg"
-            className="rounded-full"
-          >
-            Start
-            <ArrowRight className="w-4 h-4 ml-1.5" />
-          </Button>
-        </div>
+        {promptControls}
       </div>
-
       <p className="mt-3 text-center text-xs text-muted-foreground">
         AI suggests. You decide. — No credit card required.
       </p>
