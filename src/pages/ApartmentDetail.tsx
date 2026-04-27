@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect } from "react";
-import { ArrowLeft, MapPin, Bed, Bath, Wifi, Star, Heart, Share2, Calendar, CheckCircle, XCircle } from "lucide-react";
-import { ThreePanelLayout, usePanelContext } from "@/components/layout/ThreePanelLayout";
+import { ArrowLeft, MapPin, Bed, Bath, Wifi, Star, Heart, Share2, CheckCircle, XCircle } from "lucide-react";
+import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -10,16 +10,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useApartment } from "@/hooks/useApartments";
 import { useToggleSave, useIsSaved } from "@/hooks/useSavedPlaces";
 import { useAuth } from "@/hooks/useAuth";
+import { ApartmentRentActions } from "@/components/rentals/ApartmentRentActions";
 import { cn } from "@/lib/utils";
+import type { Apartment } from "@/types/listings";
 
 // Right panel content for apartment detail
-function ApartmentDetailRightPanel({ apartment }: { apartment: any }) {
+function ApartmentDetailRightPanel({ apartment }: { apartment: Apartment }) {
   return (
     <div className="space-y-6">
-      {/* Quick Actions */}
+      {/* Quick Actions — P1 real-estate CRM (tours + applications) */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Book This Place</CardTitle>
+          <CardTitle className="text-lg">Long-term rental</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-center">
@@ -38,13 +40,7 @@ function ApartmentDetailRightPanel({ apartment }: { apartment: any }) {
               <div className="text-xs text-muted-foreground">daily</div>
             </div>
           </div>
-          <Button className="w-full" size="lg">
-            <Calendar className="w-4 h-4 mr-2" />
-            Check Availability
-          </Button>
-          <Button variant="outline" className="w-full">
-            Contact Host
-          </Button>
+          <ApartmentRentActions apartment={apartment} />
         </CardContent>
       </Card>
 
@@ -98,14 +94,15 @@ function ApartmentDetailRightPanel({ apartment }: { apartment: any }) {
   );
 }
 
-// Inner component that can safely use usePanelContext
+// Inner component that can safely use useThreePanelContext (must be inside
+// the ThreePanelLayout's <ThreePanelProvider>).
 function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: { 
-  apartment: any; 
+  apartment: Apartment; 
   isSaved: boolean | undefined;
   handleSave: () => void;
-  user: any;
+  user: ReturnType<typeof useAuth>["user"];
 }) {
-  const { setRightPanelContent } = usePanelContext();
+  const { setRightPanelContent } = useThreePanelContext();
 
   useEffect(() => {
     if (apartment) {
@@ -292,15 +289,9 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
         </div>
       </div>
 
-      {/* Mobile CTA */}
-      <div className="md:hidden fixed bottom-20 left-0 right-0 p-4 bg-background border-t">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="font-bold text-lg">${apartment.price_monthly?.toLocaleString()}/mo</div>
-            <p className="text-xs text-muted-foreground">${apartment.price_daily}/night</p>
-          </div>
-          <Button size="lg">Check Availability</Button>
-        </div>
+      {/* Mobile CTA — real-estate actions */}
+      <div className="md:hidden fixed bottom-20 left-0 right-0 p-4 bg-background border-t z-30">
+        <ApartmentRentActions apartment={apartment} />
       </div>
     </div>
   );
