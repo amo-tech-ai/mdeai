@@ -74,14 +74,19 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     }
   }, []);
 
-  // Subscribe to realtime updates for current conversation
-  const realtimeTopic = currentConversation?.id 
-    ? `conversation:${currentConversation.id}:messages` 
+  // Subscribe to realtime updates for current conversation. Skip synthetic
+  // anon conversations (id begins with `anon-`) — those never have a
+  // backing Postgres row, so subscribing produces a CHANNEL_ERROR /
+  // TIMED_OUT loop on the realtime broker.
+  const isRealConversation =
+    !!currentConversation?.id && !currentConversation.id.startsWith('anon-');
+  const realtimeTopic = isRealConversation
+    ? `conversation:${currentConversation!.id}:messages`
     : '';
 
   useRealtimeChannel({
     topic: realtimeTopic,
-    enabled: !!currentConversation?.id && !!user,
+    enabled: isRealConversation && !!user,
     onEvent: handleRealtimeEvent,
   });
 
@@ -220,7 +225,20 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     // of the flow can key off conversation.id.
     let conversation = currentConversation;
     if (user) {
-      if (!conversation) {
+      // Treat synthetic anon conversations (id `anon-<uuid>`) as "no
+      // conversation yet" — using the placeholder for a real DB INSERT
+      // throws `invalid input syntax for type uuid` because messages.conversation_id
+      // expects a true UUID. This happens when an anon user signs in
+      // mid-session and the prior synthetic conversation lingered in state.
+      const isSyntheticAnon = !!conversation && conversation.id.startsWith('anon-');
+      if (!conversation || isSyntheticAnon) {
+        // If we're upgrading from anon → authed, drop the in-memory anon
+        // history so we start clean on a fresh DB-backed conversation.
+        // The 3-msg quota was already enforced server-side; we don't lose
+        // anything important here.
+        if (isSyntheticAnon) {
+          setMessages([]);
+        }
         conversation = await createConversation(content.slice(0, 50));
         if (!conversation) return;
         // Carry the pre-conversation chips onto the brand-new DB row so a
@@ -544,6 +562,19 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     }
   }, [sendMessage]);
 
+  // Reset to a brand-new chat — clears the active conversation, message
+  // stream, pending actions, reasoning trace, and chips. Used by the
+  // "New chat" button in ChatLeftNav and whenever the user hits `/` fresh.
+  const newChat = useCallback(() => {
+    setCurrentConversation(null);
+    setMessages([]);
+    setPendingActions([]);
+    setReasoningPhases([]);
+    setChatContext(EMPTY_CHAT_CONTEXT);
+    setError(null);
+    lastFailedMessageRef.current = null;
+  }, []);
+
   // Archive a conversation
   const archiveConversation = useCallback(async (conversationId: string) => {
     const { error } = await supabase
@@ -580,6 +611,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     cancelStream,
     retryLastMessage,
     archiveConversation,
+    newChat,
     setCurrentConversation,
     setMessages,
     setPendingActions,
