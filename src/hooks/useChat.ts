@@ -74,19 +74,22 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     }
   }, []);
 
-  // Subscribe to realtime updates for current conversation. Skip synthetic
-  // anon conversations (id begins with `anon-`) — those never have a
-  // backing Postgres row, so subscribing produces a CHANNEL_ERROR /
-  // TIMED_OUT loop on the realtime broker.
-  const isRealConversation =
-    !!currentConversation?.id && !currentConversation.id.startsWith('anon-');
-  const realtimeTopic = isRealConversation
+  // Subscribe to realtime updates for current conversation. We only
+  // subscribe for conversations that actually have a backing Postgres
+  // row — i.e. authed users whose conversation belongs to them. Anon
+  // conversations are pure in-memory (no DB row), so subscribing would
+  // produce CHANNEL_ERROR / TIMED_OUT on the realtime broker.
+  const isOwnConversation =
+    !!user &&
+    !!currentConversation?.id &&
+    currentConversation.user_id === user.id;
+  const realtimeTopic = isOwnConversation
     ? `conversation:${currentConversation!.id}:messages`
     : '';
 
   useRealtimeChannel({
     topic: realtimeTopic,
-    enabled: isRealConversation && !!user,
+    enabled: isOwnConversation,
     onEvent: handleRealtimeEvent,
   });
 
@@ -225,20 +228,17 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
     // of the flow can key off conversation.id.
     let conversation = currentConversation;
     if (user) {
-      // Treat synthetic anon conversations (id `anon-<uuid>`) as "no
-      // conversation yet" — using the placeholder for a real DB INSERT
-      // throws `invalid input syntax for type uuid` because messages.conversation_id
-      // expects a true UUID. This happens when an anon user signs in
-      // mid-session and the prior synthetic conversation lingered in state.
-      const isSyntheticAnon = !!conversation && conversation.id.startsWith('anon-');
-      if (!conversation || isSyntheticAnon) {
-        // If we're upgrading from anon → authed, drop the in-memory anon
-        // history so we start clean on a fresh DB-backed conversation.
-        // The 3-msg quota was already enforced server-side; we don't lose
-        // anything important here.
-        if (isSyntheticAnon) {
-          setMessages([]);
-        }
+      // A conversation only "belongs" to the current user when its
+      // user_id matches. Anon conversations carry user_id='anon' (set
+      // in the anon path below) — when an anon user signs in, that
+      // synthetic conversation is no longer valid for DB writes, so
+      // we mint a fresh DB-backed one.
+      const belongsToUser = !!conversation && conversation.user_id === user.id;
+      if (!belongsToUser) {
+        // Drop in-memory anon history so we start clean. The 3-msg
+        // quota was already enforced server-side; nothing important
+        // is lost here.
+        if (conversation) setMessages([]);
         conversation = await createConversation(content.slice(0, 50));
         if (!conversation) return;
         // Carry the pre-conversation chips onto the brand-new DB row so a
@@ -263,11 +263,17 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
         }
       }
     } else {
-      // Anon path: use (or fabricate) a client-only conversation identity.
+      // Anon path: synthesize a client-only conversation. The id MUST be
+      // a real UUID — older builds used `anon-${sid}` which broke
+      // messages.conversation_id (uuid type) and realtime channel subs.
+      // The "anon" marker now lives ONLY on user_id (in-memory sentinel,
+      // never written to DB) and on a `display_label` if a UI surface
+      // wants to show "anon-…" to the user.
       if (!conversation) {
+        const conversationId = anonSessionId ?? crypto.randomUUID();
         conversation = {
-          id: `anon-${anonSessionId}`,
-          user_id: 'anon',
+          id: conversationId,
+          user_id: 'anon', // sentinel; never persisted (anon path skips DB writes)
           title: content.slice(0, 50),
           agent_type: tabToAgentType[activeTab],
           status: 'active',
