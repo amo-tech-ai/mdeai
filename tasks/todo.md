@@ -48,11 +48,49 @@
 - [ ] **Booking dialog polish** — photo gallery + amenity grid in the review step.
 
 ### Tech-debt cleanup (anytime, low priority)
-- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView.
-- [ ] **Custom Cloud Console MapID** — Mindtrip-style muted palette. Pure visual polish.
-- [ ] **Code-split + lazy-load** map / detail pages — drops ~600 KB from initial bundle.
+- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView. (audit § 6)
+- [ ] **Custom Cloud Console MapID** — Mindtrip-style muted palette. Pure visual polish. (audit § 90-day)
+- [ ] **Code-split + lazy-load** map / detail pages — drops ~600 KB from initial bundle. (audit § 60-day)
 - [ ] **Fix `npm run verify:edge`** — wire `deno install` in the script so the CI gate works.
 - [ ] **Tighten `Conversation.user_id` type** — currently `string`; pin to `uuid | 'anon'`.
+
+## Code-quality cleanup (audit § 6)
+
+Small, surgical fixes called out in `tasks/plan/01- MDEAI Maps Architecture Audit.md` § 6.
+
+- [ ] **`google-maps-loader.ts:21-22`** — docstring claims it returns destructured constructors; actually returns the library. Minor doc fix.
+- [ ] **`google-maps-loader.ts:40`** — delete `void UUID_RE;` dead code.
+- [ ] **`google-maps-loader.ts:78-86`** — `installAuthFailureHandler` is invoked only from `installBootstrap`. Rename `_installAuthFailureHandler` (private) or expose + document.
+- [ ] **`google-maps-loader.ts:168-209`** — Vitest unit test for the shim recursion (`fn(libName, ...rest)`). Mock `window.google` to make it regression-proof.
+- [ ] **`ChatMap.tsx:160`** — "Pins never clear between turns" tradeoff is documented in ChatCanvas, not here. Add cross-reference comment.
+- [ ] **`ChatMap.tsx:248-260`** — `MEDELLIN_CENTER` is hardcoded; center on first pin or on chip neighborhood instead.
+- [ ] **`ChatCanvas.tsx:116-127`** — replace ambiguous "Keep pins across turns" comment with explicit toggle: "merge with prior pins" or "replace each turn".
+- [ ] **`GoogleMapView.tsx:290-298`** — highlight effect rebuilds full marker content on every selection change. With 50+ pins that's 50 DOM rewrites. Mutate only the changed pin.
+- [ ] **`GoogleMapView.tsx:211-219`** — marker rebuild rewires listeners every time. Use a stable id-keyed map (parity with ChatMap's `markersRef`).
+- [ ] **`MapContext.tsx:7-14`** — `MapPin.meta?: Record<string, unknown>` is too loose. Strongly type per-vertical (`RentalPin extends MapPin`).
+
+## 30-day backlog (audit § 7 — "Stabilize + observe")
+
+Items not yet in the Day 2/3/4 sprint but still on the 30-day plan.
+
+- [ ] **Cloud Console quota + budget alarm** on the Maps key — 30 min, you-side action. Prevents bill surprises if the key leaks.
+- [ ] **MapContext → zustand store** (or lift to root `<App>`) — required before `MapShell` (each page needs a different layer source). (audit § 6 + 60-day)
+
+## 60-day backlog (audit § 7 — "Mindtrip parity")
+
+- [ ] **`MapShell` component** — single map renderer used by chat / apartment detail / trips. Owns `AdvancedMarkerElement` lifecycle, clustering, InfoWindow. Reusable shell, three call sites. **Unblocks the bottom-map on apartment detail.** (audit § 5 + § 60-day)
+- [ ] **Bidirectional card ↔ pin sync** — currently only hover syncs. Card click should pan/zoom the map to the matching pin. (audit § 60-day)
+- [ ] **Saved pins ❤️ overlay on markers** — show a small heart on pins the user has saved, bound to `useChatActions.savedIds`. (audit § 60-day)
+- [ ] **ApartmentDetail bottom map** — show the apartment + nearby restaurants/cafés on the detail page. Unlocked by `MapShell`. (audit § 60-day)
+
+## 90-day backlog (audit § 7 — "Scale to thousands of listings")
+
+- [ ] **Server-side pin clustering** — Postgis `ST_ClusterDBSCAN` on bbox queries. API returns clusters at the user's viewport zoom; client never holds 1000+ pins.
+- [ ] **Heatmap layer** — Wi-Fi speed / walkability overlay for nomad targeting.
+- [ ] **Drawing tools** — drag a polygon to filter listings to a custom area ("only these 4 blocks").
+- [ ] **Walking-distance circles** — draw a 15-min walk radius around a selected pin.
+- [ ] **A/B framework via PostHog** — depends on PostHog wiring (Day 2). Run experiments on map UX changes.
+- [ ] **Service-worker cache for Maps tile layer** — LATAM 4G first-paint perf.
 
 ## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`)
 
