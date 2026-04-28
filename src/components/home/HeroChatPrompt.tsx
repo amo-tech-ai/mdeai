@@ -8,6 +8,7 @@ import {
   getPendingPrompt,
   savePendingPrompt,
 } from '@/lib/pending-prompt';
+import { trackEvent } from '@/lib/posthog';
 
 /**
  * Hero AI prompt card on the marketing homepage.
@@ -73,6 +74,14 @@ export function HeroChatPrompt({ variant = 'card' }: HeroChatPromptProps = {}) {
     if (trimmed.length === 0 || submitting) return;
     setSubmitting(true);
     savePendingPrompt(trimmed);
+    // Capture before any navigation so PostHog records the funnel
+    // entry point even if the auth round-trip fails or is abandoned.
+    trackEvent({
+      name: 'prompt_send',
+      source: 'hero',
+      promptLength: trimmed.length,
+      authed: !!user,
+    });
 
     if (user) {
       // Already authed — straight to chat. The auto-fire effect picks it up.

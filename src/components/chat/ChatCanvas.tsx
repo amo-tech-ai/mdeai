@@ -19,6 +19,7 @@ import {
   getPendingPrompt,
   urlSignalsPendingSend,
 } from '@/lib/pending-prompt';
+import { trackEvent } from '@/lib/posthog';
 
 /**
  * Known Medellín neighborhoods + lat/lng centroids. Used to resolve a
@@ -200,6 +201,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     }
     pendingFiredRef.current = true;
     clearPendingPrompt();
+    trackEvent({ name: 'prompt_autofired', promptLength: prompt.length });
     void sendMessage(prompt);
     // Strip the ?send=pending param so a refresh doesn't replay the prompt.
     navigate('/chat', { replace: true });
@@ -257,6 +259,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   const handleViewportSearch = useCallback(
     (payload: ViewportSearchPayload) => {
       const neighborhood = nearestNeighborhood(payload.center.lat, payload.center.lng);
+      trackEvent({ name: 'viewport_search', neighborhood });
       updateChatContext({ ...chatContext, neighborhood });
       void sendMessage(`Show top rentals in ${neighborhood}`);
     },

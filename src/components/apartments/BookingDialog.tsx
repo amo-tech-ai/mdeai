@@ -33,6 +33,7 @@ import {
   formatUsd,
   type BookingPricingResult,
 } from '@/lib/booking-pricing';
+import { trackEvent } from '@/lib/posthog';
 import type { Apartment } from '@/types/listings';
 
 /**
@@ -156,6 +157,12 @@ export function BookingDialog({ open, onOpenChange, apartment }: BookingDialogPr
       });
       setBookingRow(row);
       setStep('success');
+      trackEvent({
+        name: 'booking_submitted',
+        apartmentId: apartment.id,
+        estimatedTotal: pricing.total,
+        nights: pricing.totalDays,
+      });
     } catch (err) {
       if (err instanceof NotAuthenticatedError) {
         setAuthError(true);

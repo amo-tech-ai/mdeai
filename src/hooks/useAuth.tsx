@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { identifyUser, resetPostHog } from "@/lib/posthog";
 
 interface AuthContextType {
   user: User | null;
@@ -28,6 +29,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        // PostHog identity propagation. SIGNED_IN / SIGNED_UP attach
+        // future events to a person profile keyed on user.id; SIGNED_OUT
+        // resets so events don't leak across users on a shared device.
+        // No-op when PostHog isn't initialized (silent in dev/preview).
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            identifyUser(session.user.id, {
+              email: session.user.email,
+            });
+          }
+        } else if (event === 'SIGNED_OUT') {
+          resetPostHog();
+        }
       }
     );
 
@@ -36,6 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // First-load identify — for users already signed in when the
+      // app boots (e.g. they refreshed the page mid-session).
+      if (session?.user) {
+        identifyUser(session.user.id, { email: session.user.email });
+      }
     });
 
     return () => subscription.unsubscribe();
