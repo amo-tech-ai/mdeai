@@ -1,10 +1,66 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-24 — Maps Quick Wins #1–#5 shipped + audit verified; production readiness 92/100.
+> **Last updated:** 2026-04-27 — Marketing homepage at `/` + AI prompt auth handoff + maps stabilization + auto-fire race fix all live on `www.mdeai.co`. **Production readiness 96/100.**
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+## DONE 2026-04-27 — Marketing homepage + auth handoff + maps stabilization (PRs #2, #3, #4 to main)
+
+### Live on `www.mdeai.co`
+- [x] **Marketing homepage at `/`** — Mindtrip-style centered hero with embedded AI Concierge prompt. Full-width single-column. Logged-in users get a `<Navigate to="/chat" replace />`.
+- [x] **AI prompt auth handoff** — anon types prompt → `savePendingPrompt` → `/signup?returnTo=/chat?send=pending` → after auth → ChatCanvas auto-fires once via ref-guard + URL replace. Single sessionStorage key `mdeai_pending_prompt`. 8/8 unit tests.
+- [x] **`/chat` route** — anon (3-msg gate) + authed both supported. Auto-fires saved prompt when URL is `/chat?send=pending`.
+- [x] **Maps stabilization (full Quick Wins audit)** — singleton loader, `gmp-click` migration, MarkerClusterer, telemetry helper (9 event kinds, pluggable sink), v=quarterly pin, a11y on markers, clearPins on conv switch.
+- [x] **Day 1 sprint** — ChatLeftNav (chats + Saved + Trips counts) + "Search this area" pill on viewport idle (Haversine over 8 known neighborhoods → re-fire search).
+- [x] **Apartment booking flow** — multi-step BookingDialog, ContactHostDialog with pre-filled inquiry, pricing engine + 12 tests. No DB migration.
+- [x] **Critical bug fixes** — blank `/apartments/:id` (CommonJS `require()` shim), anon-UUID 400s + realtime CHANNEL_ERROR loops, double-script load, CORS Allow-Methods missing, auto-fire race with auth state on `/chat?send=pending`.
+
+### Verification (today)
+- [x] tsc + build clean
+- [x] 28/28 unit tests (5 files)
+- [x] Vercel production deploys: 3 successful merges (PR #2/#3/#4)
+- [x] Bundle audits on prod: hero strings present, masonry alt-text absent, no `pending_ai_prompt` alias, no `anon-` runtime strings, all 9 telemetry kinds present
+- [x] End-to-end smoke from `Origin: https://www.mdeai.co` → 200 OK, streaming SSE, phase events
+
+### Known gaps (informed roadmap, not bugs)
+- [ ] **No Sentry / PostHog sink** — telemetry events fire but go to console only. The seam exists (`setMapTelemetrySink`); needs real sink + DSN.
+- [ ] **`viewport_idle` event TYPED but not emitted yet** — wired into the "Search this area" feature; emit site lives in ChatMap idle listener (already shipped).
+- [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
+- [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
+- [ ] **`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`.
+- [ ] **Email confirmation flow loses pending prompt** — sessionStorage is per-tab; clicking the email link in a new tab loses the saved prompt. Documented limitation.
+
+## NEXT — Recommended sprint (ranked by Revenue / Growth / UX / Tech / Speed)
+
+### Day 2 — Observability + Mobile (highest leverage)
+- [ ] **Wire Sentry SDK** — install, set DSN, replace default telemetry sink at app boot. **R 4 / G 5 / U 1 / T 5 / S 4 = 19**. Without this, prod is blind to map / chat / booking errors.
+- [ ] **Wire PostHog** — same seam, capture conversion events (`pin_click`, `booking_submit`, `inquiry_sent`, `prompt_send`). **Drives the conversion funnel dashboard.**
+- [ ] **Mobile fullscreen map drawer** — currently no map on `md:hidden`. Add a "🗺️ Map" floating button that opens a `<Sheet>` drawer. Mobile is most of LATAM. **R 4 / G 5 / U 5 / T 3 / S 4 = 21**.
+
+### Day 3 — Conversion improvements
+- [ ] **Affiliate attribution + `outbound_clicks` migration** (Friday's Week 2 task) — `outbound_clicks(user_id nullable, listing_id, source_url, affiliate_tag, ts)`. Wrap source URLs in `RentalCardInline` + `ApartmentDetail` with affiliate-tag rewriter (Airbnb + Booking.com IDs via env). Edge fn or RPC to log clicks. **Direct revenue.**
+- [ ] **SEO page → chat handoff** (Thursday's Week 2 task) — `/apartments/:id` "Ask mdeai about this →" CTA opens `/chat?send=pending` with listing context pre-loaded. Closes the SEO acquisition loop.
+
+### Day 4 — Mindtrip parity polish
+- [ ] **InfoWindow on pin click** — peek the listing without leaving the chat. Photo + title + price + rating + "View details" link. Anon chat preservation.
+- [ ] **Booking dialog polish** — photo gallery + amenity grid in the review step.
+
+### Tech-debt cleanup (anytime, low priority)
+- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView.
+- [ ] **Custom Cloud Console MapID** — Mindtrip-style muted palette. Pure visual polish.
+- [ ] **Code-split + lazy-load** map / detail pages — drops ~600 KB from initial bundle.
+- [ ] **Fix `npm run verify:edge`** — wire `deno install` in the script so the CI gate works.
+- [ ] **Tighten `Conversation.user_id` type** — currently `string`; pin to `uuid | 'anon'`.
+
+## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`)
+
+- [ ] Logged-in user searches rentals → saves 2 listings (`saved_places` rows exist) → adds 1 to a new trip (`trip_items` row exists) → clicks outbound to Airbnb → click logged to `outbound_clicks` with affiliate tag.
+
+**3 of 5 prerequisites done** (chat works, Save + Add-to-trip + social proof shipped). Need affiliate attribution (Day 3) to complete this exit test.
+
+---
 
 ## DONE 2026-04-24 — Maps stabilization sprint + Quick Wins audit
 
