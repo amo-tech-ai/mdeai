@@ -11,6 +11,7 @@ import { MobileNav } from '@/components/layout/MobileNav';
 import { MapProvider, useMapContext, type MapPin as MapPinData } from '@/context/MapContext';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
+import { useAnonSession } from '@/hooks/useAnonSession';
 import type { ChatTab } from '@/types/chat';
 import { Button } from '@/components/ui/button';
 import {
@@ -117,7 +118,13 @@ interface ChatCanvasProps {
 
 function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   const [activeTab] = useState<ChatTab>(defaultTab);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  // Required by the auto-fire effect below — without it, the effect
+  // races useChat's internal sendMessage closure and silent-returns
+  // when both `user` and `anonSessionId` are null on first mount after
+  // an OAuth round-trip. Calling useAnonSession here is idempotent
+  // (sessionStorage is the source of truth).
+  const { anonSessionId } = useAnonSession();
   const { setPins, clearPins } = useMapContext();
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [emailGateRetry, setEmailGateRetry] = useState<number | undefined>(undefined);
@@ -156,25 +163,38 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   // Auto-fire any pending prompt saved by <HeroChatPrompt> on the marketing
   // homepage. Triggered when the URL is /chat?send=pending.
   //
-  // Guards (4 layers, belt-and-suspenders):
+  // Guards (5 layers, belt-and-suspenders):
   //   1. URL must carry `?send=pending` (so direct /chat visits don't fire)
   //   2. sessionStorage must have a pending prompt
-  //   3. Ref-guard `pendingFiredRef` blocks the second StrictMode pass
-  //   4. URL is `replace`d to `/chat` immediately after firing — refresh
+  //   3. **Auth must be settled**: useAuth.loading === false (the Supabase
+  //      session check finished) AND we have either a `user` or an
+  //      `anonSessionId`. Without this gate, sendMessage's closure inside
+  //      useChat silent-returns on the first render after an OAuth
+  //      round-trip and the prompt is lost. (Real bug we hit in prod.)
+  //   4. Ref-guard `pendingFiredRef` blocks the second StrictMode pass
+  //   5. URL is `replace`d to `/chat` immediately after firing — refresh
   //      can never replay the prompt
   //
-  // The ref MUST be set BEFORE sendMessage so a synchronous re-render in
-  // StrictMode doesn't see a stale value.
+  // The effect re-runs when authLoading / user / anonSessionId change so
+  // the post-OAuth case (auth settling AFTER mount) still fires correctly.
   const location = useLocation();
   const navigate = useNavigate();
   const pendingFiredRef = useRef(false);
   useEffect(() => {
     if (pendingFiredRef.current) return;
     if (!urlSignalsPendingSend(location.search)) return;
+    // Wait for auth to settle. Once settled, we MUST have either a real
+    // user or an anonSessionId — otherwise sendMessage silent-returns.
+    if (authLoading) return;
+    if (!user && !anonSessionId) return;
+
     const prompt = getPendingPrompt();
     if (!prompt) {
       // URL says ?send=pending but storage is empty — clean the URL and
-      // bail. Common when the user pasted the URL into a fresh tab.
+      // bail. Common when the user pasted the URL into a fresh tab OR
+      // followed an email-confirmation link in a new tab (sessionStorage
+      // is per-tab; the prompt didn't survive).
+      pendingFiredRef.current = true;
       navigate('/chat', { replace: true });
       return;
     }
@@ -184,7 +204,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     // Strip the ?send=pending param so a refresh doesn't replay the prompt.
     navigate('/chat', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search]);
+  }, [location.search, authLoading, user, anonSessionId]);
 
   // Populate map pins whenever actions deliver new listings. Uses
   // latitude/longitude from the inline payload; falls back to a "title-only"
