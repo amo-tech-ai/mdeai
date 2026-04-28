@@ -1,5 +1,40 @@
 # Changelog — mdeai.co
 
+## 2026-04-27 late evening (Affiliate attribution + outbound click tracking)
+
+**Day 3 #1 from `tasks/todo.md`.** Closes the only blocker on the Week 2 exit test — the user can now click outbound to Airbnb / Booking.com / VRBO with affiliate-tag rewriting + Postgres logging + PostHog conversion event.
+
+**Backend:**
+- New migration `supabase/migrations/20260427210000_outbound_clicks.sql`:
+  - Table `outbound_clicks(id, user_id nullable, listing_id, source_url, affiliate_tag, surface, created_at)` with indexes on `(listing_id, created_at)` and `(user_id, created_at WHERE user_id IS NOT NULL)`. RLS enabled with no public read; service role only for analytics queries.
+  - RPC `log_outbound_click(p_listing_id, p_source_url, p_affiliate_tag, p_surface)` — `SECURITY DEFINER`, `GRANT EXECUTE TO anon, authenticated`, auto-fills `user_id` from `auth.uid()`. Defense-in-depth http(s) regex check on `source_url`.
+  - `surface` is a CHECK-enforced enum (`chat_card | detail_page | map_info_window`) so analytics can answer "which surface drives outbound?" without joining route history.
+
+**Libs:**
+- New `src/lib/affiliate.ts` — `applyAffiliateTag(url, env?)` rewriter with three rules (Booking.com → `aid`, Airbnb → `af`, VRBO → `utm_source`). Behaviors: unknown domain → unchanged; known domain + env tag missing → unchanged but tag still surfaced for "lost-revenue" analytics; existing param → preserved (no override of upstream attribution); malformed / non-http → unchanged. Env keys: `VITE_BOOKING_AID`, `VITE_AIRBNB_AFFILIATE_TAG`, `VITE_VRBO_AFFILIATE_TAG` (safe to ship in client bundle — partner IDs are public-facing).
+- New `src/lib/affiliate.test.ts` — 12 tests covering: append, no-www, international TLD (airbnb.com.co), subdomain (m.airbnb.com), missing env, upstream-param preservation, unknown domain, malformed, non-http, query-string preservation, all three programs.
+- New `src/lib/track-outbound.ts` — `trackOutboundClick({ listingId, sourceUrl, surface })`. Side-effect order: (1) `window.open` synchronously so user-facing nav is never gated; (2) RPC `log_outbound_click` in background, swallows errors; (3) PostHog `outbound_clicked` event. Returns `{ url, tag }` so call sites can also use the rewritten URL for `<a href>` rendering.
+
+**Frontend wiring:**
+- `src/components/chat/embedded/RentalCardInline.tsx` — converted the decorative hover-only `<ExternalLink>` icon into a real clickable "View on Airbnb" / "View on Booking" button (responsive: text hidden on `<sm`, icon-only). Stops Link propagation so outbound-vs-detail-page intents don't conflict.
+- `src/components/rentals/RentalsListingDetail.tsx` — replaced the bare `<a href={listing.source_url}>` "View Original Listing" anchor with a Button + onClick that fires `trackOutboundClick({ surface: 'detail_page' })`.
+
+**PostHog event:** `outbound_clicked { apartmentId, sourceUrl }` — typed in `posthog.ts` AppEvent union since the PostHog wiring landed; this is the first call site that emits it.
+
+**Verification:**
+- `npm run lint` — 0 new errors.
+- `npm run build` — 4.02 s, +1 KB gzip vs previous (`index-D3oRSWhe.js`).
+- `npm test` — 40 / 40 across 6 files (12 new affiliate tests).
+- Live browser smoke: `applyAffiliateTag('https://www.airbnb.com.co/rooms/123', {VITE_AIRBNB_AFFILIATE_TAG:'mdeai-test'})` → `?af=mdeai-test` appended; booking with existing `aid=999` → preserved (no override); fazwaz / malformed → unchanged.
+- Bundle audit: `log_outbound_click`, `outbound_clicked`, `chat_card`, `detail_page`, all three `VITE_*_AFFILIATE_*` env keys all present in `dist/assets/index-*.js`.
+
+**Action required after merge:**
+- Run `supabase db push` to deploy the migration. (Or `supabase migration up` for local — pgvector / RLS extension prerequisites are already met from prior migrations.)
+- Optional: add `VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG` to Vercel + `.env.local` once partner accounts are signed up. Until set, clicks are logged with `affiliate_tag = NULL` (URL passes through unchanged) — useful baseline data for "we'd have earned X% commission on Y clicks" analysis.
+- Run `supabase gen types typescript --linked --schema public > src/integrations/supabase/database.types.ts` to refresh types so `log_outbound_click` is statically known. Until then, `track-outbound.ts` casts the rpc call (documented in-line).
+
+---
+
 ## 2026-04-27 evening (Observability live: Sentry + PostHog wired)
 
 **Closes the "prod is blind" gap from `tasks/todo.md`.** SDKs were installed and the wiring code already existed in `src/lib/sentry.ts`, `src/lib/posthog.ts`, and `src/main.tsx` — both inits silently no-op when their env vars are empty. Today we added the env vars; that flips both on.

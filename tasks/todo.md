@@ -40,7 +40,7 @@
 - [ ] **Mobile fullscreen map drawer** — currently no map on `md:hidden`. Add a "🗺️ Map" floating button that opens a `<Sheet>` drawer. Mobile is most of LATAM. **R 4 / G 5 / U 5 / T 3 / S 4 = 21**.
 
 ### Day 3 — Conversion improvements
-- [ ] **Affiliate attribution + `outbound_clicks` migration** (Friday's Week 2 task) — `outbound_clicks(user_id nullable, listing_id, source_url, affiliate_tag, ts)`. Wrap source URLs in `RentalCardInline` + `ApartmentDetail` with affiliate-tag rewriter (Airbnb + Booking.com IDs via env). Edge fn or RPC to log clicks. **Direct revenue.**
+- [x] **Affiliate attribution + `outbound_clicks` migration** — **shipped 2026-04-27 late evening**. Migration `20260427210000_outbound_clicks.sql` (table + RLS + `log_outbound_click` RPC), `src/lib/affiliate.ts` (Booking/Airbnb/VRBO rewriter, 12 unit tests), `src/lib/track-outbound.ts` (RPC + PostHog event), wired in `RentalCardInline` (chat surface = `chat_card`) + `RentalsListingDetail` (surface = `detail_page`). Env tags optional (`VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG`); clicks log with `affiliate_tag = NULL` until partner IDs are configured. **Closes Week 2 exit-test prerequisite #5.**
 - [ ] **SEO page → chat handoff** (Thursday's Week 2 task) — `/apartments/:id` "Ask mdeai about this →" CTA opens `/chat?send=pending` with listing context pre-loaded. Closes the SEO acquisition loop.
 
 ### Day 4 — Mindtrip parity polish
