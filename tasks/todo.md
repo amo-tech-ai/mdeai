@@ -218,6 +218,130 @@ These tasks add the missing automation. Each should ship with its own PR, ordere
 
 ---
 
+## 🌎 Real-World User Tests (RWT) — must mirror messy reality, not synthetic gates
+
+> **Why this section exists.** Lint + tsc + unit tests + Lighthouse all pass on a synthetic browser at full speed with clean data. Real users hit edge cases those gates can't catch: tab switches mid-flow, email links in new tabs, slow LATAM 4G, OAuth round-trips, hostile inputs, double-submits, browser-back, refresh, copy-paste URLs across devices, screen-reader nav. Every scenario below MUST pass before that path counts as production-ready — not just "code reaches the function".
+
+### Test infrastructure (build before scenarios)
+
+- [ ] **Playwright project matrix** — chromium / firefox / webkit, plus mobile-safari (iPhone 13) + mobile-chrome (Pixel 7). `playwright.config.ts` `projects: [...]`. **Files**: `playwright.config.ts`. ~1 hr.
+- [ ] **Throttled-network fixture** — preset profiles for `slow-3g` (400 ms RTT, 400 Kbps), `4g-latam` (200 ms RTT, 4 Mbps), `wifi` (no throttle). Wraps `page.route` + CDP `Network.emulateNetworkConditions`. **Files**: `e2e/fixtures/network.ts`. ~2 hrs.
+- [ ] **Test inbox for magic links** — Mailpit (local) + Supabase test-project Inbucket (preview). Helper `getMagicLinkFromInbox(email)` parses the auth email and returns the verification URL. **Files**: `e2e/fixtures/inbox.ts` + `docker-compose.test.yml`. ~3 hrs.
+- [ ] **Supabase test project / branch** — separate `mdeai-test` project OR per-PR branch DB so e2e suites don't pollute production. CI step: `supabase db push --linked --project-ref $TEST_PROJECT_REF`. ~2 hrs.
+- [ ] **Test-data factories** — typed fixtures for apartments / users / leads / outbound-clicks. Wrap `supabase.from('...').insert(...)` + cleanup. **Files**: `e2e/fixtures/factories.ts`. ~3 hrs.
+- [ ] **Geographic simulation** — Vercel preview with `VERCEL_REGION=gru1` (São Paulo) for TTFB testing. Documented procedure, not automated. ~30 min user-side.
+
+### RWT scenarios (each is one Playwright spec; sequenced by ROI)
+
+#### Critical path (must pass before any marketing push)
+
+- [ ] **RWT-1 — Anonymous → authed prompt handoff** (closes Week 2 exit test prereq + R7 partially)
+  - **Journey**: User lands on `/` from a Google search on mobile Safari. Types a prompt. Hits the 3-message anon gate. Magic-link signs up. Returns to `/chat?send=pending` and the saved prompt auto-fires once.
+  - **Reality knobs**: 4g-latam network throttle, iPhone 13 viewport, magic link from test inbox.
+  - **Pass criteria**: prompt fires exactly once (not zero, not twice); `pendingFiredRef` guard holds; URL is replaced from `/chat?send=pending` to `/chat` after fire; `prompt_send` + `prompt_autofired` both arrive in PostHog; conversation row owned by the new auth.uid().
+  - **Files**: `e2e/rwt-01-anon-to-authed-handoff.spec.ts`. ~3 hrs.
+
+- [ ] **RWT-2 — Email link in NEW TAB (the R7 case)** (closes R7)
+  - **Journey**: User types prompt in tab A, requests magic link, opens email in tab B (new tab), completes auth in B, returns to A.
+  - **Reality knobs**: Two browser contexts (`browser.newContext()` × 2). Test inbox.
+  - **Pass criteria**: tab A is informed of the auth via `BroadcastChannel` (after D7 ships) and replays the prompt — OR — shows a clear "Sign-in completed in another tab; click to continue" CTA if D7 not yet shipped. NEVER silently loses the prompt without UI feedback.
+  - **Files**: `e2e/rwt-02-email-new-tab.spec.ts`. ~4 hrs (depends on D7).
+
+- [ ] **RWT-3 — Search → Save → Add-to-trip → Outbound click** (Week 2 exit test, RWT version)
+  - **Journey**: Authed user on desktop. Searches "rentals in Laureles". Saves 2 listings. Adds 1 to a new trip. Clicks "View on Airbnb" outbound link.
+  - **Reality knobs**: Real data via factory; real network calls to ai-chat; affiliate tag in env.
+  - **Pass criteria**: 2 `saved_places` rows; 1 `trips` row; 1 `trip_items` row; 1 `outbound_clicks` row with `affiliate_tag = 'airbnb'` and `surface = 'chat_card'`; outbound URL rewritten with `?af=<tag>`; PostHog `outbound_clicked` event arrives; server-side affiliate dispute reconciliation possible from the row alone.
+  - **Files**: `e2e/rwt-03-week2-exit-test.spec.ts`. ~6 hrs.
+
+- [ ] **RWT-4 — SEO → chat handoff with listing context** (Day 3 #2, RWT version)
+  - **Journey**: Anon user lands on `/apartments/30000000-...-0001` from a Google SERP. Clicks "Ask mdeai about this →". Lands in `/chat?send=pending` with a listing-grounded prompt. Submits.
+  - **Reality knobs**: chromium, no auth, normal network.
+  - **Pass criteria**: pending prompt contains the apartment title + neighborhood; auto-fires once; Gemini response references the listing by name; no marketing-flash visible during transition.
+  - **Files**: `e2e/rwt-04-seo-handoff.spec.ts`. ~2 hrs.
+
+- [ ] **RWT-5 — Booking + idempotency on double-submit** (closes PRC-1, after B2 ships)
+  - **Journey**: Authed user on desktop. Opens BookingDialog on `/apartments/...001`. Fills dates. Clicks "Submit booking request" — then immediately clicks again before the first response (Cmd+Click + retry). Verifies only ONE booking row.
+  - **Reality knobs**: Inject 2-second latency on the booking-create edge function via `page.route()` so the double-submit window is reliably reproducible.
+  - **Pass criteria**: exactly 1 row in `bookings` with the user's id; the second POST returns the SAME booking_id from the idempotency cache; one host-notification fired (not two).
+  - **Files**: `e2e/rwt-05-booking-idempotency.spec.ts`. ~4 hrs (depends on B2).
+
+#### Reliability / edge cases
+
+- [ ] **RWT-6 — Tab refresh mid-stream** — User submits a prompt, sees streaming start, refreshes the page mid-stream. Verify (a) the in-flight SSE is cancelled cleanly, (b) the conversation row's last message is intact, (c) hydrating the page restores the conversation incl. the partial assistant message OR removes it cleanly. **Files**: `e2e/rwt-06-refresh-mid-stream.spec.ts`. ~3 hrs.
+
+- [ ] **RWT-7 — Browser back button after pin click** — User on `/chat` clicks a pin → InfoWindow → "View details" → `/apartments/:id` → browser back → `/chat`. Verify (a) chat state preserved, (b) pins still rendered, (c) scroll position restored. **Files**: `e2e/rwt-07-back-button.spec.ts`. ~2 hrs.
+
+- [ ] **RWT-8 — Anon → authed transition preserves conversation** — Anon types 3 prompts, hits limit, signs in mid-conversation. Verify (a) the in-memory anon messages are cleared (security), (b) a fresh DB-backed conversation is minted, (c) `useChat` doesn't double-fetch on the auth-state-change event. **Files**: `e2e/rwt-08-anon-to-authed-conversation.spec.ts`. ~3 hrs.
+
+- [ ] **RWT-9 — Sign out resets observability identity** — Authed user with established PostHog distinct-id signs out. Verify (a) `posthog.reset()` fires, (b) the next anon session has a different distinct-id, (c) Sentry breadcrumbs don't carry the old user id. **Files**: `e2e/rwt-09-signout-identity-reset.spec.ts`. ~2 hrs.
+
+- [ ] **RWT-10 — Two-tab session sync** — Tab A signs in. Tab B (open before sign-in, on `/`) should detect the auth-state change and offer to nav to `/chat`. Verify the supabase auth event reaches both tabs. **Files**: `e2e/rwt-10-two-tab-sync.spec.ts`. ~3 hrs.
+
+#### Performance + perception under stress
+
+- [ ] **RWT-11 — Slow 3G first-paint** — Anon user lands on `/` with `slow-3g` throttle. Verify (a) HTML loads in < 2 s, (b) hero copy paints before the chat input becomes interactive, (c) every chunk-loading state has a visible fallback. Lighthouse score Performance ≥ 50 on Slow 3G mobile preset. **Files**: `e2e/rwt-11-slow-3g-paint.spec.ts`. ~3 hrs.
+
+- [ ] **RWT-12 — Time-to-first-pin on slow 4G** (PRC-19) — Authed user on `/chat` types a prompt. From submit-click to first pin painted: < 5 s on 4g-latam throttle. Reports the actual measurement to PostHog as `ttfp_ms`. **Files**: `e2e/rwt-12-time-to-first-pin.spec.ts`. ~3 hrs.
+
+- [ ] **RWT-13 — Concurrent users + rate-limit observability** (PRC-9, after B6) — Spawn 100 simultaneous anon sessions, each sending 1 prompt. Verify (a) every request is honored OR returns 429 cleanly (no 5xx), (b) Postgres connection pool stays under 80 % utilization, (c) PostHog `rate_limit_exceeded` events match the 429 count. **Files**: `e2e/rwt-13-concurrent-users.spec.ts`. ~4 hrs (depends on B6).
+
+#### Mobile + iOS quirks
+
+- [ ] **RWT-14 — iOS Safari 100vh + safe-area** — On `iPhone 13` device profile in Playwright. Open `/chat`. Verify (a) chat input never sits behind the address bar, (b) MobileNav respects `safe-area-inset-bottom`, (c) Map drawer Sheet height uses `100dvh` (not `100vh`) so it survives the URL bar showing/hiding. **Files**: `e2e/rwt-14-ios-safari.spec.ts`. ~3 hrs.
+
+- [ ] **RWT-15 — Touch-tap behavior** — On mobile-chrome, tap the Map FAB. Verify (a) no hover-state remains stuck after tap, (b) tap-target is ≥ 44 × 44 px (WCAG AAA), (c) ripple feedback fires within 100 ms of tap-start. **Files**: `e2e/rwt-15-touch-tap.spec.ts`. ~2 hrs.
+
+#### Accessibility + screen reader
+
+- [ ] **RWT-16 — Screen-reader navigation through chat** — Use `@axe-core/playwright` + Playwright's keyboard simulation. Navigate `/chat` with Tab key only. Verify (a) every interactive element has accessible label, (b) chat messages are announced via `aria-live`, (c) the InfoWindow peek is keyboard-dismissable with Esc. **Files**: `e2e/rwt-16-screen-reader.spec.ts`. ~4 hrs.
+
+- [ ] **RWT-17 — Reduced-motion respect** — On a context with `reducedMotion: 'reduce'`. Verify (a) Sheet drawer slide-in is replaced with fade or instant, (b) skeleton shimmer animation pauses, (c) MarkerClusterer doesn't auto-zoom. **Files**: `e2e/rwt-17-reduced-motion.spec.ts`. ~2 hrs.
+
+#### Security + hostile inputs
+
+- [ ] **RWT-18 — XSS payload in chat input** — Submit `<script>alert(1)</script>` and `<img src=x onerror=alert(1)>` as user messages. Verify (a) renders as text, never executes, (b) does NOT trip CSP (B5 must allow text rendering of these strings), (c) Gemini's response also doesn't echo it as HTML. **Files**: `e2e/rwt-18-xss.spec.ts`. ~2 hrs.
+
+- [ ] **RWT-19 — SQL injection attempt in search filters** — Submit a chat-context budget chip with `'; DROP TABLE apartments; --`. Verify (a) the chip is stored as text, (b) Postgres queries from `useApartments` use parameterized `.eq()` not raw SQL, (c) edge fn returns 422 if Zod schema rejects. **Files**: `e2e/rwt-19-sqli.spec.ts`. ~2 hrs.
+
+- [ ] **RWT-20 — Anon user attempts admin endpoint** (PRC-6, after B4) — Anon user POSTs to `/admin/apartments` edge fn. Verify 403 returned; row not inserted; PostHog `unauthorized_access_attempt` event fires. **Files**: `e2e/rwt-20-admin-rbac.spec.ts`. ~2 hrs (depends on B4).
+
+#### Geographic + network reality
+
+- [ ] **RWT-21 — LATAM TTFB** (PRC-25, manual) — Curl `https://www.mdeai.co/` from a São Paulo VPS (e.g. DigitalOcean SFO3). TTFB < 500 ms. Documented one-shot procedure. ~30 min.
+
+- [ ] **RWT-22 — Cold-cache real-user load** (PRC-20) — Lighthouse CI run from a 4G-throttled mobile preset on a cold cache. Performance score ≥ 85; LCP < 2.5 s; CLS < 0.1; INP < 200 ms. **Files**: `.github/workflows/lighthouse.yml` → adds `--throttling.cpuSlowdownMultiplier=4 --throttling-method=devtools`. ~2 hrs.
+
+### RWT testing matrix (every critical-path spec runs all combinations)
+
+| | chromium | firefox | webkit | mobile-safari | mobile-chrome |
+|---|---|---|---|---|---|
+| **wifi** | RWT-1, 3, 4, 5, 6, 7, 8, 9, 10 | RWT-1, 3 | RWT-1, 3 | RWT-1, 3, 14, 15 | RWT-1, 3, 14, 15 |
+| **4g-latam** | RWT-11, 12, 22 | — | — | RWT-11, 12 | RWT-11, 12 |
+| **slow-3g** | RWT-11 (Lighthouse) | — | — | RWT-11 | — |
+
+Critical path = RWT-1 / 3 / 4 / 5 — must run on at least 3 browsers in CI. Edge cases run on chromium only unless the bug class is browser-specific (RWT-14 webkit-only).
+
+### RWT acceptance criteria for "production-ready"
+
+- [ ] **All critical-path RWTs (1, 3, 4, 5)** pass on chromium + firefox + webkit + mobile-safari, on `wifi` AND `4g-latam` profiles. 5 consecutive runs green, no flaky retries.
+- [ ] **All edge-case RWTs (6–22)** pass on chromium with the relevant browser/network knob.
+- [ ] **Failures auto-attach** — Playwright trace + screenshot + console log + network HAR captured for every failure and uploaded to the PR comment.
+- [ ] **Each RWT contributes to PostHog dashboards** — perf RWTs report `ttfp_ms` / `lcp_ms` to a PostHog test-only group so prod regressions trigger a real-data alert, not just a CI red.
+
+### RWT effort summary
+
+- Test infrastructure (6 items, ~10 hrs)
+- Critical-path scenarios (RWT-1 to RWT-5, ~19 hrs)
+- Reliability + edge (RWT-6 to RWT-10, ~13 hrs)
+- Performance under stress (RWT-11 to RWT-13, ~10 hrs)
+- Mobile + iOS (RWT-14, RWT-15, ~5 hrs)
+- A11y (RWT-16, RWT-17, ~6 hrs)
+- Security (RWT-18 to RWT-20, ~6 hrs)
+- Geographic (RWT-21, RWT-22, ~2.5 hrs)
+- **Total: ~71 hrs** (≈ 9 engineer-days). Sequence: infra batch → critical path → edge cases parallel with B-phase tasks.
+
+---
+
 ## 🚦 Production-Ready Checklist (success criteria, definition of done)
 
 Every feature MUST hit these explicit criteria before being marked done in this todo. The bar is intentionally high — a feature that ships without all four columns is technical debt by definition.
@@ -236,18 +360,18 @@ Every feature MUST hit these explicit criteria before being marked done in this 
 Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green before any public marketing push.**
 
 #### Functional readiness
-- [ ] **PRC-1 — Money path end-to-end** ⚠️ **CURRENT BLOCKER** — booking submitted → host notified → payment confirmed (Stripe test mode) → confirmation email arrives → idempotent on duplicate webhook delivery. (R1, B2, B3, L1)
-- [ ] **PRC-2 — Lead-to-booking pipeline** — chat search → save → schedule showing → application → host approve → booking → payment. End-to-end Playwright spec must run green for ≥ 5 consecutive runs. (B1, F4)
-- [ ] **PRC-3 — Affiliate attribution** — every outbound URL on a partner-program domain rewrites + logs to `outbound_clicks`; partner-tag values live for at least 1 partner. (Day 3 #1 ✓ shipped, partner IDs ⚠️)
-- [ ] **PRC-4 — Mobile parity** — every critical flow (search / save / book / message host) works on 375 × 812 with zero horizontal scroll. (Phase A drawer ✓; rest spot-verified)
+- [ ] **PRC-1 — Money path end-to-end** ⚠️ **CURRENT BLOCKER** — booking submitted → host notified → payment confirmed (Stripe test mode) → confirmation email arrives → idempotent on duplicate webhook delivery. (R1, B2, B3, L1) **RWT-5 covers idempotency.**
+- [ ] **PRC-2 — Lead-to-booking pipeline** — chat search → save → schedule showing → application → host approve → booking → payment. End-to-end Playwright spec must run green for ≥ 5 consecutive runs. (B1, F4) **RWT-3 covers Week 2 exit-test.**
+- [ ] **PRC-3 — Affiliate attribution** — every outbound URL on a partner-program domain rewrites + logs to `outbound_clicks`; partner-tag values live for at least 1 partner. (Day 3 #1 ✓ shipped, partner IDs ⚠️) **RWT-3 verifies the row + tag end-to-end.**
+- [ ] **PRC-4 — Mobile parity** — every critical flow (search / save / book / message host) works on 375 × 812 with zero horizontal scroll. (Phase A drawer ✓; rest spot-verified) **RWT-14 (iOS Safari quirks) + RWT-15 (touch tap) cover this.**
 
 #### Security
-- [ ] **PRC-5 — RLS hard guarantee** — service-role-only tables (`outbound_clicks`, `agent_audit_log`, `idempotency_keys`) deny `anon` SELECT under positive test (`curl` with anon JWT returns []). (R3, B4)
-- [ ] **PRC-6 — Admin RBAC server-side** — every admin edge fn checks `user_roles` before mutating. Non-admin JWT returns 403. (R3, B4)
-- [ ] **PRC-7 — CSP locked** — `Content-Security-Policy` on Vercel; no `unsafe-inline` on `script-src`; `securityheaders.com` score ≥ A. (B5, L3)
+- [ ] **PRC-5 — RLS hard guarantee** — service-role-only tables (`outbound_clicks`, `agent_audit_log`, `idempotency_keys`) deny `anon` SELECT under positive test (`curl` with anon JWT returns []). (R3, B4) **RWT-19 (SQLi attempt) covers parameterization.**
+- [ ] **PRC-6 — Admin RBAC server-side** — every admin edge fn checks `user_roles` before mutating. Non-admin JWT returns 403. (R3, B4) **RWT-20 covers anon-as-admin attempt.**
+- [ ] **PRC-7 — CSP locked** — `Content-Security-Policy` on Vercel; no `unsafe-inline` on `script-src`; `securityheaders.com` score ≥ A. (B5, L3) **RWT-18 (XSS attempt) verifies CSP catches inline script.**
 - [ ] **PRC-8 — Secrets isolation** — `git log -p` finds zero secrets in history; `.env*` rotated quarterly; Vercel + Supabase tokens in 1Password (or vault equivalent). (Newly identified; document rotation cadence)
-- [ ] **PRC-9 — Rate limiting durable** — `_shared/rate-limit.ts` backed by Postgres RPC, not in-memory `Map`. 100 requests / minute / user enforced; 429 returns visible in PostHog. (R6, B6, L8)
-- [ ] **PRC-10 — Auth + session integrity** — anon-vs-uuid path-handling lint-clean; realtime subscriptions gated on `conversation.user_id === user.id`; sign-out resets PostHog distinct-id. (R8 ✓ via A4)
+- [ ] **PRC-9 — Rate limiting durable** — `_shared/rate-limit.ts` backed by Postgres RPC, not in-memory `Map`. 100 requests / minute / user enforced; 429 returns visible in PostHog. (R6, B6, L8) **RWT-13 (concurrent users) verifies under load.**
+- [ ] **PRC-10 — Auth + session integrity** — anon-vs-uuid path-handling lint-clean; realtime subscriptions gated on `conversation.user_id === user.id`; sign-out resets PostHog distinct-id. (R8 ✓ via A4) **RWT-8 + RWT-9 + RWT-10 cover the transitions.**
 
 #### Observability + reliability
 - [ ] **PRC-11 — Sentry catches a real error in prod** — verified via synthetic exception within 24 h of cutover. (R4, A8)
@@ -259,20 +383,21 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [ ] **PRC-17 — DB backup + PITR** — Supabase point-in-time recovery enabled (Pro plan); last backup confirmed < 24 h old; restore tested at least once. (L7, Newly identified)
 
 #### Performance
-- [ ] **PRC-18 — Bundle budget** — entry chunk ≤ 100 KB gzip; no single chunk > 250 KB gzip; total chunks ≥ 50. (CT-2)
-- [ ] **PRC-19 — Time-to-first-pin on `/chat`** — < 1.5 s median on a throttled 4G connection (DevTools "Slow 3G" → ChatMap renders 1+ marker). (Newly identified)
-- [ ] **PRC-20 — Cold-cache full-load** — < 4 s TTI on 4G for `/`, `/chat`, `/apartments/:id`. (Newly identified)
+- [ ] **PRC-18 — Bundle budget** — entry chunk ≤ 100 KB gzip; no single chunk > 250 KB gzip; total chunks ≥ 50. (CT-2) **Today: 95 KB / 596 KB / 51 chunks ✓.**
+- [ ] **PRC-19 — Time-to-first-pin on `/chat`** — < 5 s median on a throttled 4G connection. **RWT-12 measures + reports `ttfp_ms` to PostHog.**
+- [ ] **PRC-20 — Cold-cache full-load** — < 4 s TTI on 4G for `/`, `/chat`, `/apartments/:id`. **RWT-22 (Lighthouse CI cold-cache) measures.**
 - [ ] **PRC-21 — Maps quota guard** — Cloud Console daily-quota alarm + monthly-spend alarm wired. (A7, L11)
 
 #### Compliance + ops
 - [ ] **PRC-22 — Privacy policy + Terms live** — `/privacy` + `/terms` accurate to current data flows (PostHog distinct-id, Sentry PII flag, Supabase auth.users). Reviewed by counsel if any GDPR-scope users. (Spot-check pages today)
 - [ ] **PRC-23 — Cookie consent** — visible banner if EEA users land; PostHog respects `posthog.opt_out_capturing()` from rejected consent. (Newly identified)
-- [ ] **PRC-24 — Email confirmation flow recovery** — pending prompt survives email-link open in a new tab. (R7, D7)
-- [ ] **PRC-25 — Domain + DNS** — TTL ≤ 300; CNAME chain ≤ 2 hops; LATAM-region Vercel POPs verified live. (L11)
+- [ ] **PRC-24 — Email confirmation flow recovery** — pending prompt survives email-link open in a new tab. (R7, D7) **RWT-2 verifies the new-tab case.**
+- [ ] **PRC-25 — Domain + DNS** — TTL ≤ 300; CNAME chain ≤ 2 hops; LATAM-region Vercel POPs verified live. (L11) **RWT-21 (São Paulo TTFB) measures.**
 
 ### Acceptance criteria for marking the WHOLE app production-ready
 
 - [ ] All 25 PRC items checked. Anything still ❌ documented as a known gap with mitigation in this file.
+- [ ] **All 22 RWT scenarios pass on the matrix (chromium / firefox / webkit / mobile-safari × wifi / 4g-latam where applicable).** 5 consecutive runs green on the critical-path subset (RWT-1, 3, 4, 5).
 - [ ] Last 7 days of prod traffic: < 0.1 % Sentry error rate, > 95 % positive booking-attempt completion.
 - [ ] On-call rotation defined (even if 1 person); runbook document for the 3 most-likely incidents (Maps API down, Supabase RLS misconfig, Stripe webhook 500).
 - [ ] Backup of `database.types.ts` + the `supabase/migrations/` directory snapshotted to a dated tag (`pre-launch-YYYY-MM-DD`).
