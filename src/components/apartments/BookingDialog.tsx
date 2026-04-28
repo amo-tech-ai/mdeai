@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, CheckCircle2, Loader2, MapPin, Bed, Wifi, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Calendar, CheckCircle2, Loader2, MapPin, Bed, Wifi, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -300,6 +300,15 @@ export function BookingDialog({ open, onOpenChange, apartment }: BookingDialogPr
           <div className="space-y-4">
             <ApartmentMiniSummary apartment={apartment} minStay={minStay} />
 
+            {/* Day 4 #2 — review-step polish: photo gallery + amenity grid.
+                Both render only when data exists so listings without
+                images/amenities still get a clean review. The gallery is
+                a horizontal scroll strip (no full lightbox — keeps the
+                dialog scoped to "confirm-and-submit"; the detail page
+                is where the user already inspected the listing). */}
+            <ReviewPhotoStrip apartment={apartment} />
+            <ReviewAmenityGrid apartment={apartment} />
+
             <div className="rounded-lg border border-border p-3 space-y-1.5 text-sm">
               <Row label="Move-in" value={isoToHuman(startDate)} />
               <Row label="Move-out" value={isoToHuman(effectiveEnd)} />
@@ -549,6 +558,90 @@ function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode 
     <div className="flex items-center justify-between gap-3">
       <span className="text-muted-foreground">{label}</span>
       <span className="text-foreground text-right">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Horizontal scroll strip showing up to 4 thumbnails. Snap-scrolling on
+ * touch (snap-x + snap-mandatory). Renders nothing when no images, so
+ * listings without photos don't get an empty placeholder block.
+ */
+function ReviewPhotoStrip({ apartment }: { apartment: Apartment }) {
+  const images = (apartment.images ?? []).filter((u): u is string => !!u);
+  if (images.length === 0) return null;
+  const visible = images.slice(0, 4);
+  const remaining = images.length - visible.length;
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1.5">
+        Photos
+      </p>
+      <div className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory pb-1 -mx-1 px-1">
+        {visible.map((src, i) => (
+          <div
+            key={src + i}
+            className="snap-start flex-shrink-0 w-24 h-24 rounded-md overflow-hidden bg-muted border border-border"
+          >
+            <img
+              src={src}
+              alt={`${apartment.title} photo ${i + 1}`}
+              loading="lazy"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          </div>
+        ))}
+        {remaining > 0 && (
+          <Link
+            to={`/apartments/${apartment.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="snap-start flex-shrink-0 w-24 h-24 rounded-md bg-muted border border-border flex items-center justify-center text-xs text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+            aria-label={`View all ${images.length} photos`}
+          >
+            +{remaining} more
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 2-col grid of amenities with check icons. Caps at 8 visible to keep
+ * the dialog scannable; "+N more" link to detail page for the full set.
+ */
+function ReviewAmenityGrid({ apartment }: { apartment: Apartment }) {
+  const amenities = (apartment.amenities ?? []).filter((a): a is string => !!a);
+  if (amenities.length === 0) return null;
+  const visible = amenities.slice(0, 8);
+  const remaining = amenities.length - visible.length;
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1.5">
+        What's included
+      </p>
+      <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+        {visible.map((name) => (
+          <li key={name} className="inline-flex items-center gap-1.5 min-w-0">
+            <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">{name}</span>
+          </li>
+        ))}
+      </ul>
+      {remaining > 0 && (
+        <Link
+          to={`/apartments/${apartment.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-muted-foreground hover:text-foreground inline-block mt-1.5"
+        >
+          + {remaining} more →
+        </Link>
+      )}
     </div>
   );
 }

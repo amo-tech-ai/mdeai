@@ -1,5 +1,24 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 later (Booking dialog review polish + verify:edge confirmed green)
+
+**Day 4 #2 — Booking dialog polish** ([src/components/apartments/BookingDialog.tsx](src/components/apartments/BookingDialog.tsx))
+- Review step now renders two new sections above the existing dates/pricing rows:
+  - **`<ReviewPhotoStrip>`** — horizontal scroll strip with snap-x, up to 4 thumbnails (96×96 px). Listings with more than 4 photos get a "+N more" tile that links to the detail page in a new tab. Falls through cleanly (renders nothing) when `apartment.images` is empty/missing. `onerror` on the `<img>` hides any broken thumbs rather than leaving a busted-image icon next to the title.
+  - **`<ReviewAmenityGrid>`** — 2-column grid of small chips with `<Check>` icons (emerald). Caps at 8 visible amenities; if more, a "+N more →" link opens the detail page. `truncate` per cell so long amenity names don't break the grid alignment.
+- Both helpers are local (not exported); they live below the main component file. No runtime cost when the listing has no images / amenities — they early-return null.
+- **Verified end-to-end** on `/apartments/30000000-...-0001` (Poblado Penthouse): `Check Availability` → fill dates → `Continue` → review step renders PHOTOS strip + WHAT'S INCLUDED grid (wifi, ac, kitchen, washer with check icons) above the existing pricing breakdown. Screenshot in PR #6.
+
+**`npm run verify:edge` confirmed green**
+- The "pre-existing CI gate broken" line in `tasks/todo.md` was stale. Re-ran it: deno check passes on all 10 functions + 4 shared modules; 11 / 11 deno tests pass. The earlier blocker self-resolved — deno fetched the `@supabase/supabase-js` dep on the first run after the `p1-crm` change and cached it for subsequent runs. Updated `todo.md` to reflect the resolved status.
+
+**Verification:**
+- `npm run lint` 0 new errors. `npm run build` 4.29 s. `npm test` 40 / 40 across 6 files.
+- `npm run verify:edge` clean (deno check + 11 deno tests).
+- Browser smoke (Claude Preview MCP): screenshot confirms photo strip + amenity grid render in the dialog's review step.
+
+---
+
 ## 2026-04-28 (SEO → chat handoff + map InfoWindow peek)
 
 Two tactical UX wins from `tasks/todo.md`:
