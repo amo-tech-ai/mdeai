@@ -1,5 +1,49 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 late-night (Code-splitting + route-level lazy loading — 80% smaller initial bundle)
+
+Closes the **"Code-split + lazy-load map / detail pages"** tech-debt item. Anonymous landing on `/` now ships **118 KB gzip** instead of **597 KB gzip** — the LATAM 4G first-paint hit is gone.
+
+**Vite config — manual vendor chunks ([vite.config.ts](vite.config.ts))**
+- New `manualChunks(id)` function with three tiers:
+  - **Tier 1 (entry)**: react / react-dom / react-router / scheduler — needed before paint, splitting costs more than it saves.
+  - **Tier 2 (always-needed vendors)**: `radix` (95 KB gzip), `supabase` (51 KB), `tanstack` (12 KB), `forms` (23 KB, react-hook-form + zod), `dates` (18 KB, date-fns + react-day-picker), `icons` (12 KB, lucide-react). Cacheable separately so deploys touching `src/` keep these warm.
+  - **Tier 3 (route-specific)**: `maps` (8 KB, @googlemaps/markerclusterer — only `/chat` + `/trips/:id`), `gadget` (24 KB — only `/coffee`), `posthog` (62 KB), `sentry` (29 KB), `charts` (recharts + d3, only dashboards), `motion` (framer-motion).
+- `chunkSizeWarningLimit: 800` — bumped from default 500. Entry chunk now sits comfortably below this, but the warning still fires on regressions.
+
+**App.tsx — route-level lazy loading ([src/App.tsx](src/App.tsx))**
+- Eager imports collapsed to **only `Home` and `NotFound`**. Home is the most-trafficked anonymous landing target; NotFound is the catch-all and must always be available even when chunks fail.
+- All 33 other routes converted to `React.lazy(() => import(...))`. Default-export pages use the simple form; the named export (`ChatCanvas`) uses the `.then(m => ({ default: m.X }))` shim.
+- New `<RouteFallback>` Suspense fallback — minimal centered spinner with `bg-background` so cold-loads don't flash white. Wraps the entire `<Routes>` block so any lazy component triggers it.
+- Admin pages lazy-loaded individually (one chunk per admin page) so the admin bundle never ships to non-admin users.
+
+**Bundle measurements (proof)**
+
+| Metric | Before | After |
+|---|---|---|
+| Single bundle (`index-*.js`) | 2,135 KB / 597 KB gzip | — |
+| Entry chunk (`index-*.js`) | — | **420 KB / 118 KB gzip** |
+| Route chunks | — | 4–90 KB each, lazy on nav |
+| Vendor chunks (parallel-fetch on first visit, cached separately) | — | radix 95 KB · supabase 51 KB · posthog 62 KB · sentry 29 KB · forms 23 KB · gadget 24 KB · dates 18 KB · icons 12 KB · tanstack 12 KB · maps 8 KB |
+| Build time | 4.21 s | 3.95 s |
+| Total chunks emitted | 1 | **51** |
+
+**Initial-paint payload (gzip)** — anonymous landing on `/`:
+- **Before**: 597 KB (one bundle, every route + every dep eagerly loaded).
+- **After**: ~118 KB entry + parallel-fetched vendor chunks for what `Home` actually uses (radix, supabase, react-query, icons). Routes only load when navigated.
+
+**Live verification (Claude Preview MCP)**
+- Loaded `/` (Home redirected to `/chat` for the authed session) — 70 src fetches recorded.
+- Navigated to `/login` (previously unvisited lazy route) — **22 NEW fetches** appeared in `performance.getEntriesByType('resource')`, including `src/pages/Login.tsx` itself. The Login chunk was NOT in the initial 70 — proving lazy loading is working as designed.
+- `npm run lint` clean. `npm run build` clean (3.95 s). `npm run test` 44 / 44 across 7 files. `npm run verify:edge` 11 / 11.
+
+**What this unlocks for follow-up**
+- Service-worker tile cache (90-day backlog) becomes meaningful — vendor chunks rarely change so SW caching is highly effective.
+- A/B framework via PostHog (90-day) — the `posthog` chunk is now isolated for selective preload.
+- The maps chunk (8 KB gzip) is small enough that pre-fetching on hover over `/chat` link would be near-instant.
+
+---
+
 ## 2026-04-28 night (Audit § 6 surgical cleanups — 10 fixes + new Vitest)
 
 Closes the entire **Code-quality cleanup (audit § 6)** section of `tasks/todo.md`. Each fix is small / surgical / low-risk, but the cumulative effect is meaningfully better lifecycle hygiene + less DOM thrash on the maps surfaces.

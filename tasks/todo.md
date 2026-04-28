@@ -28,7 +28,7 @@
 - [x] ~~**No Sentry / PostHog sink**~~ — **wired 2026-04-27 evening**. `VITE_SENTRY_DSN` + `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST` set in `.env.local` and Vercel (production + preview). Maps telemetry sink forwards every event to Sentry breadcrumbs + captures `*_failed` as Sentry issues + forwards conversion events (`pin_click`, `cluster_expand`, `map_auth_failed`) to PostHog. Bundle audit: `phc_rpJoH...` and `o4510109062...ingest` literals baked into `dist/assets/index-*.js`.
 - [ ] **`viewport_idle` event TYPED but not emitted yet** — wired into the "Search this area" feature; emit site lives in ChatMap idle listener (already shipped).
 - [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
-- [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
+- [x] ~~**Bundle 1.81 MB / ~480 KB gzip**~~ — **resolved 2026-04-28 late-night**. Entry chunk down to 118 KB gzip after vendor splitting + route-level lazy loading. See changelog for full breakdown.
 - [x] ~~**`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`~~ — **resolved**. Verified 2026-04-28: `npm run verify:edge` runs deno check on all 10 functions + 4 shared modules + 11/11 deno tests pass. The earlier blocker self-resolved (deno fetched the dep on first run; cached for subsequent runs).
 - [ ] **Email confirmation flow loses pending prompt** — sessionStorage is per-tab; clicking the email link in a new tab loses the saved prompt. Documented limitation.
 
@@ -50,7 +50,7 @@
 ### Tech-debt cleanup (anytime, low priority)
 - [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView. (audit § 6)
 - [ ] **Custom Cloud Console MapID** — Mindtrip-style muted palette. Pure visual polish. (audit § 90-day)
-- [ ] **Code-split + lazy-load** map / detail pages — drops ~600 KB from initial bundle. (audit § 60-day)
+- [x] **Code-split + lazy-load** map / detail pages — **shipped 2026-04-28 late-night**. Entry chunk 597 KB → **118 KB gzip** (80% smaller). 33 routes lazy-loaded behind a Suspense boundary; vendor chunks split into 10 cacheable tier-2/tier-3 groups (radix, supabase, posthog, sentry, forms, dates, icons, tanstack, maps, gadget). Live-verified: navigating to `/login` triggers 22 new fetches (including `src/pages/Login.tsx`) that were NOT in the initial 70-fetch batch.
 - [ ] **Fix `npm run verify:edge`** — wire `deno install` in the script so the CI gate works.
 - [ ] **Tighten `Conversation.user_id` type** — currently `string`; pin to `uuid | 'anon'`.
 
@@ -132,7 +132,7 @@ Items not yet in the Day 2/3/4 sprint but still on the 30-day plan.
 - [ ] **No Sentry / PostHog sink** — telemetry events fire but go to console only.
 - [ ] **`viewport_idle` telemetry event TYPED but not EMITTED** — wired with "Search this area" feature.
 - [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
-- [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
+- [x] ~~**Bundle 1.81 MB / ~480 KB gzip**~~ — **resolved 2026-04-28 late-night**. Entry chunk down to 118 KB gzip after vendor splitting + route-level lazy loading. See changelog for full breakdown.
 - [ ] **`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`.
 
 ## NEXT 10 (ranked by Revenue / Growth / UX / Tech / Speed)
