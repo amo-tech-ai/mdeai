@@ -157,6 +157,128 @@ Not yet phased — review and slot into A / B / C / D:
 
 ---
 
+## 🧪 Continuous-testing strategy (per-feature, per-phase, pre-launch)
+
+Every task in Phases A/B/C/D MUST pass the **per-PR gate** to merge. Phase B items must additionally pass the **pre-staging gate** before deploying to preview. Pre-launch additionally enforces the **pre-production gate**.
+
+### Per-PR gate (runs on every commit, blocks merge)
+
+| Gate | Tool / command | Pass criteria | Today's status |
+|---|---|---|---|
+| **G1 — Type-check** | `npx tsc --noEmit` | 0 errors | ✅ green |
+| **G2 — Lint** | `npm run lint` | 0 NEW errors on changed files; pre-existing 461 issues do not regress | ✅ green |
+| **G3 — Unit tests** | `npm run test` | All pass (currently 44 / 44 across 7 files); new tests required for any new lib in `src/lib/` | ✅ green |
+| **G4 — Edge function check** | `npm run verify:edge` (when `supabase/` changed) | Deno `check` clean + 11 / 11 deno tests pass | ✅ green |
+| **G5 — Build** | `npm run build` | Clean exit; entry-chunk gzip ≤ 100 KB (current: 95 KB) | ✅ green — budget added below |
+| **G6 — Security grep** | repo-wide grep for hardcoded `phc_`, `sk_live_`, `eyJhbGciOi...`, `https://*.supabase.co/...` outside `.env*` and `dist/` | 0 hits | ⚠️ run manually today, automate in B5 |
+| **G7 — CodeRabbit / Vercel preview** | GitHub PR checks | All `state: SUCCESS` (Supabase Preview can be SKIPPED on this branch) | ✅ green |
+
+### Per-phase gate (runs at the end of each phase batch)
+
+| Gate | Tool / command | Pass criteria | Status |
+|---|---|---|---|
+| **F1 — Bundle audit** | `du -h dist/assets/index-*.js` + grep entry chunk for vendor leakage | Entry chunk gzip ≤ 100 KB (today: **95 KB**); no `@gadgetinc/` / `@sentry/` / `@googlemaps/` substrings in entry; total chunks ≥ 50 | ✅ enforced this PR |
+| **F2 — Browser smoke** | Claude Preview MCP — navigate every route added/changed in the phase + verify console clean | No `TypeError` / `Uncaught` / `map_init_failed`; no 500 on edge fns | ✅ for Phase A |
+| **F3 — Migration soundness** (Phase B+) | Apply via `supabase db push` to a branch DB; verify with `\d+ <table>` + RLS tests | Idempotent (re-run is no-op); RLS denies anon SELECT on private tables; SECURITY DEFINER functions have explicit GRANTs | ✅ enforced this sprint |
+| **F4 — E2E** (added in B1) | `npx playwright test --reporter=line` | 100 % pass on critical-path specs; flaky retries ≤ 1 | ❌ **B1 not yet shipped** |
+| **F5 — Telemetry sanity** | `performance.getEntriesByType('resource')` filtered for `posthog`, `sentry` | Both SDKs initialized; first event lands within 60 s of nav | ⚠️ manual verify post-merge |
+
+### Pre-launch gate (one-time before public marketing push)
+
+| Gate | Method | Pass criteria | Status |
+|---|---|---|---|
+| **L1 — Money-path smoke** | Manual booking on prod with Stripe test card | Booking row created, host email fired, payment-webhook idempotency-tested with duplicate POST | ❌ **R1 — booking-create + payment-webhook missing** |
+| **L2 — Admin RBAC** | Curl admin endpoints with non-admin JWT | 403 on every route; no client-side-only gating | ❌ **R3 not yet shipped** |
+| **L3 — CSP audit** | DevTools → Console (no inline-script violations after lazy-load); `securityheaders.com` | Score ≥ A; no `unsafe-inline` on script-src | ❌ B5 not yet shipped |
+| **L4 — Lighthouse mobile** | `npx lighthouse https://www.mdeai.co --form-factor=mobile` | Performance ≥ 85; Accessibility ≥ 95; Best Practices ≥ 90; SEO ≥ 95 | ❓ never run |
+| **L5 — Web Vitals (real users)** | PostHog `web_vitals` plugin OR `@sentry/replay` | LCP P75 < 2.5 s on prod traffic for 7 days | ❓ not wired |
+| **L6 — Sentry error rate** | Sentry dashboard, last 24 h | Error rate ≤ 0.1 % of pageviews; no Critical-tagged events | ❓ never measured |
+| **L7 — Database backup** | Supabase dashboard → Backups | Point-in-time recovery enabled; last backup < 24 h old | ❓ user-side, never confirmed |
+| **L8 — Rate-limit observability** | Insert 100 ai-chat requests in 1 min from one user | 429 returned after limit; PostHog `rate_limit_exceeded` event fires | ❌ B6 (durable rate-limiter) pending |
+| **L9 — Affiliate attribution end-to-end** | Click outbound on prod with `VITE_BOOKING_AID` set | URL has `aid=<value>`; `outbound_clicks` row inserted with `affiliate_tag = 'booking'` | ⚠️ partner accounts not yet live |
+| **L10 — Mobile responsive audit** | Chrome DevTools 320 / 375 / 414 px widths | No horizontal scroll, no overlapping text, FAB above MobileNav | ✅ for current scope |
+| **L11 — Domain + DNS** | `dig www.mdeai.co +short` + Vercel edge regions | TTL ≤ 300; CNAME chain ≤ 2 hops; `--latam` POPs available | ❓ never confirmed |
+| **L12 — Status page** | `status.mdeai.co` exists + subscribed to Vercel + Supabase health | Live + email/SMS alerts wired | ❌ Newly identified item |
+
+### Continuous-testing TODO (build out the gates that are still ❌ / ❓)
+
+These tasks add the missing automation. Each should ship with its own PR, ordered by ROI.
+
+- [ ] **CT-1 — `npm run gate:pr`** — single bash script that runs G1-G6 in sequence, prints a green/red summary, exits 1 on any failure. Used as the `pre-push` git hook OR as a CI step. **Files**: new `scripts/gate-pr.sh`. ~1 hr.
+- [ ] **CT-2 — Bundle-size budget enforcement** — script that fails the build if entry-chunk gzip exceeds 100 KB. Wraps `vite build --reporter=json` + reads + asserts. **Files**: new `scripts/budget-check.ts`. ~1 hr.
+- [ ] **CT-3 — Secrets grep CI step** — `git diff` against base branch + grep for known token prefixes. Run inside G6. ~30 min.
+- [ ] **CT-4 — Playwright critical-path specs** (= B1) — `e2e/week2-exit-test.spec.ts` covering Save → Add-to-trip → Outbound. **6 hrs.**
+- [ ] **CT-5 — Visual regression with Playwright `toHaveScreenshot()`** — guards the polished BookingDialog review step + ApartmentDetail header + ChatCanvas welcome. ~3 hrs.
+- [ ] **CT-6 — Lighthouse CI** — GitHub Action that runs lighthouse on every PR's Vercel preview URL and posts a comment with deltas. **Files**: `.github/workflows/lighthouse.yml`. ~2 hrs.
+- [ ] **CT-7 — Axe a11y CI** — `@axe-core/playwright` on the routes covered by CT-4. Fail PR on new violations. ~2 hrs.
+- [ ] **CT-8 — Web Vitals → PostHog** — `posthog-js` has built-in `web_vitals` capture; flip the flag + add a PostHog dashboard tile. ~1 hr.
+- [ ] **CT-9 — Sentry release tagging** (= B7) — `release: <commit SHA>` in `initSentry()` + Vite define plugin. ~30 min.
+- [ ] **CT-10 — Edge function E2E** — `deno test` against a Supabase branch DB; fires real auth-gated requests. ~3 hrs.
+- [ ] **CT-11 — Migration smoke test** — apply every migration to a fresh local DB and run `pg_restore --schema-only` diff. ~2 hrs.
+
+---
+
+## 🚦 Production-Ready Checklist (success criteria, definition of done)
+
+Every feature MUST hit these explicit criteria before being marked done in this todo. The bar is intentionally high — a feature that ships without all four columns is technical debt by definition.
+
+### Definition of done (per feature)
+
+| Column | Required artifact | Measurable threshold |
+|---|---|---|
+| **Built** | Source landed on the branch + lint + tsc + build green | G1+G2+G5 pass |
+| **Tested** | Unit OR E2E test covering the new behavior | New test added; per-PR gate green |
+| **Documented** | Changelog entry + `tasks/todo.md` flipped to checked + JSDoc on any new export | Visible in `git log` + `cat changelog \| head -40` |
+| **Verified** | Live smoke on dev OR preview OR prod (whichever surface the feature lives on) | Either Claude Preview MCP transcript OR screenshot OR a `curl` log attached to the PR |
+
+### Production-grade success criteria (pre-launch gate)
+
+Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green before any public marketing push.**
+
+#### Functional readiness
+- [ ] **PRC-1 — Money path end-to-end** ⚠️ **CURRENT BLOCKER** — booking submitted → host notified → payment confirmed (Stripe test mode) → confirmation email arrives → idempotent on duplicate webhook delivery. (R1, B2, B3, L1)
+- [ ] **PRC-2 — Lead-to-booking pipeline** — chat search → save → schedule showing → application → host approve → booking → payment. End-to-end Playwright spec must run green for ≥ 5 consecutive runs. (B1, F4)
+- [ ] **PRC-3 — Affiliate attribution** — every outbound URL on a partner-program domain rewrites + logs to `outbound_clicks`; partner-tag values live for at least 1 partner. (Day 3 #1 ✓ shipped, partner IDs ⚠️)
+- [ ] **PRC-4 — Mobile parity** — every critical flow (search / save / book / message host) works on 375 × 812 with zero horizontal scroll. (Phase A drawer ✓; rest spot-verified)
+
+#### Security
+- [ ] **PRC-5 — RLS hard guarantee** — service-role-only tables (`outbound_clicks`, `agent_audit_log`, `idempotency_keys`) deny `anon` SELECT under positive test (`curl` with anon JWT returns []). (R3, B4)
+- [ ] **PRC-6 — Admin RBAC server-side** — every admin edge fn checks `user_roles` before mutating. Non-admin JWT returns 403. (R3, B4)
+- [ ] **PRC-7 — CSP locked** — `Content-Security-Policy` on Vercel; no `unsafe-inline` on `script-src`; `securityheaders.com` score ≥ A. (B5, L3)
+- [ ] **PRC-8 — Secrets isolation** — `git log -p` finds zero secrets in history; `.env*` rotated quarterly; Vercel + Supabase tokens in 1Password (or vault equivalent). (Newly identified; document rotation cadence)
+- [ ] **PRC-9 — Rate limiting durable** — `_shared/rate-limit.ts` backed by Postgres RPC, not in-memory `Map`. 100 requests / minute / user enforced; 429 returns visible in PostHog. (R6, B6, L8)
+- [ ] **PRC-10 — Auth + session integrity** — anon-vs-uuid path-handling lint-clean; realtime subscriptions gated on `conversation.user_id === user.id`; sign-out resets PostHog distinct-id. (R8 ✓ via A4)
+
+#### Observability + reliability
+- [ ] **PRC-11 — Sentry catches a real error in prod** — verified via synthetic exception within 24 h of cutover. (R4, A8)
+- [ ] **PRC-12 — PostHog captures `prompt_send` from a real user** — visible in Live Events within 24 h of cutover. (R4, A8)
+- [ ] **PRC-13 — Sentry release tagging** — every dashboard issue groups by deploy commit SHA. (B7, CT-9)
+- [ ] **PRC-14 — Web Vitals visibility** — LCP / INP / CLS captured per-route in PostHog; P75 LCP < 2.5 s on prod traffic for 7 days. (L5, CT-8)
+- [ ] **PRC-15 — Lighthouse score** — mobile: Performance ≥ 85, A11y ≥ 95, Best-Practices ≥ 90, SEO ≥ 95. (L4, CT-6)
+- [ ] **PRC-16 — Status page live** — `status.mdeai.co`; auto-subscribed to Vercel + Supabase. Email/SMS to oncall on degradation. (Newly identified, L12)
+- [ ] **PRC-17 — DB backup + PITR** — Supabase point-in-time recovery enabled (Pro plan); last backup confirmed < 24 h old; restore tested at least once. (L7, Newly identified)
+
+#### Performance
+- [ ] **PRC-18 — Bundle budget** — entry chunk ≤ 100 KB gzip; no single chunk > 250 KB gzip; total chunks ≥ 50. (CT-2)
+- [ ] **PRC-19 — Time-to-first-pin on `/chat`** — < 1.5 s median on a throttled 4G connection (DevTools "Slow 3G" → ChatMap renders 1+ marker). (Newly identified)
+- [ ] **PRC-20 — Cold-cache full-load** — < 4 s TTI on 4G for `/`, `/chat`, `/apartments/:id`. (Newly identified)
+- [ ] **PRC-21 — Maps quota guard** — Cloud Console daily-quota alarm + monthly-spend alarm wired. (A7, L11)
+
+#### Compliance + ops
+- [ ] **PRC-22 — Privacy policy + Terms live** — `/privacy` + `/terms` accurate to current data flows (PostHog distinct-id, Sentry PII flag, Supabase auth.users). Reviewed by counsel if any GDPR-scope users. (Spot-check pages today)
+- [ ] **PRC-23 — Cookie consent** — visible banner if EEA users land; PostHog respects `posthog.opt_out_capturing()` from rejected consent. (Newly identified)
+- [ ] **PRC-24 — Email confirmation flow recovery** — pending prompt survives email-link open in a new tab. (R7, D7)
+- [ ] **PRC-25 — Domain + DNS** — TTL ≤ 300; CNAME chain ≤ 2 hops; LATAM-region Vercel POPs verified live. (L11)
+
+### Acceptance criteria for marking the WHOLE app production-ready
+
+- [ ] All 25 PRC items checked. Anything still ❌ documented as a known gap with mitigation in this file.
+- [ ] Last 7 days of prod traffic: < 0.1 % Sentry error rate, > 95 % positive booking-attempt completion.
+- [ ] On-call rotation defined (even if 1 person); runbook document for the 3 most-likely incidents (Maps API down, Supabase RLS misconfig, Stripe webhook 500).
+- [ ] Backup of `database.types.ts` + the `supabase/migrations/` directory snapshotted to a dated tag (`pre-launch-YYYY-MM-DD`).
+
+---
+
 ## 🧪 Plan verification checklist
 
 - [x] Every item maps to a closing red flag OR a documented user-value increment
