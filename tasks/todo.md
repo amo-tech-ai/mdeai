@@ -1,10 +1,186 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-28 — Day 2 / 3 / 4 sprint shipped on `fix/chat-production-hardening` (PR #6). Sentry + PostHog live in prod, mobile fullscreen map drawer + SEO handoff + InfoWindow peek + booking-dialog polish + affiliate attribution + outbound-click logging + audit § 6 (10 surgical cleanups + new Vitest) + **route-level code-splitting (entry chunk 597 KB → 118 KB gzip)** all merged to the branch. **Production readiness 98/100** pending PR #6 merge + post-merge migration push.
+> **Last updated:** 2026-04-28 evening — PR #6 merged to `main` (commit `ec92105`). `outbound_clicks` migration + `log_outbound_click` RPC deployed to hosted Supabase (live + smoke-tested). `database.types.ts` regenerated; `track-outbound.ts` rpc cast removed. **Production readiness 99/100** — only the money-path edge functions remain before launch-grade.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+---
+
+## 🔴 Red flags / blockers / failure points
+
+Catalogued for visibility — see "Phase B" below for fixes.
+
+| # | Severity | Issue | Mitigation |
+|---|---|---|---|
+| **R1** | 🔴 **PRE-LAUNCH BLOCKER** | **Money path broken** — `booking-create` + `payment-webhook` edge functions don't exist. UX implies bookings work; back end stops at row insertion. No payment confirmation, no host notification, no Stripe webhook. | Phase B item B2 |
+| **R2** | 🟡 HIGH | **Zero E2E Playwright tests.** Every PR ships on manual smoke + unit tests only. Regression risk is increasing with the velocity. | Phase B item B1 |
+| **R3** | 🟡 HIGH | **Admin RBAC not enforced server-side.** `user_roles` table exists, no edge fn checks it. Admin endpoints are gated by client-side route guards only. | Phase B item B4 |
+| **R4** | 🟡 HIGH | **Sentry / PostHog not yet observed in real prod.** Vars set, init verified, bundle has literals — but no real event has been confirmed in `app.posthog.com` Live Events / Sentry dashboard. SDKs could be silently failing in some browser contexts. | Phase A item A8 |
+| **R5** | 🟡 MEDIUM | **Stripe / PSP decision still TBD** (Stripe-only vs Wompi/local for COP). Blocks B2 implementation. | Open Decisions §1 |
+| **R6** | 🟡 MEDIUM | **In-memory rate limiter** (`_shared/rate-limit.ts`) resets per edge invocation. Acceptable for MVP, fails at scale. Durable Postgres-backed limiter migration exists (`20260423120000_durable_rate_limiter.sql`) but not yet wired to all functions. | Phase B item B6 |
+| **R7** | 🟡 MEDIUM | **Email confirmation flow loses pending prompt** — sessionStorage is per-tab. Documented limitation; user opens email link in new tab → prompt lost. | Phase D item D7 |
+| **R8** | 🟢 LOW | **`Conversation.user_id` typed as `string`** — anon-vs-uuid bug class previously hit at runtime (now fixed at runtime, type still loose). | Phase A item A4 |
+| **R9** | 🟢 LOW | **MapProvider is chat-only** — apartment detail / trips pages don't share pin state. | Phase C items C1, C2 |
+| **R10** | 🟢 LOW | **2 fast-refresh warnings in `MapContext.tsx`** — non-component exports trigger react-refresh rule. HMR-only, no correctness impact. | Phase A item A3 |
+| **R11** | 🟢 LOW | **Auth-redirect Suspense flash** — authed users landing on `/` see ~50–200 ms spinner before ChatCanvas chunk loads. | Phase A item A1 |
+| **R12** | 🟢 LOW | **`viewport_idle` PostHog event TYPED but not emitted.** | Phase A item A6 |
+
+---
+
+## ✅ Best-practices review (post-merge)
+
+| Area | Status | Notes |
+|---|---|---|
+| Code-splitting + lazy routes | ✅ | 33 routes lazy, 51 chunks emitted |
+| Vendor chunking | ✅ | 10 cacheable groups, ordered by dependency depth |
+| Suspense boundaries | ✅ | Single boundary at `<Routes>` level with `<RouteFallback>` |
+| Migrations | ✅ | All idempotent (`CREATE OR REPLACE` / `IF NOT EXISTS`) |
+| RLS on all tables | ✅ | Including new `outbound_clicks` (no public SELECT) |
+| SECURITY DEFINER RPCs | ✅ | `apartment_save_counts`, `log_outbound_click` |
+| Typed env vars | ✅ | `VITE_*` convention enforced; rule documented |
+| Telemetry layering | ✅ | Sentry breadcrumbs + PostHog events |
+| Pin lifecycle docs | ✅ | Source-of-truth in ChatCanvas, cross-ref in ChatMap |
+| Edge function CORS | ✅ | Per-request `getCorsHeaders(req)` |
+| Edge function auth | ✅ | `verify_jwt: true` on all 10 |
+| **E2E tests** | ❌ | **0 Playwright tests written. R2.** |
+| **Money-path edge fns** | ❌ | **booking-create + payment-webhook missing. R1.** |
+| **Admin RBAC server-side** | ❌ | **Not enforced. R3.** |
+| **CSP headers** | ❌ | **Not set on Vercel.** |
+| **Sentry release tagging** | ❌ | **Errors not associated with deploy version.** |
+| **Database backup verification** | ❓ | **Never verified.** |
+| **Secrets rotation** | ❌ | **No documented schedule for Shopify/Gadget/Vercel tokens.** |
+
+---
+
+## 📋 NEXT — Sequenced 22-item plan (4 phases)
+
+Each phase is one PR. Items within a phase can ship together. Order respects dependencies (an item's "unblocks" target is downstream).
+
+### Phase A — Quick wins batch (target: 1 PR, ~6 hrs)
+
+Compound improvements with low review surface. Ship before Phase B starts.
+
+- [x] **A5 — Regenerate `database.types.ts`** — **DONE 2026-04-28 evening**. Removed the local rpc cast from `track-outbound.ts`; `log_outbound_click` is now fully typed via the canonical Database type.
+- [ ] **A1 — Pre-fetch `ChatCanvas` chunk on Home mount** — kills the auth-redirect Suspense flash (R11). One-line `import('@/components/chat/ChatCanvas')` in Home's `useEffect`. ~5 min. **Files**: `src/pages/Home.tsx`.
+- [ ] **A2 — Lazy-mount `<GadgetProvider>` only on `/coffee`** — drops the 24 KB gzip Gadget chunk from every non-coffee route. Move provider into a route-scoped wrapper. ~30 min. **Files**: `src/App.tsx`, possibly new `src/components/CoffeeProviderShell.tsx`.
+- [ ] **A3 — Split `MapContext.tsx`** — move `MapPin` / `RentalPinMeta` / `PIN_CATEGORY_CONFIG` to `src/types/map-pin.ts`. Kills 2 fast-refresh warnings (R10) + improves HMR speed. ~15 min. **Files**: new `src/types/map-pin.ts`, `MapContext.tsx`, ~3 import sites.
+- [ ] **A4 — Tighten `Conversation.user_id` to `uuid \| 'anon'`** — compile-time bug-class prevention (R8). ~30 min. **Files**: `src/types/chat.ts` + 3-4 call sites.
+- [ ] **A6 — Add `viewport_idle` PostHog event emission** — already typed in the union, ChatMap idle listener has the data, just no `trackEvent({name:'viewport_idle',...})` call (R12). ~10 min. **Files**: `src/components/chat/ChatMap.tsx`.
+- [ ] **A7 — Cloud Console Maps key — quota + budget alarm** — 30 min user-side action. Prevents bill surprises if the key leaks. **Files**: none (Google Cloud Console).
+- [ ] **A8 — Verify Sentry / PostHog in real prod** — submit a hero prompt on `www.mdeai.co`, confirm `prompt_send` arrives in PostHog Live Events; force a synthetic Sentry error and confirm it lands in the dashboard. Closes R4. ~15 min. **Files**: none.
+
+**Phase A acceptance:** all 8 boxes checked + lint/build/tests pass + bundle audit confirms `chunkSizeWarningLimit` not regressed.
+
+---
+
+### Phase B — Production readiness (target: 1 PR per item, sequenced)
+
+Pre-launch blockers. **R1 (money path) must ship before any public marketing push.**
+
+- [ ] **B1 — Playwright E2E for Week 2 exit-test path** — `search rentals → save 2 → add 1 to trip → click outbound to Airbnb → verify outbound_clicks row`. Covers the highest-traffic happy-path. ~6 hrs. **Files**: `playwright.config.ts` (already present), new `e2e/week2-exit-test.spec.ts`. Unblocks confident merging of every subsequent PR.
+- [ ] **B2 — `booking-create` edge function** ⚠️ **R1 PRE-LAUNCH BLOCKER**. Validates dates / availability, creates `bookings` row with idempotency key, dispatches host notification (email + future WhatsApp). Depends on Open Decisions §1 (Stripe vs Wompi). ~1 day. **Files**: `supabase/functions/booking-create/index.ts`, `supabase/functions/_shared/notifications.ts`.
+- [ ] **B3 — `payment-webhook` edge function** ⚠️ **R1 PRE-LAUNCH BLOCKER**. Stripe signature verification; flips `bookings.payment_status` → confirmed; idempotency-key dedupe. ~1 day. **Files**: `supabase/functions/payment-webhook/index.ts`.
+- [ ] **B4 — Admin RBAC server-side** — read `user_roles` in every admin edge fn before action. ~4 hrs. **Files**: new `_shared/admin-guard.ts`, every admin fn.
+- [ ] **B5 — CSP headers + security audit** — set `Content-Security-Policy` on Vercel; verify no inline scripts after lazy-load refactor. ~2 hrs. **Files**: `vercel.json` (or `next.config` equivalent).
+- [ ] **B6 — Wire durable rate-limiter RPC** — replace in-memory `_shared/rate-limit.ts` with the `check_rate_limit` Postgres RPC (migration already shipped at `20260423120001`). ~3 hrs. **Files**: `supabase/functions/_shared/rate-limit.ts`, every fn that calls it.
+- [ ] **B7 — Sentry release tagging** — set `release: <commit SHA>` in `initSentry()` so dashboard groups errors by deploy. ~30 min. **Files**: `src/lib/sentry.ts`, `vite.config.ts` (define plugin).
+- [ ] **B8 — Showing-reminder pg_cron** (T-24h + T-1h) — closes the lead-to-booking loop. ~3 hrs. **Files**: new migration with `pg_cron` jobs invoking edge fn that posts to email + WhatsApp.
+
+**Phase B acceptance:** R1 + R2 + R3 + R4 closed. All edge functions enforced server-side; CSP shipped; first synthetic Sentry release tag confirmed.
+
+---
+
+### Phase C — Mindtrip parity (each: half-day, dependency-ordered)
+
+Visual + interaction parity on the maps surface. Ships after Phase A.
+
+- [ ] **C1 — `MapContext` → zustand store, lifted to root `<App>`** — single pin store across `/chat`, `/apartments/:id`, `/trips/:id`. Closes R9. ~3 hrs. **Files**: new `src/stores/map-store.ts`, `App.tsx`, all `useMapContext()` call sites.
+- [ ] **C2 — `MapShell` reusable component** — single map renderer for 3 surfaces. Pulls clustering + InfoWindow + lifecycle into one place. Depends on C1. ~1 day. **Files**: new `src/components/map/MapShell.tsx`, refactor ChatMap + GoogleMapView to consume it.
+- [ ] **C3 — `useMarkerLayer` hook** — dedup ChatMap + GoogleMapView. After audit § 6 made the patterns symmetric, this is mechanical. ~2 hrs. **Files**: new `src/hooks/useMarkerLayer.ts`, refactor 2 consumers.
+- [ ] **C4 — ApartmentDetail bottom map** — show the apartment + nearby restaurants/cafés on the detail page. Big trust signal. Depends on C2. ~3 hrs. **Files**: `src/pages/ApartmentDetail.tsx`.
+- [ ] **C5 — Saved pins ❤️ overlay on markers** — bound to `useChatActions.savedIds`. Visual continuity. ~2 hrs. **Files**: ChatMap + RentalCardInline.
+- [ ] **C6 — Bidirectional card ↔ pin sync** — card click pans/zooms map (currently only hover syncs). Depends on C2. ~3 hrs. **Files**: `src/stores/map-store.ts`, `RentalCardInline.tsx`, `MapShell`.
+- [ ] **C7 — Pre-fetch route chunk on link hover** — `onMouseEnter={() => preload}` on top nav links. ~50 ms warmup → near-instant nav. ~1 hr. **Files**: top nav component.
+
+**Phase C acceptance:** map state shared across 3 surfaces; bottom-map live on ApartmentDetail; visual parity with Mindtrip.
+
+---
+
+### Phase D — Scale + new channels (multi-day, milestone-tracked)
+
+90-day backlog. Order is impact-weighted; each item is its own milestone PR.
+
+- [ ] **D1 — Server-side pin clustering** (Postgis `ST_ClusterDBSCAN`) — scales to 1000+ listings. Today's `MarkerClusterer` is client-only. ~2 days.
+- [ ] **D2 — Service-worker tile cache for Maps** — first-paint LATAM 4G perf. **Now meaningful** because vendor chunks rarely change. ~2 days.
+- [ ] **D3 — A/B framework via PostHog** — selective preload of `posthog` chunk + experiment flags. ~1 day.
+- [ ] **D4 — WhatsApp v1** (Infobip webhook + lead capture + search + reminders) — todo.md Week 7-8 milestone. LATAM messaging norm. ~1 week.
+- [ ] **D5 — Walking-distance circles** — visual layer on selected pin. ~half-day.
+- [ ] **D6 — Heatmap overlay** — Wi-Fi speed / walkability for nomad targeting. ~1 day.
+- [ ] **D7 — Email confirmation flow → cross-tab pending prompt** — broadcast channel + IndexedDB fallback. Closes R7. ~3 hrs.
+
+---
+
+## 🆕 Newly identified (added 2026-04-28 evening)
+
+Not yet phased — review and slot into A / B / C / D:
+
+- [ ] **PostHog dashboard setup** — define funnel + retention queries (prompt → save → outbound → booking). Without dashboards, the events are landing in a black box. ~1 hr (PostHog UI).
+- [ ] **Outbound-clicks analytics dashboard** — table now exists; SQL view + Metabase/Looker tile for "top affiliate-tagged URLs / hour". ~2 hrs.
+- [ ] **Database backup verification** — confirm Supabase point-in-time recovery is enabled on the production project tier. ~30 min user-side.
+- [ ] **Status page** (`status.mdeai.co`) — Better-Stack or Statuspage; subscribe to Vercel + Supabase health. ~1 hr.
+- [ ] **Secrets rotation schedule** — quarterly rotation cadence for Shopify CLI token, Admin API token, Gadget secret, Vercel deploy token. Document in CLAUDE.md. ~1 hr.
+- [ ] **Domain warm-up / DNS check** — confirm DNS has low TTL during launch + Vercel edge routing for LATAM. ~1 hr.
+- [ ] **Outbound-click attribution dashboard alert** — Sentry alert when `log_outbound_click` errors > 1% of calls. ~30 min.
+
+---
+
+## 🎯 Recommended sequencing (next 2-week sprint)
+
+**Week 1 (Mon–Fri, 22 hrs):**
+- Day 1–2: **Phase A** (8 items in 1 PR — ~6 hrs total). Gives compounding wins immediately.
+- Day 3: **B1 Playwright E2E** (6 hrs). Without this, every PR after Phase A flies blind.
+- Day 4–5: **B2 booking-create + B3 payment-webhook** (1.5 days combined). Closes the money-path gap.
+
+**Week 2 (Mon–Fri, 22 hrs):**
+- Day 1: **B4 + B5 + B6 + B7** (security batch — RBAC + CSP + durable rate-limit + Sentry release tag). 1 PR.
+- Day 2–3: **B8 Showing-reminder cron** (3 hrs) + **C1 MapContext → zustand** (3 hrs) + **C3 useMarkerLayer** (2 hrs). 1 PR each.
+- Day 4–5: **C2 MapShell** (1 day) — unblocks C4/C6.
+
+**Why this ordering:**
+1. Phase A first — compounding wins ship before bigger work begins; review surface stays small.
+2. B1 (Playwright) immediately after — every PR from this point benefits from automated smoke.
+3. B2 + B3 (money path) is the last pre-launch blocker — must land before any marketing push.
+4. Security batch (B4-B7) ships as one PR — they share `_shared/` infrastructure.
+5. Phase C unblocks Mindtrip parity for the 60-day plan; runs in parallel with B once B1 + B2 + B3 are merged.
+
+---
+
+## 🧪 Plan verification checklist
+
+- [x] Every item maps to a closing red flag OR a documented user-value increment
+- [x] Phase A items are all <1 hr — fits "Quick wins batch" definition
+- [x] Phase B items are pre-launch blockers (R1 closure)
+- [x] Phase C items are dependency-ordered (C1 → C2 → C4/C6)
+- [x] Phase D items have milestone status (not weekly)
+- [x] Every red flag (R1–R12) has a phase + item assigned
+- [x] No duplicate items between phases
+- [x] No item depends on something later in the same phase
+- [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## DONE 2026-04-28 evening — PR #6 merged + migration deployed
+
+- [x] **PR #6 merged to `main`** — squash-merge `ec92105`. 7 commits on the sprint, all live at `www.mdeai.co` after Vercel auto-deploy.
+- [x] **`outbound_clicks` migration deployed to hosted Supabase** — applied via Supabase MCP `apply_migration`. Table + indexes + RLS + `log_outbound_click` RPC all confirmed via `information_schema` + `pg_indexes` + `role_routine_grants` queries.
+- [x] **RPC smoke tests passed** — defense-in-depth http(s) regex correctly rejected `javascript:alert(1)` with sqlstate 22023; real insert succeeded with all columns populated; test row deleted post-verification.
+- [x] **`apartment_save_counts_rpc` migration registered** — was previously deployed out-of-band; this added it to the migration history table so local + remote are now in sync.
+- [x] **`database.types.ts` regenerated** — 3940 lines, includes `outbound_clicks` row + `log_outbound_click` RPC signature.
+- [x] **`track-outbound.ts` rpc cast removed** — function call now goes through canonical typed `supabase.rpc('log_outbound_click', ...)`. Type-check + lint clean.
+
+---
 
 ## DONE 2026-04-28 — Day 2 / 3 / 4 sprint + audit § 6 + code-split (PR #6, 7 commits)
 

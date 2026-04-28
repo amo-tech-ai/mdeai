@@ -24,21 +24,9 @@ export interface OutboundClickInput {
  *      outbound nav.
  *   3. PostHog `outbound_clicked` event — same fire-and-forget.
  *
- * The RPC type cast: until `supabase gen types` is run after this
- * migration ships, `log_outbound_click` isn't in `database.types.ts`.
- * Casting to a narrowed shape gives us call-site safety without the
- * full client typing.
+ * The RPC is fully typed via `database.types.ts` (regenerated after the
+ * 20260427210000_outbound_clicks migration was applied to remote).
  */
-type LogOutboundClickRpc = (
-  fn: 'log_outbound_click',
-  args: {
-    p_listing_id: string;
-    p_source_url: string;
-    p_affiliate_tag: string | null;
-    p_surface: OutboundSurface;
-  },
-) => Promise<{ data: string | null; error: { message: string } | null }>;
-
 export function trackOutboundClick(input: OutboundClickInput): {
   url: string;
   tag: string | null;
@@ -49,8 +37,7 @@ export function trackOutboundClick(input: OutboundClickInput): {
 
   void (async () => {
     try {
-      const rpc = supabase.rpc as unknown as LogOutboundClickRpc;
-      const { error } = await rpc('log_outbound_click', {
+      const { error } = await supabase.rpc('log_outbound_click', {
         p_listing_id: input.listingId,
         p_source_url: url,
         p_affiliate_tag: tag,
