@@ -8,7 +8,12 @@ import { ChatContextChips } from './ChatContextChips';
 import { EmailGateModal } from './EmailGateModal';
 import { ChatLeftNav } from './ChatLeftNav';
 import { MobileNav } from '@/components/layout/MobileNav';
-import { MapProvider, useMapContext, type MapPin as MapPinData } from '@/context/MapContext';
+import {
+  MapProvider,
+  useMapContext,
+  type MapPin as MapPinData,
+  type RentalPinMeta,
+} from '@/context/MapContext';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import { useAnonSession } from '@/hooks/useAnonSession';
@@ -230,29 +235,44 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     );
     const listings = rentalAction?.payload.listings;
     if (!listings || listings.length === 0) return;
-    const nextPins: MapPinData[] = listings.map((l) => ({
-      id: l.id,
-      category: 'rental',
-      title: l.title,
-      latitude: l.latitude ?? null,
-      longitude: l.longitude ?? null,
-      label: l.price_monthly ? `$${l.price_monthly}/mo` : undefined,
-      // Extra fields read by ChatMap's InfoWindow peek (Day 4 #1). Loose-
-      // typed today; will tighten to a `RentalPin extends MapPin` when
-      // the audit's MapContext typing improvement (todo.md tech-debt) lands.
-      meta: {
+    const nextPins: MapPinData[] = listings.map((l) => {
+      // Typed per-vertical bag — read on the consumer side via
+      // `pin.meta as RentalPinMeta` in ChatMap's InfoWindow peek.
+      const meta: RentalPinMeta = {
         source_url: l.source_url,
         neighborhood: l.neighborhood,
         image: l.images?.[0] ?? null,
         rating: l.rating ?? null,
         bedrooms: l.bedrooms ?? null,
         bathrooms: l.bathrooms ?? null,
-      },
-    }));
+      };
+      return {
+        id: l.id,
+        category: 'rental',
+        title: l.title,
+        latitude: l.latitude ?? null,
+        longitude: l.longitude ?? null,
+        label: l.price_monthly ? `$${l.price_monthly}/mo` : undefined,
+        meta,
+      };
+    });
+    // Pin lifecycle (single source of truth — see also ChatMap which
+    // only RENDERS pins from this context, never owns them):
+    //   • Each new tool response REPLACES the entire pin set
+    //     (`setPins(nextPins)` above) — we don't merge with prior
+    //     turns. Rationale: the user's intent shifts conversationally
+    //     ("show me Laureles" → "what about Provenza?"), and merging
+    //     would leave Laureles pins lingering on the Provenza map.
+    //   • The two effects below DO clear pins, but only on bigger
+    //     scope changes:
+    //       (a) message list emptied → presumably new chat
+    //       (b) currentConversation.id changed → switched chats
+    //   • The cleanup below is intentionally empty — un-mounting this
+    //     effect doesn't drop pins (they belong to the conversation,
+    //     not the effect's lifecycle).
     setPins(nextPins);
     return () => {
-      // Keep pins across turns — only clear on explicit new chat.
-      // clearPins() removed intentionally.
+      /* intentionally empty — see lifecycle comment above */
     };
   }, [pendingActions, setPins]);
 

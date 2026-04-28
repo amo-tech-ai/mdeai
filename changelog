@@ -1,5 +1,47 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 night (Audit § 6 surgical cleanups — 10 fixes + new Vitest)
+
+Closes the entire **Code-quality cleanup (audit § 6)** section of `tasks/todo.md`. Each fix is small / surgical / low-risk, but the cumulative effect is meaningfully better lifecycle hygiene + less DOM thrash on the maps surfaces.
+
+**Backend / lib polish ([src/lib/google-maps-loader.ts](src/lib/google-maps-loader.ts))**
+- **Fix #1 — docstring corrected** to match actual return shape. The example now shows the typed `loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', key)` form (the function returns the *whole* library — destructure on the call site).
+- **Fix #2 — dead `void UUID_RE;` removed** (audit found this was kept "for future referrer-test parity" but never wired up).
+- **Fix #3 — `installAuthFailureHandler` → `_installAuthFailureHandler`** (private convention; only invoked from `installBootstrap`). Verified post-rename via dynamic import: module exports are now exactly `[isMapsAuthFailed, loadGoogleMapsLibrary, onMapsAuthFailed]` — the underscore-prefixed handler is correctly module-internal.
+
+**Lib tests ([src/lib/google-maps-loader.test.ts](src/lib/google-maps-loader.test.ts))**
+- **Fix #4 — Vitest test for the shim recursion contract.** 4 tests that stub `document.createElement('script')` and `document.head.append()` to prevent a real network fetch, then synthesize Google's "real importLibrary lands → bootstrap callback fires" sequence and assert the recursive call lands in the REAL impl, not in a stale shim closure. Also asserts:
+  - script `src` is built with `key`, `loading=async`, `callback=google.maps.__mdeaiMapsCb__`
+  - missing apiKey rejects with a clear error
+  - `gm_authFailure` toggles `isMapsAuthFailed()` from false → true
+
+**ChatMap polish ([src/components/chat/ChatMap.tsx](src/components/chat/ChatMap.tsx))**
+- **Fix #5 — pin-lifecycle cross-reference comment** added at the top of the component, pointing to ChatCanvas as the source-of-truth for pin lifecycle. ChatMap renders pins, never owns them.
+- **Fix #6 — `MEDELLIN_CENTER` → smart initial center.** First geo-pinned listing already in context wins; falls back to the Medellín default only when the chat hasn't surfaced anything yet. fitBounds in the pins-update effect overrides this once we have ≥1 pin, but the pre-batch pose now matches the user's actual search area.
+
+**ChatCanvas polish ([src/components/chat/ChatCanvas.tsx](src/components/chat/ChatCanvas.tsx))**
+- **Fix #7 — explicit pin-merge comment**, replacing the ambiguous "Keep pins across turns" line. New comment block documents the policy: each tool response REPLACES pins (no merge across turns); two scope-change effects clear pins (message-list emptied, conversation-id changed); the cleanup is intentionally empty since pins belong to the conversation, not the effect.
+
+**MapContext typing ([src/context/MapContext.tsx](src/context/MapContext.tsx))**
+- **Fix #10 — `RentalPinMeta` type added** alongside `MapPin`. Producers (ChatCanvas) now build `meta: RentalPinMeta = { source_url, neighborhood, image, rating, bedrooms, bathrooms }` instead of an inline object literal; consumers (ChatMap's InfoWindow) narrow with `pin.meta as RentalPinMeta` instead of casting each field individually. `MapPin.meta` itself stays loosely typed (`Record<string, unknown>`) so the addition of new verticals (restaurant, event, attraction) doesn't require touching the base interface — they each get their own `<Vertical>PinMeta` and consumers branch on `pin.category`.
+
+**GoogleMapView refactor ([src/components/itinerary/GoogleMapView.tsx](src/components/itinerary/GoogleMapView.tsx))**
+- **Fix #9 — id-keyed marker map** (parity with `ChatMap.markersRef`). Replaced the array `AdvancedMarkerElement[]` with `Map<string, MarkerEntry>` (entry = `{ marker, clickHandler }`). The items-update effect now diffs in three phases:
+  1. REMOVE markers whose id dropped out of the live set + detach their listeners.
+  2. UPDATE existing markers in-place with new content / position / zIndex.
+  3. ADD fresh markers for new ids only.
+  Same id reuses the same DOM element + click handler, so listener rewiring is gone, and a hovered/focused pin survives sibling-list updates.
+- **Fix #8 — surgical selection mutation.** Split the previous `[selectedItemId, itemsWithCoords, …]` mega-effect into two: items-update (without selection in deps) and selection-change. The selection-change effect uses a `prevSelectedRef` and only mutates the prev → new pin pair (O(2) DOM rewrites per click), down from O(n) (50 pins → 50 rewrites). Prev = unselected, new = selected; the rest are untouched.
+
+**Verification (this round)**
+- `npm run lint` — 0 errors. 2 pre-existing fast-refresh warnings on `MapContext.tsx` (non-component exports — `PIN_CATEGORY_CONFIG` already triggered the rule; `RentalPinMeta` is a type-only export so doesn't add runtime impact).
+- `npm run build` — 4.21 s. Bundle 2.13 MB / 596 KB gzip (+1.6 KB gzip vs previous).
+- `npm run test` — **44 / 44** passing across **7** files (was 40 / 40 across 6 — the 4 new google-maps-loader tests are all green).
+- `npm run verify:edge` — deno check clean + 11 / 11 deno tests pass.
+- Browser smoke (Claude Preview MCP): `/chat` mounts, Google Map renders (`gm-style` present), no `map_init_failed` / `TypeError` / `Uncaught` in console; loader exports correctly hide the renamed `_installAuthFailureHandler`.
+
+---
+
 ## 2026-04-28 later (Booking dialog review polish + verify:edge confirmed green)
 
 **Day 4 #2 — Booking dialog polish** ([src/components/apartments/BookingDialog.tsx](src/components/apartments/BookingDialog.tsx))

@@ -3,7 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { MapPin as MapPinIcon } from 'lucide-react';
-import { useMapContext, PIN_CATEGORY_CONFIG, type MapPin } from '@/context/MapContext';
+import {
+  useMapContext,
+  PIN_CATEGORY_CONFIG,
+  type MapPin,
+  type RentalPinMeta,
+} from '@/context/MapContext';
 import {
   isMapsAuthFailed,
   loadGoogleMapsLibrary,
@@ -132,6 +137,12 @@ export interface ChatMapProps {
 }
 
 export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
+  // Pin lifecycle reminder: ChatMap RENDERS pins, never owns them. The
+  // MapContext is the source-of-truth; ChatCanvas's useEffect on
+  // `pendingActions` is what sets/replaces pins each turn. The "pins
+  // never persist across turns" tradeoff lives in that effect, not
+  // here — see ChatCanvas.tsx → "Pin lifecycle (single source of
+  // truth)" comment.
   const { pins, highlightedPinId, setHighlightedPinId } = useMapContext();
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
   const navigate = useNavigate();
@@ -221,8 +232,22 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
         MapCtorRef.current = mapsLib.Map;
         MarkerCtorRef.current = markerLib.AdvancedMarkerElement;
 
+        // Smart initial center: prefer the first geo-pinned listing
+        // already in context (so the map opens on the user's actual
+        // search area, not a generic Medellín wide-shot) — fall back
+        // to MEDELLIN_CENTER when the chat hasn't returned anything
+        // yet. fitBounds in the pins-update effect overrides this once
+        // we have ≥1 pin, but the initial pose matters for the
+        // half-second between map ready and the first pin batch.
+        const firstGeoPin = pins.find(
+          (p) => typeof p.latitude === 'number' && typeof p.longitude === 'number',
+        );
+        const initialCenter = firstGeoPin
+          ? { lat: firstGeoPin.latitude as number, lng: firstGeoPin.longitude as number }
+          : MEDELLIN_CENTER;
+
         mapRef.current = new mapsLib.Map(containerRef.current!, {
-          center: MEDELLIN_CENTER,
+          center: initialCenter,
           zoom: 13,
           mapId: MAP_ID,
           disableDefaultUI: false,
@@ -271,6 +296,12 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
     return () => {
       cancelled = true;
     };
+    // `pins` is intentionally NOT in deps — re-running this effect on
+    // every pin update would tear down + rebuild the entire map, killing
+    // the markers + clusterer + InfoWindow each turn. The smart initial
+    // center is meant to read pins ONCE at init; subsequent pin batches
+    // are handled by the fitBounds effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, authFailed]);
 
   // Build the InfoWindow peek content for a pin: photo + title +
@@ -282,12 +313,16 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
   // events from innerHTML strings).
   const makeInfoContent = useCallback(
     (pin: MapPin, onViewDetails: () => void): HTMLElement => {
-      const meta = (pin.meta ?? {}) as Record<string, unknown>;
-      const image = (meta.image as string | null | undefined) ?? null;
-      const rating = (meta.rating as number | null | undefined) ?? null;
-      const neighborhood = (meta.neighborhood as string | null | undefined) ?? null;
-      const bedrooms = (meta.bedrooms as number | null | undefined) ?? null;
-      const bathrooms = (meta.bathrooms as number | null | undefined) ?? null;
+      // Narrow the loose `meta` bag to the typed RentalPinMeta — only
+      // valid because every chat pin is currently a `rental` (the
+      // pinDetailPath() guard above). When other categories ship,
+      // branch on `pin.category` first.
+      const meta = (pin.meta ?? {}) as RentalPinMeta;
+      const image = meta.image ?? null;
+      const rating = meta.rating ?? null;
+      const neighborhood = meta.neighborhood ?? null;
+      const bedrooms = meta.bedrooms ?? null;
+      const bathrooms = meta.bathrooms ?? null;
 
       const root = document.createElement('div');
       root.className = 'mdeai-info-peek';

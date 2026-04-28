@@ -54,20 +54,20 @@
 - [ ] **Fix `npm run verify:edge`** — wire `deno install` in the script so the CI gate works.
 - [ ] **Tighten `Conversation.user_id` type** — currently `string`; pin to `uuid | 'anon'`.
 
-## Code-quality cleanup (audit § 6)
+## Code-quality cleanup (audit § 6) — **all 10 shipped 2026-04-28 night**
 
-Small, surgical fixes called out in `tasks/plan/01- MDEAI Maps Architecture Audit.md` § 6.
+Small, surgical fixes called out in `tasks/plan/01- MDEAI Maps Architecture Audit.md` § 6. See `changelog` 2026-04-28 night entry for full details.
 
-- [ ] **`google-maps-loader.ts:21-22`** — docstring claims it returns destructured constructors; actually returns the library. Minor doc fix.
-- [ ] **`google-maps-loader.ts:40`** — delete `void UUID_RE;` dead code.
-- [ ] **`google-maps-loader.ts:78-86`** — `installAuthFailureHandler` is invoked only from `installBootstrap`. Rename `_installAuthFailureHandler` (private) or expose + document.
-- [ ] **`google-maps-loader.ts:168-209`** — Vitest unit test for the shim recursion (`fn(libName, ...rest)`). Mock `window.google` to make it regression-proof.
-- [ ] **`ChatMap.tsx:160`** — "Pins never clear between turns" tradeoff is documented in ChatCanvas, not here. Add cross-reference comment.
-- [ ] **`ChatMap.tsx:248-260`** — `MEDELLIN_CENTER` is hardcoded; center on first pin or on chip neighborhood instead.
-- [ ] **`ChatCanvas.tsx:116-127`** — replace ambiguous "Keep pins across turns" comment with explicit toggle: "merge with prior pins" or "replace each turn".
-- [ ] **`GoogleMapView.tsx:290-298`** — highlight effect rebuilds full marker content on every selection change. With 50+ pins that's 50 DOM rewrites. Mutate only the changed pin.
-- [ ] **`GoogleMapView.tsx:211-219`** — marker rebuild rewires listeners every time. Use a stable id-keyed map (parity with ChatMap's `markersRef`).
-- [ ] **`MapContext.tsx:7-14`** — `MapPin.meta?: Record<string, unknown>` is too loose. Strongly type per-vertical (`RentalPin extends MapPin`).
+- [x] **`google-maps-loader.ts` docstring** — example now shows the typed `loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', key)` form returning the whole library object.
+- [x] **`google-maps-loader.ts` dead `void UUID_RE`** — deleted.
+- [x] **`google-maps-loader.ts` `_installAuthFailureHandler`** — renamed to underscore-prefixed private. Verified post-rename: module exports are exactly `[isMapsAuthFailed, loadGoogleMapsLibrary, onMapsAuthFailed]`.
+- [x] **`google-maps-loader.test.ts`** — new Vitest, 4 tests covering: shim recursion lands in real impl (not stale closure), script src is built correctly (key + loading=async + callback), missing apiKey rejects clearly, `gm_authFailure` toggles `isMapsAuthFailed()`.
+- [x] **`ChatMap.tsx` cross-reference** — comment at the top of the component points to ChatCanvas as pin-lifecycle source-of-truth.
+- [x] **`ChatMap.tsx` smart `MEDELLIN_CENTER`** — first geo-pinned listing in context wins; falls back to default only when chat hasn't surfaced anything yet.
+- [x] **`ChatCanvas.tsx` pin-merge comment** — explicit policy block: each tool response REPLACES pins; two scope-change effects clear; cleanup is intentionally empty.
+- [x] **`GoogleMapView.tsx` surgical selection mutation** — split items-update from selection-change; selection-change uses `prevSelectedRef` and only mutates the prev → new pin pair (O(2) DOM rewrites per click vs O(n) before — 50 pins → 50× → 2× rewrites).
+- [x] **`GoogleMapView.tsx` id-keyed marker map** — replaced `AdvancedMarkerElement[]` with `Map<string, MarkerEntry>`. Items-update diffs in 3 phases (REMOVE / UPDATE / ADD) so same id reuses DOM + click handler. Listener rewiring eliminated.
+- [x] **`MapContext.tsx` `RentalPinMeta`** — typed per-vertical bag added; producers (ChatCanvas) build typed `meta`; consumers (ChatMap InfoWindow) narrow with `as RentalPinMeta` instead of casting field-by-field. `MapPin.meta` stays loosely-typed so new verticals (restaurant/event/attraction) plug in without touching the base.
 
 ## 30-day backlog (audit § 7 — "Stabilize + observe")
 
