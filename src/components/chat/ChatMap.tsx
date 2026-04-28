@@ -161,6 +161,11 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  // One InfoWindow instance reused across all pin clicks. We never
+  // create per-pin InfoWindows — that leaks DOM and breaks the "only
+  // one peek visible at a time" contract Mindtrip uses. Set/replace
+  // content + reopen at the new anchor instead.
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   // Each marker carries the EventListener we attached, so we can call
   // `removeEventListener` symmetrically on unmount + when a marker is
   // dropped between turns. Without this, listeners leak — addEventListener
@@ -244,6 +249,16 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
             // telemetry; let it handle the zoom.
           },
         });
+        // Day 4 #1 — InfoWindow peek on pin click. Created once here
+        // (the `maps` library is already loaded above) and reused for
+        // every pin: setContent() + open() at the new anchor. Closes
+        // automatically on map click, pan, or zoom (Google default).
+        // Note: pixelOffset would need `google.maps.Size` (in the
+        // `core` library, not `maps`). Default offset already places
+        // the bubble above the anchor — skip the extra import.
+        infoWindowRef.current = new mapsLib.InfoWindow({
+          disableAutoPan: false,
+        });
         setLibrariesReady(true);
       } catch (err) {
         if (cancelled) return;
@@ -257,6 +272,92 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
       cancelled = true;
     };
   }, [apiKey, authFailed]);
+
+  // Build the InfoWindow peek content for a pin: photo + title +
+  // neighborhood/BR/BA + price/rating + "View details" CTA. Returns a
+  // detached HTMLDivElement; InfoWindow.setContent() takes ownership.
+  //
+  // Why DOM not innerHTML: the "View details" button needs a real
+  // onclick that captures the pin closure (cleaner than dispatching
+  // events from innerHTML strings).
+  const makeInfoContent = useCallback(
+    (pin: MapPin, onViewDetails: () => void): HTMLElement => {
+      const meta = (pin.meta ?? {}) as Record<string, unknown>;
+      const image = (meta.image as string | null | undefined) ?? null;
+      const rating = (meta.rating as number | null | undefined) ?? null;
+      const neighborhood = (meta.neighborhood as string | null | undefined) ?? null;
+      const bedrooms = (meta.bedrooms as number | null | undefined) ?? null;
+      const bathrooms = (meta.bathrooms as number | null | undefined) ?? null;
+
+      const root = document.createElement('div');
+      root.className = 'mdeai-info-peek';
+      root.style.cssText = 'max-width:240px;font-family:inherit;';
+
+      if (image) {
+        const img = document.createElement('img');
+        img.src = image;
+        img.alt = pin.title;
+        img.loading = 'lazy';
+        img.style.cssText =
+          'width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:block;';
+        // If the image errors out, hide it cleanly rather than leaving a
+        // broken-image icon next to the title.
+        img.addEventListener('error', () => {
+          img.style.display = 'none';
+        });
+        root.appendChild(img);
+      }
+
+      const title = document.createElement('h3');
+      title.textContent = pin.title;
+      title.style.cssText =
+        'font-size:14px;font-weight:600;line-height:1.3;margin:0 0 4px 0;color:#0f172a;';
+      root.appendChild(title);
+
+      const subParts: string[] = [];
+      if (neighborhood) subParts.push(neighborhood);
+      if (bedrooms != null) subParts.push(`${bedrooms} BR`);
+      if (bathrooms != null) subParts.push(`${bathrooms} BA`);
+      if (subParts.length > 0) {
+        const sub = document.createElement('p');
+        sub.textContent = subParts.join(' · ');
+        sub.style.cssText = 'font-size:12px;color:#64748b;margin:0 0 6px 0;';
+        root.appendChild(sub);
+      }
+
+      const row = document.createElement('div');
+      row.style.cssText =
+        'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;';
+      if (pin.label) {
+        const price = document.createElement('span');
+        price.textContent = pin.label;
+        price.style.cssText = 'font-size:14px;font-weight:600;color:#0f172a;';
+        row.appendChild(price);
+      }
+      if (rating != null) {
+        const rate = document.createElement('span');
+        rate.textContent = `★ ${Number(rating).toFixed(1)}`;
+        rate.style.cssText = 'font-size:12px;color:#d97706;font-weight:500;';
+        row.appendChild(rate);
+      }
+      if (row.children.length > 0) root.appendChild(row);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'View details →';
+      btn.style.cssText =
+        'background:#10b981;color:#fff;border:0;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;width:100%;';
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onViewDetails();
+      });
+      root.appendChild(btn);
+
+      return root;
+    },
+    [],
+  );
 
   // Create / update marker content. Uses a plain div so we can keep the
   // mdeai visual language (emoji + title pill) without MapID-bound custom
@@ -371,7 +472,27 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
               newTab,
             });
             setHighlightedPinId(pin.id);
-            navigateToPin(pin, newTab);
+
+            // Modifier-keys + middle-click + keyboard → preserve the
+            // power-user "open detail in new tab / direct nav" behavior.
+            // Plain click → InfoWindow peek (Day 4 #1). The peek's
+            // "View details" button calls navigateToPin internally.
+            if (newTab || viaKeyboard) {
+              navigateToPin(pin, newTab);
+              return;
+            }
+            const iw = infoWindowRef.current;
+            if (!iw || !mapRef.current) {
+              navigateToPin(pin, false);
+              return;
+            }
+            iw.setContent(
+              makeInfoContent(pin, () => {
+                iw.close();
+                navigateToPin(pin, false);
+              }),
+            );
+            iw.open({ map: mapRef.current, anchor: marker });
           };
           marker.addEventListener('gmp-click', clickHandler);
           markersRef.current.set(pin.id, { marker, clickHandler });
@@ -415,7 +536,14 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
     // `highlightedPinId` intentionally omitted — handled in the next effect
     // to avoid re-creating markers on every hover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pins, librariesReady, authFailed, makeContent, setHighlightedPinId, navigateToPin]);
+  }, [pins, librariesReady, authFailed, makeContent, makeInfoContent, setHighlightedPinId, navigateToPin]);
+
+  // Close any open InfoWindow when the pin set changes — otherwise the
+  // peek can outlive its anchor (e.g. conversation switch clears pins
+  // but the InfoWindow keeps floating mid-map).
+  useEffect(() => {
+    infoWindowRef.current?.close();
+  }, [pins]);
 
   // Update marker content when highlight changes (no marker churn).
   useEffect(() => {

@@ -41,10 +41,10 @@
 
 ### Day 3 — Conversion improvements
 - [x] **Affiliate attribution + `outbound_clicks` migration** — **shipped 2026-04-27 late evening**. Migration `20260427210000_outbound_clicks.sql` (table + RLS + `log_outbound_click` RPC), `src/lib/affiliate.ts` (Booking/Airbnb/VRBO rewriter, 12 unit tests), `src/lib/track-outbound.ts` (RPC + PostHog event), wired in `RentalCardInline` (chat surface = `chat_card`) + `RentalsListingDetail` (surface = `detail_page`). Env tags optional (`VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG`); clicks log with `affiliate_tag = NULL` until partner IDs are configured. **Closes Week 2 exit-test prerequisite #5.**
-- [ ] **SEO page → chat handoff** (Thursday's Week 2 task) — `/apartments/:id` "Ask mdeai about this →" CTA opens `/chat?send=pending` with listing context pre-loaded. Closes the SEO acquisition loop.
+- [x] **SEO page → chat handoff** — **shipped 2026-04-28**. "Ask mdeai about this →" button on `/apartments/:id` right rail composes a listing-grounded prompt + `savePendingPrompt` + nav to `/chat?send=pending`. Live-verified: button click → URL handoff → auto-fire → Gemini response with `rental_search` payload of 9 listings.
 
 ### Day 4 — Mindtrip parity polish
-- [ ] **InfoWindow on pin click** — peek the listing without leaving the chat. Photo + title + price + rating + "View details" link. Anon chat preservation.
+- [x] **InfoWindow on pin click** — **shipped 2026-04-28**. Single InfoWindow instance reused across pins (Mindtrip pattern). Peek = photo + title + neighborhood/BR/BA + price/rating + "View details →" button. Cmd/Ctrl/middle-click + keyboard preserve direct-nav. Pin meta extended in `ChatCanvas` with `image / rating / bedrooms / bathrooms`. Cleanup closes peek on `pins` change so it can't outlive anchor.
 - [ ] **Booking dialog polish** — photo gallery + amenity grid in the review step.
 
 ### Tech-debt cleanup (anytime, low priority)

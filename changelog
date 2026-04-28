@@ -1,5 +1,31 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 (SEO → chat handoff + map InfoWindow peek)
+
+Two tactical UX wins from `tasks/todo.md`:
+
+**Day 3 #2 — SEO page → chat handoff** ([src/pages/ApartmentDetail.tsx](src/pages/ApartmentDetail.tsx))
+- New "Ask mdeai about this →" button in the right-rail Quick Actions card. Composes a contextual prompt naming the listing + neighborhood, calls `savePendingPrompt`, navigates to `/chat?send=pending`. ChatCanvas auto-fires the prompt as the user's first turn — Gemini's response is grounded in the specific listing, not a cold open.
+- PostHog `prompt_send` event fires (`source: 'chat_input'`) so the SEO entry point shows up in the conversion funnel alongside hero-prompt entries.
+- **Live verified end-to-end:** clicked button on `/apartments/<seed-uuid>` → URL replaced to `/chat` (auto-fire stripped `?send=pending`) → user message appeared with the apartment context → Gemini responded with `What I Searched For` + `Best Option` + 9-listing rental_search payload.
+
+**Day 4 #1 — InfoWindow peek on pin click** ([src/components/chat/ChatMap.tsx](src/components/chat/ChatMap.tsx) + [src/components/chat/ChatCanvas.tsx](src/components/chat/ChatCanvas.tsx))
+- Map pin click now opens a Google Maps InfoWindow with a peek (photo + title + neighborhood/BR/BA + price/rating + "View details →" button) instead of immediately navigating away. Preserves the chat session — anon users don't lose their conversation just to peek a listing.
+- Power-user shortcuts preserved: Cmd/Ctrl-click + middle-click + Enter-on-keyboard still navigate directly. The branching is at the `clickHandler` level, not by intercepting the marker event globally.
+- One InfoWindow instance reused across all pins (Mindtrip's "only one peek visible at a time" pattern). `setContent()` + `open()` at the new anchor each click.
+- Cleanup: `useEffect` closes the open peek on `pins` change so it can't outlive its anchor when the conversation switches.
+- Pin metadata extended in `ChatCanvas` to include `image`, `rating`, `bedrooms`, `bathrooms` (loose-typed today; will tighten when the audit's `RentalPin extends MapPin` typing improvement lands).
+- **Bug fix in this change:** initial draft used `new mapsLib.Size(0, -8)` for the InfoWindow `pixelOffset`, but `Size` is in the `core` library, not `maps`. The throw was caught by the existing `map_init_failed` handler, dropping the user into the fallback pin list. Fixed by dropping the cosmetic offset (Google's default places the bubble above the anchor).
+
+**Verification:**
+- `npm run lint` 0 new errors. `npm run build` 4.17 s. `npm test` 40 / 40 across 6 files.
+- Browser smoke (Claude Preview MCP): `google.maps.InfoWindow` ctor + `setContent({...DOM...})` succeed; map mounts cleanly with no `map_init_failed` in console; SEO handoff round-trip verified end-to-end including Gemini response.
+- Bundle audit: `Ask mdeai about this`, `View details →`, `mdeai-info-peek`, `InfoWindow`, `prompt_send` literals all present in `dist/assets/index-*.js`.
+
+**Known limitation:** Couldn't fully verify the click-pin-see-InfoWindow flow in the preview sandbox because the anon-chat quota exhausted before I could land more pins on the map. The init code path is verified (no init crash, ctor works, content DOM builds correctly); the user-facing click flow needs to be confirmed on the merged-to-prod deploy.
+
+---
+
 ## 2026-04-27 late evening (Affiliate attribution + outbound click tracking)
 
 **Day 3 #1 from `tasks/todo.md`.** Closes the only blocker on the Week 2 exit test — the user can now click outbound to Airbnb / Booking.com / VRBO with affiliate-tag rewriting + Postgres logging + PostHog conversion event.

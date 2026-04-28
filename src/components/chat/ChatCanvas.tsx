@@ -237,7 +237,17 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
       latitude: l.latitude ?? null,
       longitude: l.longitude ?? null,
       label: l.price_monthly ? `$${l.price_monthly}/mo` : undefined,
-      meta: { source_url: l.source_url, neighborhood: l.neighborhood },
+      // Extra fields read by ChatMap's InfoWindow peek (Day 4 #1). Loose-
+      // typed today; will tighten to a `RentalPin extends MapPin` when
+      // the audit's MapContext typing improvement (todo.md tech-debt) lands.
+      meta: {
+        source_url: l.source_url,
+        neighborhood: l.neighborhood,
+        image: l.images?.[0] ?? null,
+        rating: l.rating ?? null,
+        bedrooms: l.bedrooms ?? null,
+        bathrooms: l.bathrooms ?? null,
+      },
     }));
     setPins(nextPins);
     return () => {
