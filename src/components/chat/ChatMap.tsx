@@ -663,6 +663,7 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
               e: ne.lng(),
               w: sw.lng(),
             },
+            zoom: map.getZoom() ?? 13,
           });
         }
       }

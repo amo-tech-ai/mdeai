@@ -105,6 +105,19 @@ function mapEventToSentry(event: MapTelemetryEvent): void {
     trackEvent({ name: 'cluster_expand', clusterSize: event.clusterSize });
   } else if (event.kind === 'auth_failed') {
     trackEvent({ name: 'map_auth_failed', error: event.error });
+  } else if (event.kind === 'viewport_idle') {
+    // Forward bbox + zoom — answers "which neighborhoods do users
+    // dwell on the longest?" without needing per-pin telemetry.
+    // PostHog accepts float properties, so we pass the corners raw
+    // (4 decimals = ~10 m precision, more than enough for analytics).
+    trackEvent({
+      name: 'viewport_idle',
+      bboxN: event.bbox.n,
+      bboxS: event.bbox.s,
+      bboxE: event.bbox.e,
+      bboxW: event.bbox.w,
+      zoom: event.zoom,
+    });
   }
 }
 

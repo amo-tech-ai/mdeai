@@ -43,7 +43,7 @@ function manualChunks(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
   // Order matters — first match wins. Specific before generic.
   if (id.includes("@googlemaps/")) return "maps";
-  if (id.includes("@gadgetinc/")) return "gadget";
+  if (id.includes("@gadgetinc/") || id.includes("@gadget-client/")) return "gadget";
   if (id.includes("posthog-js")) return "posthog";
   if (id.includes("@sentry/")) return "sentry";
   if (id.includes("recharts") || id.includes("d3-")) return "charts";

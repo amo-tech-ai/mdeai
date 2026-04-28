@@ -1,5 +1,61 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 (later) — Phase A quick-wins batch (5 items, 1 commit)
+
+Closes 5 of the 7 code-side Phase A items defined in `tasks/todo.md`. (A7 is a Cloud Console manual action; A8 is a manual prod-telemetry verification.)
+
+**A1 — Pre-fetch `ChatCanvas` chunk on Home mount** ([src/pages/Home.tsx](src/pages/Home.tsx))
+- One-line `useEffect(() => void import('@/components/chat/ChatCanvas'), [])`. Fire-and-forget, silent on failure.
+- Kicks off the 33 KB / 10.5 KB gzip ChatCanvas chunk fetch in the background while the user reads the marketing copy.
+- By the time `<Navigate to="/chat" />` resolves (authed) or the user submits the hero prompt (anon), the chunk is already cached → Suspense fallback almost never paints. Closes **R11** in todo.md.
+- **Live-verified** — `performance.getEntriesByType('resource')` on `/` shows `components/chat/ChatCanvas.tsx` + `ChatTabs / ChatMessageList / ChatInput` already fetched before any nav.
+
+**A2 — Lazy-mount `<GadgetProvider>` only on `/coffee*` routes** ([src/components/coffee/CoffeeShell.tsx](src/components/coffee/CoffeeShell.tsx) — new file; [src/App.tsx](src/App.tsx))
+- New `<CoffeeShell>` parent route renders `<GadgetProvider api={gadgetApi}><Outlet /></GadgetProvider>`. Lazy-loaded — the Gadget runtime + project client (`@gadgetinc/react` + `@gadget-client/mdeai`) only fetch when a user lands on `/coffee` or `/coffee/:handle`.
+- Removed the eager `<GadgetProvider>` wrapping from the App root + the `import { Provider as GadgetProvider }` + `import { gadgetApi }` at top of App.tsx.
+- `vite.config.ts` `manualChunks` rule extended to fold `@gadget-client/` into the `gadget` chunk (was creating a tiny separate `client-*.js` chunk because the rule only matched `@gadgetinc/`). Result: one consolidated `gadget` chunk at 185 KB / 48 KB gzip, fetched on-demand.
+- **Bundle delta (proof)**:
+  - Entry chunk **420 KB → 312 KB raw / 118 KB → 95 KB gzip (-19.5%)** on every non-coffee route.
+  - Gadget chunk completely removed from the initial-paint critical path on `/`, `/chat`, `/apartments/:id`, etc.
+- **Live-verified** — fresh nav to `/coffee` triggers `@gadgetinc_react.js` + `@gadget-client_mdeai.js` + a real GraphQL request to `mdeai--development.gadget.app/api/graphql`. Before nav: zero Gadget references on Home. After nav: full chain loaded + Coffee page rendered.
+
+**A3 — Split `MapContext.tsx`** ([src/types/map-pin.ts](src/types/map-pin.ts) — new file; [src/context/MapContext.tsx](src/context/MapContext.tsx))
+- Moved `MapPin`, `MapPinCategory`, `RentalPinMeta`, `PIN_CATEGORY_CONFIG` to `src/types/map-pin.ts`. Re-exported from MapContext for backward-compat — existing `import { MapPin, ... } from '@/context/MapContext'` keeps working; new consumers should import from `@/types/map-pin`.
+- Killed the const-export fast-refresh warning in MapContext.tsx. The remaining warning on the `useMapContext` hook export gets a documented `eslint-disable-next-line` (provider + hook are conventionally co-located in React; splitting would force exposing the internal Context object). Closes **R10** (partial — 2 warnings → 0).
+
+**A4 — Tighten `Conversation.user_id` to `(string & {}) \| 'anon'`** ([src/types/chat.ts](src/types/chat.ts))
+- New exported type alias `ConversationUserId = (string & {}) | 'anon'` with extensive JSDoc explaining:
+  - The `string & {}` no-widening trick preserves `'anon'` IntelliSense autocomplete while still accepting any UUID.
+  - The contract: never insert `'anon'` into FKs to `auth.users`, never subscribe to realtime channels with anon owner, etc.
+  - The bug class this prevents: previously `anon-${sid}` was once stored on `messages.conversation_id` (uuid type) and threw at runtime — the 'anon' marker now lives ONLY on `user_id` and the type makes that explicit.
+- Closes **R8**.
+
+**A6 — `viewport_idle` event reaches PostHog** ([src/lib/maps-telemetry.ts](src/lib/maps-telemetry.ts), [src/lib/posthog.ts](src/lib/posthog.ts), [src/lib/sentry.ts](src/lib/sentry.ts), [src/components/chat/ChatMap.tsx](src/components/chat/ChatMap.tsx))
+- Was already fired as a maps-telemetry event → Sentry breadcrumb. Now also forwarded to PostHog with `bboxN/S/E/W` floats + `zoom`. Answers "which neighborhoods do users dwell on the longest?" without per-pin telemetry.
+- Extended `MapTelemetryEvent.viewport_idle` to include `zoom` (1–22 from `map.getZoom()`). Updated the ChatMap idle listener to populate it.
+- Added `viewport_idle` arm to the `AppEvent` discriminated union in `posthog.ts`.
+- Added the forwarder branch in `mapEventToSentry()` (`sentry.ts`) — same shape pattern as `pin_click` / `cluster_expand` / `auth_failed`. Closes **R12**.
+
+**Verification**
+- `npm run lint` 0 errors, 0 new warnings on changed files.
+- `npm run build` 4.22 s.
+- `npm run test` 44 / 44 across 7 files.
+- `npx tsc --noEmit` clean.
+- Live browser smoke (Claude Preview MCP):
+  - `/` → ChatCanvas chunk pre-fetched in `performance.getEntries` (A1 ✓)
+  - `src/types/map-pin.ts` exports `PIN_CATEGORY_CONFIG` + types (A3 ✓)
+  - `trackEvent({ name: 'viewport_idle', ... })` accepts the typed shape with no TS error (A6 ✓)
+  - `/coffee` nav → 46 new fetches including `@gadgetinc_react.js` + `@gadget-client_mdeai.js` + a real `mdeai--development.gadget.app/api/graphql` request (A2 ✓)
+
+**Cumulative bundle perf since the start of the chat-central sprint:**
+| Stage | Entry gzip |
+|---|---|
+| Pre-split (single bundle) | 597 KB |
+| After code-split (PR #6) | 118 KB |
+| After Phase A (this) | **95 KB (-84% from original)** |
+
+---
+
 ## 2026-04-28 — sprint rollup (PR #6, 7 commits since main)
 
 The Day 2 / 3 / 4 sprint plus audit § 6 plus a code-splitting pass all landed on `fix/chat-production-hardening` over 24 hours. Production readiness moves from **96 → 98** pending PR #6 merge + post-merge migration push.

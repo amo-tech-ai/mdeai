@@ -117,9 +117,33 @@ export function hasChatContext(ctx: ChatContext | null | undefined): boolean {
   return false;
 }
 
+/**
+ * Conversation owner. Authenticated users carry a UUID; anonymous chat
+ * sessions carry the literal `'anon'` sentinel (in-memory only, never
+ * written to DB — the anon path skips Postgres writes entirely).
+ *
+ * The `string & {}` trick preserves the `'anon'` literal in IntelliSense
+ * autocomplete while still accepting any UUID string. Without it, TS
+ * widens the union to plain `string` and the literal hint is lost.
+ *
+ * Always check `user_id === 'anon'` before:
+ *   - inserting a row that FKs to `auth.users` (Postgres won't accept it)
+ *   - subscribing to realtime channels (the broker errors on non-UUID
+ *     conversation owners — `useRealtimeChannel` already gates on
+ *     `conversation.user_id === user.id`, but new code should do the
+ *     same)
+ *   - calling RLS-protected RPCs that auto-fill from `auth.uid()`
+ *
+ * Past bug class this prevents:
+ *   "anon-${sid}" was once stored on `messages.conversation_id` (uuid
+ *   type) — which threw at runtime. The 'anon' marker now lives ONLY
+ *   on `user_id`, and this type makes that contract explicit.
+ */
+export type ConversationUserId = (string & {}) | 'anon';
+
 export interface Conversation {
   id: string;
-  user_id: string;
+  user_id: ConversationUserId;
   title: string;
   agent_type: string;
   status: 'active' | 'archived';

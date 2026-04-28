@@ -1,41 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { MapPin } from '@/types/map-pin';
 
-export type MapPinCategory = 'rental' | 'restaurant' | 'event' | 'attraction';
-
-/**
- * Per-vertical typed shapes for `MapPin.meta`. Today only `rental` has
- * a documented shape (used by ChatMap's InfoWindow peek + telemetry);
- * the other categories haven't shipped consumers yet so they keep the
- * loose `Record<string, unknown>` fallback. Adding a new vertical:
- *   1. Define `<Vertical>PinMeta` here.
- *   2. Narrow MapPin.meta in the consumer with `as <Vertical>PinMeta`.
- *   3. Producer (ChatCanvas / future tools) populates the shape.
- */
-export interface RentalPinMeta {
-  source_url?: string | null;
-  neighborhood?: string | null;
-  image?: string | null;
-  rating?: number | null;
-  bedrooms?: number | null;
-  bathrooms?: number | null;
-}
-
-export interface MapPin {
-  id: string;
-  category: MapPinCategory;
-  title: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  /** Short label shown next to the pin (e.g. price). */
-  label?: string;
-  /**
-   * Free-form payload for detail lookups (URL, photo, rating, etc.).
-   * Producers populate per-vertical shapes — see `RentalPinMeta`.
-   * Consumers SHOULD narrow with `as RentalPinMeta` (or future
-   * vertical types) instead of treating the bag as truly unknown.
-   */
-  meta?: Record<string, unknown>;
-}
+// Re-export the types so existing consumers that import { MapPin, ... }
+// from '@/context/MapContext' don't have to change. New consumers should
+// prefer importing from '@/types/map-pin' directly.
+export type { MapPin, MapPinCategory, RentalPinMeta } from '@/types/map-pin';
+export { PIN_CATEGORY_CONFIG } from '@/types/map-pin';
 
 interface MapContextValue {
   pins: MapPin[];
@@ -51,6 +21,10 @@ const MapContext = createContext<MapContextValue | undefined>(undefined);
  * Shares map-pin state between the chat conversation (produces pins on tool
  * response) and the map panel (renders them). Also carries the hover / click
  * highlight used to cross-link cards ↔ pins.
+ *
+ * Types + constants live in `src/types/map-pin.ts` so this file stays
+ * component-only (keeps HMR fast — react-refresh prefers single-export
+ * component files).
  *
  * See: tasks/CHAT-CENTRAL-PLAN.md §3 — Architecture.
  */
@@ -75,6 +49,13 @@ export function MapProvider({ children }: { children: ReactNode }) {
   return <MapContext.Provider value={value}>{children}</MapContext.Provider>;
 }
 
+// react-refresh wants component-only files. `useMapContext` is a hook,
+// not a component, but it's inseparable from the provider above (the
+// internal `MapContext` object would otherwise need to be exported,
+// which leaks an implementation detail). Co-locating provider + hook
+// is the standard React pattern; the HMR cost is negligible (one
+// component-tree refresh on context-file edits).
+// eslint-disable-next-line react-refresh/only-export-components
 export function useMapContext(): MapContextValue {
   const ctx = useContext(MapContext);
   if (!ctx) {
@@ -82,17 +63,3 @@ export function useMapContext(): MapContextValue {
   }
   return ctx;
 }
-
-/**
- * Pin color config — single source of truth for both the map renderer and
- * the card badges. Adding a new category = one row.
- */
-export const PIN_CATEGORY_CONFIG: Record<
-  MapPinCategory,
-  { emoji: string; color: string; label: string }
-> = {
-  rental: { emoji: '🏠', color: '#10b981', label: 'Rental' },
-  restaurant: { emoji: '🍽️', color: '#f59e0b', label: 'Restaurant' },
-  event: { emoji: '🎉', color: '#a855f7', label: 'Event' },
-  attraction: { emoji: '📍', color: '#3b82f6', label: 'Attraction' },
-};

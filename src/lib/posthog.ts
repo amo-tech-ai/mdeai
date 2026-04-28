@@ -60,6 +60,7 @@ export type AppEvent =
   // — Maps —
   | { name: 'pin_click'; pinId: string; viaKeyboard: boolean; newTab: boolean }
   | { name: 'cluster_expand'; clusterSize: number }
+  | { name: 'viewport_idle'; bboxN: number; bboxS: number; bboxE: number; bboxW: number; zoom: number }
   | { name: 'viewport_search'; neighborhood: string }
   | { name: 'map_auth_failed'; error?: string }
   // — Conversion (rentals / booking) —

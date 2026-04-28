@@ -27,7 +27,12 @@ export type MapTelemetryEvent =
   | { kind: 'marker_render_failed'; error: string; pinCount: number }
   | { kind: 'pin_click'; pinId: string; viaKeyboard?: boolean; newTab?: boolean }
   | { kind: 'fitbounds'; pinCount: number }
-  | { kind: 'viewport_idle'; bbox: { n: number; s: number; e: number; w: number } }
+  | {
+      kind: 'viewport_idle';
+      bbox: { n: number; s: number; e: number; w: number };
+      /** Map zoom level at the moment of idle (1–22). */
+      zoom: number;
+    }
   | { kind: 'cluster_expand'; clusterSize: number };
 
 /**
