@@ -1,10 +1,48 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-27 — Marketing homepage at `/` + AI prompt auth handoff + maps stabilization + auto-fire race fix all live on `www.mdeai.co`. **Production readiness 96/100.**
+> **Last updated:** 2026-04-28 — Day 2 / 3 / 4 sprint shipped on `fix/chat-production-hardening` (PR #6). Sentry + PostHog live in prod, mobile fullscreen map drawer + SEO handoff + InfoWindow peek + booking-dialog polish + affiliate attribution + outbound-click logging + audit § 6 (10 surgical cleanups + new Vitest) + **route-level code-splitting (entry chunk 597 KB → 118 KB gzip)** all merged to the branch. **Production readiness 98/100** pending PR #6 merge + post-merge migration push.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+## DONE 2026-04-28 — Day 2 / 3 / 4 sprint + audit § 6 + code-split (PR #6, 7 commits)
+
+### Live on `fix/chat-production-hardening` (awaiting PR #6 merge)
+
+**Day 2 (observability + mobile)**
+- [x] **Sentry + PostHog activated** — env vars in Vercel (production + preview) + `.env.local`. Wiring code shipped earlier; this turned the no-op switches on. Bundle audit confirms `phc_rpJoH...` + Sentry DSN literals baked into prod build.
+- [x] **Mobile fullscreen map drawer** — floating `Map (N)` pill at `bottom-24 right-4` opens a `<Sheet side="bottom">` with the same `<ChatMap />`. MapContext shares pin state. Verified at `375 × 812`; hidden on `md:` and up.
+
+**Day 3 (revenue / SEO loop)**
+- [x] **Affiliate attribution + `outbound_clicks`** — migration `20260427210000_outbound_clicks.sql` (table + RLS + `log_outbound_click` RPC) + `src/lib/affiliate.ts` (Booking/Airbnb/VRBO rewriter, **12 unit tests**) + `src/lib/track-outbound.ts` + wired in RentalCardInline (chat surface) + RentalsListingDetail (detail surface). Closes Week 2 exit-test prereq #5.
+- [x] **SEO → chat handoff** — "Ask mdeai about this →" CTA on `/apartments/:id` composes a listing-grounded prompt + `savePendingPrompt()` + nav to `/chat?send=pending`. Verified end-to-end (button → URL handoff → auto-fire → 9-listing rental_search payload).
+
+**Day 4 (Mindtrip parity)**
+- [x] **InfoWindow peek on pin click** — single InfoWindow instance reused across pins. Peek = photo + title + neighborhood / BR/BA + price/rating + "View details →". Cmd/Ctrl/middle-click + keyboard preserve direct-nav.
+- [x] **Booking dialog polish** — review step shows photo strip (snap-x, up to 4 thumbs + "+N more" link) + 2-col amenity grid with check icons (caps at 8). Both render conditionally. Verified end-to-end on Poblado Penthouse listing.
+
+**Audit § 6 (10 surgical fixes + new Vitest)**
+- [x] All 10 audit-§-6 items closed in commit `a3a4a4c`. Highlights: GoogleMapView selection-mutation went from O(n) to O(2) DOM rewrites per click; id-keyed marker map (parity with ChatMap); typed `RentalPinMeta`; new `google-maps-loader.test.ts` with 4 Vitests covering shim recursion, script src construction, missing-key rejection, `gm_authFailure` handshake.
+
+**Performance — code-splitting (commit `a802093`)**
+- [x] **Entry chunk 597 KB → 118 KB gzip (80% smaller).** 33 routes lazy-loaded behind a Suspense boundary; vendor chunks split into 10 cacheable groups (radix 95 KB / supabase 51 KB / posthog 62 KB / sentry 29 KB / forms 23 KB / gadget 24 KB / dates 18 KB / icons 12 KB / tanstack 12 KB / maps 8 KB gzip). Live-verified: navigating to `/login` triggers 22 new fetches that were NOT in the initial 70-fetch batch.
+
+### Verification (this sprint)
+- [x] `npm run lint` — 0 errors on changed files
+- [x] `npm run build` — 3.95 s, **51 chunks emitted** (was 1)
+- [x] `npm run test` — **44 / 44** across 7 files (was 28 / 28 across 5 — added 12 affiliate tests + 4 google-maps-loader tests)
+- [x] `npm run verify:edge` — deno check + 11 / 11 deno tests pass (the "broken" status in todo was stale; now confirmed green)
+- [x] Browser smoke (Claude Preview MCP): mobile drawer + desktop layout + observability init + affiliate rewriter + booking review step + lazy chunk fetch — all verified live
+
+### Post-merge actions (queued for after PR #6 lands)
+- [ ] `supabase db push` — deploys `outbound_clicks` migration to hosted
+- [ ] `supabase gen types typescript --linked` — refreshes `database.types.ts` so `track-outbound.ts` can drop its local rpc cast
+- [ ] (Optional, when partner accounts go live) Add `VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG` to Vercel + `.env.local`. Until then, clicks log with `affiliate_tag = NULL` — useful baseline for "we'd have earned X% on Y clicks" analysis
+- [ ] Confirm a real PostHog event arrives in `app.posthog.com` Live Events after a hero-prompt submit on www.mdeai.co
+- [ ] Confirm a synthetic Sentry error captures (e.g. force `script_load_failed` map telemetry)
+
+---
 
 ## DONE 2026-04-27 — Marketing homepage + auth handoff + maps stabilization (PRs #2, #3, #4 to main)
 
@@ -34,10 +72,10 @@
 
 ## NEXT — Recommended sprint (ranked by Revenue / Growth / UX / Tech / Speed)
 
-### Day 2 — Observability + Mobile (highest leverage)
+### Day 2 — Observability + Mobile (highest leverage) — **all 3 shipped**
 - [x] **Wire Sentry SDK** — DSN in `.env.local` + Vercel (prod + preview). `initSentry()` activates, replaces maps-telemetry sink with Sentry breadcrumb + captureException sink for `*_failed` events. Build verified: 8 sentry refs in prod bundle.
 - [x] **Wire PostHog** — `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST` in `.env.local` + Vercel. `initPostHog()` activates, typed `AppEvent` union, 6 call sites already emit (`prompt_send`, `prompt_autofired`, `viewport_search`, `pin_click`, `cluster_expand`, `booking_submitted`). Stale `VITE_PUBLIC_POSTHOG_*` deleted from Vercel.
-- [ ] **Mobile fullscreen map drawer** — currently no map on `md:hidden`. Add a "🗺️ Map" floating button that opens a `<Sheet>` drawer. Mobile is most of LATAM. **R 4 / G 5 / U 5 / T 3 / S 4 = 21**.
+- [x] **Mobile fullscreen map drawer** — **shipped 2026-04-28**. Floating `Map (N)` pill at `bottom-24 right-4` opens a `<Sheet side="bottom">` with `<ChatMap />` inside. MapContext shares pin state automatically. Verified at `375 × 812`; correctly hidden on `md:` and up.
 
 ### Day 3 — Conversion improvements
 - [x] **Affiliate attribution + `outbound_clicks` migration** — **shipped 2026-04-27 late evening**. Migration `20260427210000_outbound_clicks.sql` (table + RLS + `log_outbound_click` RPC), `src/lib/affiliate.ts` (Booking/Airbnb/VRBO rewriter, 12 unit tests), `src/lib/track-outbound.ts` (RPC + PostHog event), wired in `RentalCardInline` (chat surface = `chat_card`) + `RentalsListingDetail` (surface = `detail_page`). Env tags optional (`VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG`); clicks log with `affiliate_tag = NULL` until partner IDs are configured. **Closes Week 2 exit-test prerequisite #5.**
@@ -48,10 +86,10 @@
 - [x] **Booking dialog polish** — **shipped 2026-04-28**. Review step now shows a horizontal photo strip (snap-x, up to 4 thumbnails + "+N more" link) and a 2-col amenity grid with check icons (caps at 8, "+N more →" if exceeded). Both render conditionally so listings without photos/amenities don't get empty placeholders. Verified end-to-end on `/apartments/30000000...0001` (Poblado Penthouse) → screenshot confirms PHOTOS + WHAT'S INCLUDED sections render correctly above the dates/pricing rows.
 
 ### Tech-debt cleanup (anytime, low priority)
-- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView. (audit § 6)
+- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView. (audit § 6) **PARTIALLY UNBLOCKED:** GoogleMapView refactor in audit-§-6 made the patterns symmetric; extraction is now mostly mechanical.
 - [ ] **Custom Cloud Console MapID** — Mindtrip-style muted palette. Pure visual polish. (audit § 90-day)
 - [x] **Code-split + lazy-load** map / detail pages — **shipped 2026-04-28 late-night**. Entry chunk 597 KB → **118 KB gzip** (80% smaller). 33 routes lazy-loaded behind a Suspense boundary; vendor chunks split into 10 cacheable tier-2/tier-3 groups (radix, supabase, posthog, sentry, forms, dates, icons, tanstack, maps, gadget). Live-verified: navigating to `/login` triggers 22 new fetches (including `src/pages/Login.tsx`) that were NOT in the initial 70-fetch batch.
-- [ ] **Fix `npm run verify:edge`** — wire `deno install` in the script so the CI gate works.
+- [x] ~~**Fix `npm run verify:edge`**~~ — **resolved 2026-04-28**. `npm run verify:edge` runs deno check + 11 / 11 deno tests pass. The blocker self-resolved after deno cached `@supabase/supabase-js` on first run.
 - [ ] **Tighten `Conversation.user_id` type** — currently `string`; pin to `uuid | 'anon'`.
 
 ## Code-quality cleanup (audit § 6) — **all 10 shipped 2026-04-28 night**
@@ -92,11 +130,11 @@ Items not yet in the Day 2/3/4 sprint but still on the 30-day plan.
 - [ ] **A/B framework via PostHog** — depends on PostHog wiring (Day 2). Run experiments on map UX changes.
 - [ ] **Service-worker cache for Maps tile layer** — LATAM 4G first-paint perf.
 
-## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`)
+## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`) — **all 5 prerequisites shipped**
 
-- [ ] Logged-in user searches rentals → saves 2 listings (`saved_places` rows exist) → adds 1 to a new trip (`trip_items` row exists) → clicks outbound to Airbnb → click logged to `outbound_clicks` with affiliate tag.
+- [ ] **Run end-to-end on prod** (post-merge): logged-in user searches rentals → saves 2 listings (`saved_places` rows exist) → adds 1 to a new trip (`trip_items` row exists) → clicks outbound to Airbnb → click logged to `outbound_clicks` with affiliate tag.
 
-**3 of 5 prerequisites done** (chat works, Save + Add-to-trip + social proof shipped). Need affiliate attribution (Day 3) to complete this exit test.
+**5 of 5 prerequisites done** ✓ chat ✓ Save ✓ Add-to-trip ✓ social proof ✓ affiliate attribution + outbound-click logging. The only remaining step is the live end-to-end run after PR #6 merges + `supabase db push` deploys the migration.
 
 ---
 

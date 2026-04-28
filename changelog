@@ -1,5 +1,33 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 — sprint rollup (PR #6, 7 commits since main)
+
+The Day 2 / 3 / 4 sprint plus audit § 6 plus a code-splitting pass all landed on `fix/chat-production-hardening` over 24 hours. Production readiness moves from **96 → 98** pending PR #6 merge + post-merge migration push.
+
+**What shipped (in commit order — see entries below for details):**
+| # | Commit | Scope |
+|---|---|---|
+| 1 | `f419848` | PostHog wiring (was on branch unmerged) |
+| 2 | `8ce589a` | Mobile fullscreen map drawer + observability env activation |
+| 3 | `cea3972` | Outbound click tracking + Airbnb / Booking / VRBO rewriter (12 unit tests) |
+| 4 | `bae4aba` | SEO → chat handoff + InfoWindow peek on pin click |
+| 5 | `78a6258` | Booking dialog polish (photo strip + amenity grid) + verify:edge confirmed green |
+| 6 | `a3a4a4c` | Audit § 6 — 10 surgical map cleanups + new `google-maps-loader.test.ts` (4 Vitests) |
+| 7 | `a802093` | Code-split + lazy routes — 597 KB → 118 KB gzip first-paint (80% smaller) |
+
+**Aggregate test deltas:**
+| | Before sprint | After sprint |
+|---|---|---|
+| Unit tests | 28 / 28 (5 files) | **44 / 44** (7 files) |
+| Entry bundle gzip | 597 KB | **118 KB** |
+| Total chunks emitted | 1 | **51** |
+| Build time | 4.21 s | 3.95 s |
+| `verify:edge` | broken (stale note) | **11 / 11 deno tests pass** |
+
+**Status of Week 2 exit-test prerequisites (`tasks/CHAT-CENTRAL-PLAN.md` §5):** all **5 / 5 done** — chat / Save / Add-to-trip / social proof / affiliate attribution. Remaining: live end-to-end run after PR #6 merge + `supabase db push`.
+
+---
+
 ## 2026-04-28 late-night (Code-splitting + route-level lazy loading — 80% smaller initial bundle)
 
 Closes the **"Code-split + lazy-load map / detail pages"** tech-debt item. Anonymous landing on `/` now ships **118 KB gzip** instead of **597 KB gzip** — the LATAM 4G first-paint hit is gone.
