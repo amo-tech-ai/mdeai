@@ -1,5 +1,26 @@
 # Changelog — mdeai.co
 
+## 2026-04-27 evening (Observability live: Sentry + PostHog wired)
+
+**Closes the "prod is blind" gap from `tasks/todo.md`.** SDKs were installed and the wiring code already existed in `src/lib/sentry.ts`, `src/lib/posthog.ts`, and `src/main.tsx` — both inits silently no-op when their env vars are empty. Today we added the env vars; that flips both on.
+
+**`.env.local`:**
+- Added `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` (names match what `import.meta.env` reads — *not* the `VITE_PUBLIC_*` Next.js convention; rule documented in `.claude/rules/env-management.md`).
+- Removed duplicate `VITE_GOOGLE_MAPS_API_KEY` line (line 27 had a copy of line 25 with a trailing space).
+
+**Vercel (production + preview targets):**
+- Pushed all three vars via REST API (`POST /v10/projects/$ID/env?upsert=true`). HTTP 201 each.
+- Deleted stale `VITE_PUBLIC_POSTHOG_KEY` + `VITE_PUBLIC_POSTHOG_HOST` (created earlier with the wrong-name convention, would never be read by code).
+
+**Verified:**
+- `npm run build` ✓ 4.27 s.
+- Bundle scan of `dist/assets/index-DzfVi9P5.js` (2.1 MB): `phc_rpJoHQUZ5...` literal present, `o4510109062070273.ingest.us.sentry.io` literal present, 3 posthog SDK refs, 8 sentry SDK refs.
+- `vercel/v9/projects/$ID/env` lists exactly the three correct keys, no `VITE_PUBLIC_*` leftovers.
+
+**What this unlocks:** every `setMapTelemetrySink` event now becomes a Sentry breadcrumb on errors; every `*_failed` map event becomes a Sentry issue with `tags: { component: 'maps', kind: ... }`; PostHog already has 6 typed event call sites firing (`prompt_send`, `prompt_autofired`, `viewport_search`, `pin_click`, `cluster_expand`, `booking_submitted`). Local dev fires immediately; next Vercel deploy goes live in prod.
+
+---
+
 ## 2026-04-27 (Production: marketing homepage + AI prompt auth handoff + bug fix)
 
 Shipped to **`www.mdeai.co`** via three merges to `main` today:

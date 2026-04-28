@@ -25,7 +25,7 @@
 - [x] End-to-end smoke from `Origin: https://www.mdeai.co` → 200 OK, streaming SSE, phase events
 
 ### Known gaps (informed roadmap, not bugs)
-- [ ] **No Sentry / PostHog sink** — telemetry events fire but go to console only. The seam exists (`setMapTelemetrySink`); needs real sink + DSN.
+- [x] ~~**No Sentry / PostHog sink**~~ — **wired 2026-04-27 evening**. `VITE_SENTRY_DSN` + `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST` set in `.env.local` and Vercel (production + preview). Maps telemetry sink forwards every event to Sentry breadcrumbs + captures `*_failed` as Sentry issues + forwards conversion events (`pin_click`, `cluster_expand`, `map_auth_failed`) to PostHog. Bundle audit: `phc_rpJoH...` and `o4510109062...ingest` literals baked into `dist/assets/index-*.js`.
 - [ ] **`viewport_idle` event TYPED but not emitted yet** — wired into the "Search this area" feature; emit site lives in ChatMap idle listener (already shipped).
 - [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
 - [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
@@ -35,8 +35,8 @@
 ## NEXT — Recommended sprint (ranked by Revenue / Growth / UX / Tech / Speed)
 
 ### Day 2 — Observability + Mobile (highest leverage)
-- [ ] **Wire Sentry SDK** — install, set DSN, replace default telemetry sink at app boot. **R 4 / G 5 / U 1 / T 5 / S 4 = 19**. Without this, prod is blind to map / chat / booking errors.
-- [ ] **Wire PostHog** — same seam, capture conversion events (`pin_click`, `booking_submit`, `inquiry_sent`, `prompt_send`). **Drives the conversion funnel dashboard.**
+- [x] **Wire Sentry SDK** — DSN in `.env.local` + Vercel (prod + preview). `initSentry()` activates, replaces maps-telemetry sink with Sentry breadcrumb + captureException sink for `*_failed` events. Build verified: 8 sentry refs in prod bundle.
+- [x] **Wire PostHog** — `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST` in `.env.local` + Vercel. `initPostHog()` activates, typed `AppEvent` union, 6 call sites already emit (`prompt_send`, `prompt_autofired`, `viewport_search`, `pin_click`, `cluster_expand`, `booking_submitted`). Stale `VITE_PUBLIC_POSTHOG_*` deleted from Vercel.
 - [ ] **Mobile fullscreen map drawer** — currently no map on `md:hidden`. Add a "🗺️ Map" floating button that opens a `<Sheet>` drawer. Mobile is most of LATAM. **R 4 / G 5 / U 5 / T 3 / S 4 = 21**.
 
 ### Day 3 — Conversion improvements

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, DollarSign, Heart, MapPin, Calendar } from 'lucide-react';
+import { Sparkles, DollarSign, Heart, MapPin, Calendar, Map as MapIcon } from 'lucide-react';
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
 import { ChatMap, type ViewportSearchPayload } from './ChatMap';
@@ -14,6 +14,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAnonSession } from '@/hooks/useAnonSession';
 import type { ChatTab } from '@/types/chat';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import {
   clearPendingPrompt,
   getPendingPrompt,
@@ -126,9 +134,14 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   // an OAuth round-trip. Calling useAnonSession here is idempotent
   // (sessionStorage is the source of truth).
   const { anonSessionId } = useAnonSession();
-  const { setPins, clearPins } = useMapContext();
+  const { pins, setPins, clearPins } = useMapContext();
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [emailGateRetry, setEmailGateRetry] = useState<number | undefined>(undefined);
+  // Mobile-only: controls the fullscreen map Sheet. Ref-counted so we can
+  // close it programmatically (e.g. after the user fires a "Search this
+  // area" search from inside the drawer — feels weird if the map stays
+  // open while the chat is updating behind it).
+  const [mobileMapOpen, setMobileMapOpen] = useState(false);
 
   const {
     messages,
@@ -356,7 +369,12 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
         </main>
       </div>
 
-      {/* Mobile: single column, chat only (map toggle is a follow-up) */}
+      {/* Mobile: single column with floating map drawer.
+          The desktop right-rail map is hidden here (no room); instead we
+          show a "🗺️ Map (N)" pill above the input that opens a Sheet
+          containing the same <ChatMap />. MapContext wraps the whole tree
+          so pin state is shared automatically — the Sheet is just a
+          different rendering surface for the same map. */}
       <div className="md:hidden flex flex-col min-h-screen pb-20">
         <main className="flex-1 flex flex-col min-w-0">
           <ChatContextChips value={chatContext} onChange={updateChatContext} />
@@ -386,6 +404,57 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
             />
           </div>
         </main>
+
+        {/* Floating "Map" pill — sits above MobileNav (pb-20) and the chat
+            input. Only renders when there are pins to show OR the user is
+            in a conversation (so the empty WelcomeState stays clean). */}
+        <Sheet open={mobileMapOpen} onOpenChange={setMobileMapOpen}>
+          <SheetTrigger asChild>
+            <Button
+              size="sm"
+              className="fixed bottom-24 right-4 z-40 h-11 gap-2 rounded-full px-4 shadow-lg"
+              aria-label={
+                pins.length > 0
+                  ? `Show map with ${pins.length} ${pins.length === 1 ? 'pin' : 'pins'}`
+                  : 'Show map'
+              }
+            >
+              <MapIcon className="h-4 w-4" aria-hidden="true" />
+              <span>Map</span>
+              {pins.length > 0 && (
+                <span className="ml-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-xs leading-none">
+                  {pins.length}
+                </span>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent
+            side="bottom"
+            className="flex h-[100dvh] flex-col p-0 gap-0"
+          >
+            <SheetHeader className="border-b border-border px-4 py-3 text-left">
+              <SheetTitle className="text-base">Map</SheetTitle>
+              <SheetDescription className="text-xs">
+                {pins.length > 0
+                  ? `${pins.length} ${pins.length === 1 ? 'place' : 'places'} from your conversation`
+                  : 'Pins appear as the AI finds places'}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1">
+              <ChatMap
+                onViewportSearch={(payload) => {
+                  // Close the drawer first — otherwise the chat updates
+                  // behind a still-open Sheet which feels odd. The
+                  // sendMessage call inside handleViewportSearch will
+                  // populate fresh pins; user can re-open to see them.
+                  setMobileMapOpen(false);
+                  handleViewportSearch(payload);
+                }}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+
         <MobileNav />
       </div>
 
