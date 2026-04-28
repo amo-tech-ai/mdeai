@@ -3,6 +3,7 @@ import {
   setMapTelemetrySink,
   type MapTelemetryEvent,
 } from '@/lib/maps-telemetry';
+import { trackEvent } from '@/lib/posthog';
 
 /**
  * Sentry browser SDK init + wiring.
@@ -88,6 +89,22 @@ function mapEventToSentry(event: MapTelemetryEvent): void {
       tags: { component: 'maps', kind: event.kind },
       extra: stripKind(event),
     });
+  }
+
+  // Also forward conversion-relevant maps events to PostHog. Sentry is
+  // for error monitoring; PostHog is for product analytics. They want
+  // different shapes — translate the ones that matter for the funnel.
+  if (event.kind === 'pin_click') {
+    trackEvent({
+      name: 'pin_click',
+      pinId: event.pinId,
+      viaKeyboard: !!event.viaKeyboard,
+      newTab: !!event.newTab,
+    });
+  } else if (event.kind === 'cluster_expand') {
+    trackEvent({ name: 'cluster_expand', clusterSize: event.clusterSize });
+  } else if (event.kind === 'auth_failed') {
+    trackEvent({ name: 'map_auth_failed', error: event.error });
   }
 }
 

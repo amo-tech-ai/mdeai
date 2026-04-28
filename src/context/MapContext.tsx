@@ -2,6 +2,24 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 
 export type MapPinCategory = 'rental' | 'restaurant' | 'event' | 'attraction';
 
+/**
+ * Per-vertical typed shapes for `MapPin.meta`. Today only `rental` has
+ * a documented shape (used by ChatMap's InfoWindow peek + telemetry);
+ * the other categories haven't shipped consumers yet so they keep the
+ * loose `Record<string, unknown>` fallback. Adding a new vertical:
+ *   1. Define `<Vertical>PinMeta` here.
+ *   2. Narrow MapPin.meta in the consumer with `as <Vertical>PinMeta`.
+ *   3. Producer (ChatCanvas / future tools) populates the shape.
+ */
+export interface RentalPinMeta {
+  source_url?: string | null;
+  neighborhood?: string | null;
+  image?: string | null;
+  rating?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+}
+
 export interface MapPin {
   id: string;
   category: MapPinCategory;
@@ -10,7 +28,12 @@ export interface MapPin {
   longitude?: number | null;
   /** Short label shown next to the pin (e.g. price). */
   label?: string;
-  /** Free-form payload for detail lookups (URL, price, etc). */
+  /**
+   * Free-form payload for detail lookups (URL, photo, rating, etc.).
+   * Producers populate per-vertical shapes — see `RentalPinMeta`.
+   * Consumers SHOULD narrow with `as RentalPinMeta` (or future
+   * vertical types) instead of treating the bag as truly unknown.
+   */
   meta?: Record<string, unknown>;
 }
 

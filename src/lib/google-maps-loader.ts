@@ -18,15 +18,21 @@
  *
  * Use it like this (callers should NOT inject their own <script>):
  *
- *   const { Map } = await loadGoogleMapsLibrary('maps', apiKey);
- *   const { AdvancedMarkerElement } = await loadGoogleMapsLibrary('marker', apiKey);
+ *   // Each call returns the WHOLE library object — destructure the
+ *   // constructors you need:
+ *   const { Map, LatLngBounds } = await loadGoogleMapsLibrary<google.maps.MapsLibrary>(
+ *     'maps',
+ *     apiKey,
+ *   );
+ *   const { AdvancedMarkerElement } = await loadGoogleMapsLibrary<google.maps.MarkerLibrary>(
+ *     'marker',
+ *     apiKey,
+ *   );
  *
  *   if (isMapsAuthFailed()) { … render fallback … }
  */
 
 const SCRIPT_ID = 'google-maps-script';
-const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-void UUID_RE; // (kept for future referrer-test parity; unused at runtime)
 
 declare global {
   interface Window {
@@ -71,7 +77,13 @@ function getState(): MapsLoaderState {
   return window.__mdeaiMapsLoader;
 }
 
-function installAuthFailureHandler(): void {
+/**
+ * Private — only invoked from `installBootstrap`. Registers the
+ * `gm_authFailure` global so React state can flip to the fallback UI
+ * without crashing inside the Maps internals. Underscore-prefixed to
+ * signal "module-internal, do not export".
+ */
+function _installAuthFailureHandler(): void {
   if (typeof window === 'undefined') return;
   if (window.gm_authFailure) return;
   window.gm_authFailure = () => {
@@ -120,7 +132,7 @@ export function onMapsAuthFailed(cb: () => void): () => void {
  */
 function installBootstrap(apiKey: string): void {
   if (typeof window === 'undefined') return;
-  installAuthFailureHandler();
+  _installAuthFailureHandler();
 
   const state = getState();
   if (state.apiKey && state.apiKey !== apiKey) {

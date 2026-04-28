@@ -1,3 +1,5 @@
+import { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,54 +11,79 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { TripProvider } from "@/context/TripContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
+
+// EAGER imports — only the routes most likely to load on first paint:
+//   • Home    — every anonymous landing hits this.
+//   • NotFound — catch-all needs to be available even when chunks fail.
+// Everything else lazy-loads behind a Suspense boundary so the entry
+// chunk stays small. See vite.config.ts for the vendor split.
 import Home from "./pages/Home";
-import Index from "./pages/Index";
-import { ChatCanvas } from "@/components/chat/ChatCanvas";
-import Dashboard from "./pages/Dashboard";
-import Onboarding from "./pages/Onboarding";
-import Explore from "./pages/Explore";
-import Apartments from "./pages/Apartments";
-import ApartmentDetail from "./pages/ApartmentDetail";
-import Rentals from "./pages/Rentals";
-import Coffee from "./pages/Coffee";
-import CoffeeDetail from "./pages/CoffeeDetail";
-import Cars from "./pages/Cars";
-import CarDetail from "./pages/CarDetail";
-import Restaurants from "./pages/Restaurants";
-import RestaurantDetail from "./pages/RestaurantDetail";
-import Events from "./pages/Events";
-import EventDetail from "./pages/EventDetail";
-import PlaceDetail from "./pages/PlaceDetail";
-import Saved from "./pages/Saved";
-import Collections from "./pages/Collections";
-import Trips from "./pages/Trips";
-import TripDetail from "./pages/TripDetail";
-import TripNew from "./pages/TripNew";
-import Bookings from "./pages/Bookings";
-import Concierge from "./pages/Concierge";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
-import Sitemap from "./pages/Sitemap";
-// Marketing pages
-import HowItWorks from "./pages/HowItWorks";
-import Pricing from "./pages/Pricing";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
-import Notifications from "./pages/Notifications";
-// Admin pages
-import {
-  AdminDashboard,
-  AdminApartments,
-  AdminRestaurants,
-  AdminEvents,
-  AdminCars,
-  AdminUsers,
-} from "./pages/admin";
+
+// LAZY routes — React.lazy creates a separate chunk per import, named
+// after the source file (e.g. `ApartmentDetail-<hash>.js`). Default-
+// export pages can use the simple form; named exports need the
+// `.then(m => ({ default: m.X }))` shim.
+const ChatCanvas = lazy(() =>
+  import("@/components/chat/ChatCanvas").then((m) => ({ default: m.ChatCanvas })),
+);
+const Index = lazy(() => import("./pages/Index"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Explore = lazy(() => import("./pages/Explore"));
+const Apartments = lazy(() => import("./pages/Apartments"));
+const ApartmentDetail = lazy(() => import("./pages/ApartmentDetail"));
+const Rentals = lazy(() => import("./pages/Rentals"));
+const Coffee = lazy(() => import("./pages/Coffee"));
+const CoffeeDetail = lazy(() => import("./pages/CoffeeDetail"));
+const Cars = lazy(() => import("./pages/Cars"));
+const CarDetail = lazy(() => import("./pages/CarDetail"));
+const Restaurants = lazy(() => import("./pages/Restaurants"));
+const RestaurantDetail = lazy(() => import("./pages/RestaurantDetail"));
+const Events = lazy(() => import("./pages/Events"));
+const EventDetail = lazy(() => import("./pages/EventDetail"));
+const PlaceDetail = lazy(() => import("./pages/PlaceDetail"));
+const Saved = lazy(() => import("./pages/Saved"));
+const Collections = lazy(() => import("./pages/Collections"));
+const Trips = lazy(() => import("./pages/Trips"));
+const TripDetail = lazy(() => import("./pages/TripDetail"));
+const TripNew = lazy(() => import("./pages/TripNew"));
+const Bookings = lazy(() => import("./pages/Bookings"));
+const Concierge = lazy(() => import("./pages/Concierge"));
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Sitemap = lazy(() => import("./pages/Sitemap"));
+const HowItWorks = lazy(() => import("./pages/HowItWorks"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+// Admin pages — default exports per file, lazy-loaded individually so
+// the admin bundle only ships when an admin actually navigates here.
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminApartments = lazy(() => import("./pages/admin/AdminApartments"));
+const AdminRestaurants = lazy(() => import("./pages/admin/AdminRestaurants"));
+const AdminEvents = lazy(() => import("./pages/admin/AdminEvents"));
+const AdminCars = lazy(() => import("./pages/admin/AdminCars"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 
 const queryClient = new QueryClient();
+
+/**
+ * Full-screen Suspense fallback. Intentionally minimal — most lazy
+ * chunks resolve in <300 ms on a warm cache, so a heavy skeleton would
+ * cause more layout shift than the spinner. The container has the
+ * background class so cold-load doesn't flash white.
+ */
+function RouteFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" aria-label="Loading" />
+    </div>
+  );
+}
 
 /**
  * Render the FloatingChatWidget on every route EXCEPT the chat-canvas pages.
@@ -78,6 +105,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <TripProvider>
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Public marketing homepage — logged-in users get
                 <Navigate to="/chat" replace /> inside <Home>. */}
@@ -183,6 +211,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
             {/* Floating widget only on non-chat routes; the canvas at `/` IS the chat. */}
             <ConditionalFloatingChat />
           </TripProvider>

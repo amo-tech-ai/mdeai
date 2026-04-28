@@ -1,6 +1,6 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { ArrowLeft, MapPin, Bed, Bath, Wifi, Star, Heart, Share2, Calendar, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Bed, Bath, Wifi, Star, Heart, Share2, Calendar, CheckCircle, XCircle, Sparkles } from "lucide-react";
 import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,16 +14,20 @@ import { BookingDialog } from "@/components/apartments/BookingDialog";
 import { ContactHostDialog } from "@/components/apartments/ContactHostDialog";
 import type { Apartment } from "@/types/listings";
 import { cn } from "@/lib/utils";
+import { savePendingPrompt } from "@/lib/pending-prompt";
+import { trackEvent } from "@/lib/posthog";
 
 // Right panel content for apartment detail
 function ApartmentDetailRightPanel({
   apartment,
   onCheckAvailability,
   onContactHost,
+  onAskMdeai,
 }: {
   apartment: Apartment;
   onCheckAvailability: () => void;
   onContactHost: () => void;
+  onAskMdeai: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -55,6 +59,17 @@ function ApartmentDetailRightPanel({
           </Button>
           <Button variant="outline" className="w-full" onClick={onContactHost}>
             Contact Host
+          </Button>
+          {/* SEO acquisition loop — bring search-traffic users into the
+              chat-first experience without losing the listing context.
+              The pending-prompt is auto-fired post-auth (anon: directly). */}
+          <Button
+            variant="ghost"
+            className="w-full text-primary hover:text-primary"
+            onClick={onAskMdeai}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Ask mdeai about this →
           </Button>
         </CardContent>
       </Card>
@@ -118,8 +133,32 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
   user: ReturnType<typeof useAuth>["user"];
 }) {
   const { setRightPanelContent } = useThreePanelContext();
+  const navigate = useNavigate();
   const [bookingOpen, setBookingOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+
+  // SEO → chat handoff. Save a contextual prompt to sessionStorage and
+  // route to /chat?send=pending; ChatCanvas auto-fires it (anon) or
+  // through Supabase auth (signed-in). The prompt names the listing so
+  // Gemini's first turn is grounded in the specific apartment, not a
+  // cold open.
+  const askMdeai = () => {
+    if (!apartment) return;
+    const where = [apartment.neighborhood, apartment.city]
+      .filter(Boolean)
+      .join(", ");
+    const prompt = where
+      ? `I'm looking at "${apartment.title}" in ${where}. Tell me about this place and similar options.`
+      : `I'm looking at "${apartment.title}". Tell me about this place and similar options.`;
+    savePendingPrompt(prompt);
+    trackEvent({
+      name: "prompt_send",
+      source: "chat_input",
+      promptLength: prompt.length,
+      authed: !!user,
+    });
+    navigate("/chat?send=pending");
+  };
 
   useEffect(() => {
     if (apartment) {
@@ -128,10 +167,15 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
           apartment={apartment}
           onCheckAvailability={() => setBookingOpen(true)}
           onContactHost={() => setContactOpen(true)}
+          onAskMdeai={askMdeai}
         />,
       );
     }
     return () => setRightPanelContent(null);
+    // askMdeai depends on apartment + navigate + user; the apartment dep
+    // here re-builds the panel when the listing changes (which is the
+    // only case the closure can become stale for the user's purpose).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apartment, setRightPanelContent]);
 
   const mainImage = apartment.images?.[0] || "/placeholder.svg";

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsSaved, useToggleSave } from "@/hooks/useSavedPlaces";
+import { trackOutboundClick } from "@/lib/track-outbound";
 import type { Apartment } from "@/types/listings";
 
 interface RentalsListingDetailProps {
@@ -51,7 +52,7 @@ export function RentalsListingDetail({ listingId, initialData, onClose }: Rental
         const token = sessionData?.session?.access_token;
 
         const response = await fetch(
-          "https://zkwcbyxiwklihegjhuql.supabase.co/functions/v1/rentals",
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rentals`,
           {
             method: "POST",
             headers: {
@@ -91,7 +92,7 @@ export function RentalsListingDetail({ listingId, initialData, onClose }: Rental
       const token = sessionData?.session?.access_token;
 
       const response = await fetch(
-        "https://zkwcbyxiwklihegjhuql.supabase.co/functions/v1/rentals",
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rentals`,
         {
           method: "POST",
           headers: {
@@ -339,11 +340,21 @@ export function RentalsListingDetail({ listingId, initialData, onClose }: Rental
         </Button>
 
         {listing.source_url && (
-          <Button asChild variant="ghost" className="w-full">
-            <a href={listing.source_url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="w-4 h-4 mr-2" />
-              View Original Listing
-            </a>
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={(e) => {
+              e.preventDefault();
+              if (!listing.source_url) return;
+              trackOutboundClick({
+                listingId: listing.id,
+                sourceUrl: listing.source_url,
+                surface: "detail_page",
+              });
+            }}
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            View Original Listing
           </Button>
         )}
       </div>

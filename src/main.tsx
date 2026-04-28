@@ -2,11 +2,16 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { initSentry, SentryErrorBoundary } from "@/lib/sentry";
+import { initPostHog } from "@/lib/posthog";
 
-// Initialize Sentry FIRST — before React mounts. Idempotent + silent
-// if VITE_SENTRY_DSN isn't set (so dev builds don't spam Sentry).
-// Also rebinds the maps-telemetry sink so every map event flows as a
-// Sentry breadcrumb + every map *_failed event becomes a captured issue.
+// Initialize observability FIRST — before React mounts so we catch
+// early-mount errors. Both calls are idempotent and silent when their
+// env vars are empty (so dev/preview builds don't spam telemetry).
+//
+// Order matters: initPostHog before initSentry. The Sentry init replaces
+// the maps-telemetry sink with one that forwards to BOTH Sentry AND
+// PostHog — so PostHog must already be ready to receive forwards.
+initPostHog();
 initSentry();
 
 createRoot(document.getElementById("root")!).render(

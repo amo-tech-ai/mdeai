@@ -1,10 +1,48 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-27 — Marketing homepage at `/` + AI prompt auth handoff + maps stabilization + auto-fire race fix all live on `www.mdeai.co`. **Production readiness 96/100.**
+> **Last updated:** 2026-04-28 — Day 2 / 3 / 4 sprint shipped on `fix/chat-production-hardening` (PR #6). Sentry + PostHog live in prod, mobile fullscreen map drawer + SEO handoff + InfoWindow peek + booking-dialog polish + affiliate attribution + outbound-click logging + audit § 6 (10 surgical cleanups + new Vitest) + **route-level code-splitting (entry chunk 597 KB → 118 KB gzip)** all merged to the branch. **Production readiness 98/100** pending PR #6 merge + post-merge migration push.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+## DONE 2026-04-28 — Day 2 / 3 / 4 sprint + audit § 6 + code-split (PR #6, 7 commits)
+
+### Live on `fix/chat-production-hardening` (awaiting PR #6 merge)
+
+**Day 2 (observability + mobile)**
+- [x] **Sentry + PostHog activated** — env vars in Vercel (production + preview) + `.env.local`. Wiring code shipped earlier; this turned the no-op switches on. Bundle audit confirms `phc_rpJoH...` + Sentry DSN literals baked into prod build.
+- [x] **Mobile fullscreen map drawer** — floating `Map (N)` pill at `bottom-24 right-4` opens a `<Sheet side="bottom">` with the same `<ChatMap />`. MapContext shares pin state. Verified at `375 × 812`; hidden on `md:` and up.
+
+**Day 3 (revenue / SEO loop)**
+- [x] **Affiliate attribution + `outbound_clicks`** — migration `20260427210000_outbound_clicks.sql` (table + RLS + `log_outbound_click` RPC) + `src/lib/affiliate.ts` (Booking/Airbnb/VRBO rewriter, **12 unit tests**) + `src/lib/track-outbound.ts` + wired in RentalCardInline (chat surface) + RentalsListingDetail (detail surface). Closes Week 2 exit-test prereq #5.
+- [x] **SEO → chat handoff** — "Ask mdeai about this →" CTA on `/apartments/:id` composes a listing-grounded prompt + `savePendingPrompt()` + nav to `/chat?send=pending`. Verified end-to-end (button → URL handoff → auto-fire → 9-listing rental_search payload).
+
+**Day 4 (Mindtrip parity)**
+- [x] **InfoWindow peek on pin click** — single InfoWindow instance reused across pins. Peek = photo + title + neighborhood / BR/BA + price/rating + "View details →". Cmd/Ctrl/middle-click + keyboard preserve direct-nav.
+- [x] **Booking dialog polish** — review step shows photo strip (snap-x, up to 4 thumbs + "+N more" link) + 2-col amenity grid with check icons (caps at 8). Both render conditionally. Verified end-to-end on Poblado Penthouse listing.
+
+**Audit § 6 (10 surgical fixes + new Vitest)**
+- [x] All 10 audit-§-6 items closed in commit `a3a4a4c`. Highlights: GoogleMapView selection-mutation went from O(n) to O(2) DOM rewrites per click; id-keyed marker map (parity with ChatMap); typed `RentalPinMeta`; new `google-maps-loader.test.ts` with 4 Vitests covering shim recursion, script src construction, missing-key rejection, `gm_authFailure` handshake.
+
+**Performance — code-splitting (commit `a802093`)**
+- [x] **Entry chunk 597 KB → 118 KB gzip (80% smaller).** 33 routes lazy-loaded behind a Suspense boundary; vendor chunks split into 10 cacheable groups (radix 95 KB / supabase 51 KB / posthog 62 KB / sentry 29 KB / forms 23 KB / gadget 24 KB / dates 18 KB / icons 12 KB / tanstack 12 KB / maps 8 KB gzip). Live-verified: navigating to `/login` triggers 22 new fetches that were NOT in the initial 70-fetch batch.
+
+### Verification (this sprint)
+- [x] `npm run lint` — 0 errors on changed files
+- [x] `npm run build` — 3.95 s, **51 chunks emitted** (was 1)
+- [x] `npm run test` — **44 / 44** across 7 files (was 28 / 28 across 5 — added 12 affiliate tests + 4 google-maps-loader tests)
+- [x] `npm run verify:edge` — deno check + 11 / 11 deno tests pass (the "broken" status in todo was stale; now confirmed green)
+- [x] Browser smoke (Claude Preview MCP): mobile drawer + desktop layout + observability init + affiliate rewriter + booking review step + lazy chunk fetch — all verified live
+
+### Post-merge actions (queued for after PR #6 lands)
+- [ ] `supabase db push` — deploys `outbound_clicks` migration to hosted
+- [ ] `supabase gen types typescript --linked` — refreshes `database.types.ts` so `track-outbound.ts` can drop its local rpc cast
+- [ ] (Optional, when partner accounts go live) Add `VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG` to Vercel + `.env.local`. Until then, clicks log with `affiliate_tag = NULL` — useful baseline for "we'd have earned X% on Y clicks" analysis
+- [ ] Confirm a real PostHog event arrives in `app.posthog.com` Live Events after a hero-prompt submit on www.mdeai.co
+- [ ] Confirm a synthetic Sentry error captures (e.g. force `script_load_failed` map telemetry)
+
+---
 
 ## DONE 2026-04-27 — Marketing homepage + auth handoff + maps stabilization (PRs #2, #3, #4 to main)
 
@@ -25,49 +63,49 @@
 - [x] End-to-end smoke from `Origin: https://www.mdeai.co` → 200 OK, streaming SSE, phase events
 
 ### Known gaps (informed roadmap, not bugs)
-- [ ] **No Sentry / PostHog sink** — telemetry events fire but go to console only. The seam exists (`setMapTelemetrySink`); needs real sink + DSN.
+- [x] ~~**No Sentry / PostHog sink**~~ — **wired 2026-04-27 evening**. `VITE_SENTRY_DSN` + `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST` set in `.env.local` and Vercel (production + preview). Maps telemetry sink forwards every event to Sentry breadcrumbs + captures `*_failed` as Sentry issues + forwards conversion events (`pin_click`, `cluster_expand`, `map_auth_failed`) to PostHog. Bundle audit: `phc_rpJoH...` and `o4510109062...ingest` literals baked into `dist/assets/index-*.js`.
 - [ ] **`viewport_idle` event TYPED but not emitted yet** — wired into the "Search this area" feature; emit site lives in ChatMap idle listener (already shipped).
 - [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
-- [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
-- [ ] **`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`.
+- [x] ~~**Bundle 1.81 MB / ~480 KB gzip**~~ — **resolved 2026-04-28 late-night**. Entry chunk down to 118 KB gzip after vendor splitting + route-level lazy loading. See changelog for full breakdown.
+- [x] ~~**`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`~~ — **resolved**. Verified 2026-04-28: `npm run verify:edge` runs deno check on all 10 functions + 4 shared modules + 11/11 deno tests pass. The earlier blocker self-resolved (deno fetched the dep on first run; cached for subsequent runs).
 - [ ] **Email confirmation flow loses pending prompt** — sessionStorage is per-tab; clicking the email link in a new tab loses the saved prompt. Documented limitation.
 
 ## NEXT — Recommended sprint (ranked by Revenue / Growth / UX / Tech / Speed)
 
-### Day 2 — Observability + Mobile (highest leverage)
-- [ ] **Wire Sentry SDK** — install, set DSN, replace default telemetry sink at app boot. **R 4 / G 5 / U 1 / T 5 / S 4 = 19**. Without this, prod is blind to map / chat / booking errors.
-- [ ] **Wire PostHog** — same seam, capture conversion events (`pin_click`, `booking_submit`, `inquiry_sent`, `prompt_send`). **Drives the conversion funnel dashboard.**
-- [ ] **Mobile fullscreen map drawer** — currently no map on `md:hidden`. Add a "🗺️ Map" floating button that opens a `<Sheet>` drawer. Mobile is most of LATAM. **R 4 / G 5 / U 5 / T 3 / S 4 = 21**.
+### Day 2 — Observability + Mobile (highest leverage) — **all 3 shipped**
+- [x] **Wire Sentry SDK** — DSN in `.env.local` + Vercel (prod + preview). `initSentry()` activates, replaces maps-telemetry sink with Sentry breadcrumb + captureException sink for `*_failed` events. Build verified: 8 sentry refs in prod bundle.
+- [x] **Wire PostHog** — `VITE_POSTHOG_KEY` + `VITE_POSTHOG_HOST` in `.env.local` + Vercel. `initPostHog()` activates, typed `AppEvent` union, 6 call sites already emit (`prompt_send`, `prompt_autofired`, `viewport_search`, `pin_click`, `cluster_expand`, `booking_submitted`). Stale `VITE_PUBLIC_POSTHOG_*` deleted from Vercel.
+- [x] **Mobile fullscreen map drawer** — **shipped 2026-04-28**. Floating `Map (N)` pill at `bottom-24 right-4` opens a `<Sheet side="bottom">` with `<ChatMap />` inside. MapContext shares pin state automatically. Verified at `375 × 812`; correctly hidden on `md:` and up.
 
 ### Day 3 — Conversion improvements
-- [ ] **Affiliate attribution + `outbound_clicks` migration** (Friday's Week 2 task) — `outbound_clicks(user_id nullable, listing_id, source_url, affiliate_tag, ts)`. Wrap source URLs in `RentalCardInline` + `ApartmentDetail` with affiliate-tag rewriter (Airbnb + Booking.com IDs via env). Edge fn or RPC to log clicks. **Direct revenue.**
-- [ ] **SEO page → chat handoff** (Thursday's Week 2 task) — `/apartments/:id` "Ask mdeai about this →" CTA opens `/chat?send=pending` with listing context pre-loaded. Closes the SEO acquisition loop.
+- [x] **Affiliate attribution + `outbound_clicks` migration** — **shipped 2026-04-27 late evening**. Migration `20260427210000_outbound_clicks.sql` (table + RLS + `log_outbound_click` RPC), `src/lib/affiliate.ts` (Booking/Airbnb/VRBO rewriter, 12 unit tests), `src/lib/track-outbound.ts` (RPC + PostHog event), wired in `RentalCardInline` (chat surface = `chat_card`) + `RentalsListingDetail` (surface = `detail_page`). Env tags optional (`VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG`); clicks log with `affiliate_tag = NULL` until partner IDs are configured. **Closes Week 2 exit-test prerequisite #5.**
+- [x] **SEO page → chat handoff** — **shipped 2026-04-28**. "Ask mdeai about this →" button on `/apartments/:id` right rail composes a listing-grounded prompt + `savePendingPrompt` + nav to `/chat?send=pending`. Live-verified: button click → URL handoff → auto-fire → Gemini response with `rental_search` payload of 9 listings.
 
 ### Day 4 — Mindtrip parity polish
-- [ ] **InfoWindow on pin click** — peek the listing without leaving the chat. Photo + title + price + rating + "View details" link. Anon chat preservation.
-- [ ] **Booking dialog polish** — photo gallery + amenity grid in the review step.
+- [x] **InfoWindow on pin click** — **shipped 2026-04-28**. Single InfoWindow instance reused across pins (Mindtrip pattern). Peek = photo + title + neighborhood/BR/BA + price/rating + "View details →" button. Cmd/Ctrl/middle-click + keyboard preserve direct-nav. Pin meta extended in `ChatCanvas` with `image / rating / bedrooms / bathrooms`. Cleanup closes peek on `pins` change so it can't outlive anchor.
+- [x] **Booking dialog polish** — **shipped 2026-04-28**. Review step now shows a horizontal photo strip (snap-x, up to 4 thumbnails + "+N more" link) and a 2-col amenity grid with check icons (caps at 8, "+N more →" if exceeded). Both render conditionally so listings without photos/amenities don't get empty placeholders. Verified end-to-end on `/apartments/30000000...0001` (Poblado Penthouse) → screenshot confirms PHOTOS + WHAT'S INCLUDED sections render correctly above the dates/pricing rows.
 
 ### Tech-debt cleanup (anytime, low priority)
-- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView. (audit § 6)
+- [ ] **`useMarkerLayer` hook** — factor duplication between ChatMap and GoogleMapView. (audit § 6) **PARTIALLY UNBLOCKED:** GoogleMapView refactor in audit-§-6 made the patterns symmetric; extraction is now mostly mechanical.
 - [ ] **Custom Cloud Console MapID** — Mindtrip-style muted palette. Pure visual polish. (audit § 90-day)
-- [ ] **Code-split + lazy-load** map / detail pages — drops ~600 KB from initial bundle. (audit § 60-day)
-- [ ] **Fix `npm run verify:edge`** — wire `deno install` in the script so the CI gate works.
+- [x] **Code-split + lazy-load** map / detail pages — **shipped 2026-04-28 late-night**. Entry chunk 597 KB → **118 KB gzip** (80% smaller). 33 routes lazy-loaded behind a Suspense boundary; vendor chunks split into 10 cacheable tier-2/tier-3 groups (radix, supabase, posthog, sentry, forms, dates, icons, tanstack, maps, gadget). Live-verified: navigating to `/login` triggers 22 new fetches (including `src/pages/Login.tsx`) that were NOT in the initial 70-fetch batch.
+- [x] ~~**Fix `npm run verify:edge`**~~ — **resolved 2026-04-28**. `npm run verify:edge` runs deno check + 11 / 11 deno tests pass. The blocker self-resolved after deno cached `@supabase/supabase-js` on first run.
 - [ ] **Tighten `Conversation.user_id` type** — currently `string`; pin to `uuid | 'anon'`.
 
-## Code-quality cleanup (audit § 6)
+## Code-quality cleanup (audit § 6) — **all 10 shipped 2026-04-28 night**
 
-Small, surgical fixes called out in `tasks/plan/01- MDEAI Maps Architecture Audit.md` § 6.
+Small, surgical fixes called out in `tasks/plan/01- MDEAI Maps Architecture Audit.md` § 6. See `changelog` 2026-04-28 night entry for full details.
 
-- [ ] **`google-maps-loader.ts:21-22`** — docstring claims it returns destructured constructors; actually returns the library. Minor doc fix.
-- [ ] **`google-maps-loader.ts:40`** — delete `void UUID_RE;` dead code.
-- [ ] **`google-maps-loader.ts:78-86`** — `installAuthFailureHandler` is invoked only from `installBootstrap`. Rename `_installAuthFailureHandler` (private) or expose + document.
-- [ ] **`google-maps-loader.ts:168-209`** — Vitest unit test for the shim recursion (`fn(libName, ...rest)`). Mock `window.google` to make it regression-proof.
-- [ ] **`ChatMap.tsx:160`** — "Pins never clear between turns" tradeoff is documented in ChatCanvas, not here. Add cross-reference comment.
-- [ ] **`ChatMap.tsx:248-260`** — `MEDELLIN_CENTER` is hardcoded; center on first pin or on chip neighborhood instead.
-- [ ] **`ChatCanvas.tsx:116-127`** — replace ambiguous "Keep pins across turns" comment with explicit toggle: "merge with prior pins" or "replace each turn".
-- [ ] **`GoogleMapView.tsx:290-298`** — highlight effect rebuilds full marker content on every selection change. With 50+ pins that's 50 DOM rewrites. Mutate only the changed pin.
-- [ ] **`GoogleMapView.tsx:211-219`** — marker rebuild rewires listeners every time. Use a stable id-keyed map (parity with ChatMap's `markersRef`).
-- [ ] **`MapContext.tsx:7-14`** — `MapPin.meta?: Record<string, unknown>` is too loose. Strongly type per-vertical (`RentalPin extends MapPin`).
+- [x] **`google-maps-loader.ts` docstring** — example now shows the typed `loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', key)` form returning the whole library object.
+- [x] **`google-maps-loader.ts` dead `void UUID_RE`** — deleted.
+- [x] **`google-maps-loader.ts` `_installAuthFailureHandler`** — renamed to underscore-prefixed private. Verified post-rename: module exports are exactly `[isMapsAuthFailed, loadGoogleMapsLibrary, onMapsAuthFailed]`.
+- [x] **`google-maps-loader.test.ts`** — new Vitest, 4 tests covering: shim recursion lands in real impl (not stale closure), script src is built correctly (key + loading=async + callback), missing apiKey rejects clearly, `gm_authFailure` toggles `isMapsAuthFailed()`.
+- [x] **`ChatMap.tsx` cross-reference** — comment at the top of the component points to ChatCanvas as pin-lifecycle source-of-truth.
+- [x] **`ChatMap.tsx` smart `MEDELLIN_CENTER`** — first geo-pinned listing in context wins; falls back to default only when chat hasn't surfaced anything yet.
+- [x] **`ChatCanvas.tsx` pin-merge comment** — explicit policy block: each tool response REPLACES pins; two scope-change effects clear; cleanup is intentionally empty.
+- [x] **`GoogleMapView.tsx` surgical selection mutation** — split items-update from selection-change; selection-change uses `prevSelectedRef` and only mutates the prev → new pin pair (O(2) DOM rewrites per click vs O(n) before — 50 pins → 50× → 2× rewrites).
+- [x] **`GoogleMapView.tsx` id-keyed marker map** — replaced `AdvancedMarkerElement[]` with `Map<string, MarkerEntry>`. Items-update diffs in 3 phases (REMOVE / UPDATE / ADD) so same id reuses DOM + click handler. Listener rewiring eliminated.
+- [x] **`MapContext.tsx` `RentalPinMeta`** — typed per-vertical bag added; producers (ChatCanvas) build typed `meta`; consumers (ChatMap InfoWindow) narrow with `as RentalPinMeta` instead of casting field-by-field. `MapPin.meta` stays loosely-typed so new verticals (restaurant/event/attraction) plug in without touching the base.
 
 ## 30-day backlog (audit § 7 — "Stabilize + observe")
 
@@ -92,11 +130,11 @@ Items not yet in the Day 2/3/4 sprint but still on the 30-day plan.
 - [ ] **A/B framework via PostHog** — depends on PostHog wiring (Day 2). Run experiments on map UX changes.
 - [ ] **Service-worker cache for Maps tile layer** — LATAM 4G first-paint perf.
 
-## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`)
+## Week 2 exit test (§5 of `tasks/CHAT-CENTRAL-PLAN.md`) — **all 5 prerequisites shipped**
 
-- [ ] Logged-in user searches rentals → saves 2 listings (`saved_places` rows exist) → adds 1 to a new trip (`trip_items` row exists) → clicks outbound to Airbnb → click logged to `outbound_clicks` with affiliate tag.
+- [ ] **Run end-to-end on prod** (post-merge): logged-in user searches rentals → saves 2 listings (`saved_places` rows exist) → adds 1 to a new trip (`trip_items` row exists) → clicks outbound to Airbnb → click logged to `outbound_clicks` with affiliate tag.
 
-**3 of 5 prerequisites done** (chat works, Save + Add-to-trip + social proof shipped). Need affiliate attribution (Day 3) to complete this exit test.
+**5 of 5 prerequisites done** ✓ chat ✓ Save ✓ Add-to-trip ✓ social proof ✓ affiliate attribution + outbound-click logging. The only remaining step is the live end-to-end run after PR #6 merges + `supabase db push` deploys the migration.
 
 ---
 
@@ -132,7 +170,7 @@ Items not yet in the Day 2/3/4 sprint but still on the 30-day plan.
 - [ ] **No Sentry / PostHog sink** — telemetry events fire but go to console only.
 - [ ] **`viewport_idle` telemetry event TYPED but not EMITTED** — wired with "Search this area" feature.
 - [ ] **MapProvider is chat-only** — apartment detail and trips pages don't share pin state.
-- [ ] **Bundle 1.81 MB / ~480 KB gzip** — no code-splitting yet; LATAM 4G first-paint hit.
+- [x] ~~**Bundle 1.81 MB / ~480 KB gzip**~~ — **resolved 2026-04-28 late-night**. Entry chunk down to 118 KB gzip after vendor splitting + route-level lazy loading. See changelog for full breakdown.
 - [ ] **`npm run verify:edge` broken** (pre-existing) — `p1-crm/index.ts` deno-imports `@supabase/supabase-js`.
 
 ## NEXT 10 (ranked by Revenue / Growth / UX / Tech / Speed)

@@ -17,6 +17,7 @@ import {
   NotAuthenticatedError,
   useSubmitInquiry,
 } from '@/hooks/useApartmentBooking';
+import { trackEvent } from '@/lib/posthog';
 import type { Apartment } from '@/types/listings';
 
 /**
@@ -92,6 +93,7 @@ export function ContactHostDialog({
         endDate: endDate ?? null,
       });
       setSuccess(true);
+      trackEvent({ name: 'inquiry_sent', apartmentId: apartment.id });
     } catch (err) {
       if (err instanceof NotAuthenticatedError) {
         setAuthError(true);

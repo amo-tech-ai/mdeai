@@ -4,6 +4,7 @@ import { Heart, Plus, Star, Bed, Bath, Wifi, ShieldCheck, ExternalLink } from 'l
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { trackOutboundClick } from '@/lib/track-outbound';
 import type { RentalInlineListing } from '@/types/chat';
 import apartmentPlaceholder from '@/assets/apartment-1.jpg';
 
@@ -52,6 +53,18 @@ export function RentalCardInline({
     e.preventDefault();
     e.stopPropagation();
     onAddToTrip?.(listing.id);
+  };
+  const handleOutbound = (e: React.MouseEvent) => {
+    // Stop the parent <Link> from also navigating to /apartments/:id —
+    // outbound and detail-page nav are mutually exclusive intents.
+    e.preventDefault();
+    e.stopPropagation();
+    if (!listing.source_url) return;
+    trackOutboundClick({
+      listingId: listing.id,
+      sourceUrl: listing.source_url,
+      surface: 'chat_card',
+    });
   };
 
   return (
@@ -120,9 +133,15 @@ export function RentalCardInline({
             </div>
           </div>
           {listing.source_url && (
-            <span className="text-xs text-muted-foreground inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={handleOutbound}
+              aria-label={`Open original listing on ${sourceLabel ?? 'source site'}`}
+              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 px-1.5 py-1 rounded-md hover:bg-muted/60 transition-colors"
+            >
+              <span className="hidden sm:inline">View on {sourceLabel ?? 'source'}</span>
               <ExternalLink className="w-3 h-3" />
-            </span>
+            </button>
           )}
         </div>
       </div>

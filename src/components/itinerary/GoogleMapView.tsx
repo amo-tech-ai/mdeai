@@ -105,7 +105,20 @@ export function GoogleMapView({
 }: GoogleMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  // Id-keyed marker store (parity with ChatMap.markersRef). Lets us
+  // diff against existing markers rather than tear-down + rebuild on
+  // every itemsWithCoords change. Same id reuses the same DOM element
+  // + click handler, so listeners aren't constantly rewired and the
+  // user's hover/focus state on a pin survives sibling-list updates.
+  type MarkerEntry = {
+    marker: google.maps.marker.AdvancedMarkerElement;
+    clickHandler: EventListener;
+  };
+  const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
+  // Track previous selection so the selection-change effect only mutates
+  // the two affected markers (prev → unselected, new → selected) instead
+  // of redrawing all 50+ on every click.
+  const prevSelectedRef = useRef<string | null>(null);
   const polylineRef = useRef<google.maps.Polyline | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -203,31 +216,49 @@ export function GoogleMapView({
     []
   );
 
-  // Update markers
+  // Update markers — diff against the existing id-keyed map instead of
+  // tearing down + rebuilding every time. Three phases:
+  //   1. REMOVE: markers whose id is no longer in itemsWithCoords get
+  //      their listener detached + removed from the map.
+  //   2. UPDATE: existing markers get their content / position /
+  //      zIndex refreshed in place — no listener rewiring.
+  //   3. ADD: new ids get a fresh AdvancedMarkerElement with click
+  //      listener.
+  // This effect intentionally does NOT depend on `selectedItemId` —
+  // the dedicated selection effect below handles that with surgical
+  // pin mutation. Without that split, every click would rebuild every
+  // marker (50× DOM rewrite at 50 pins).
   useEffect(() => {
     if (!mapRef.current || !isMapLoaded) return;
 
-    // Clear existing markers
-    // Clean up listeners + detach existing markers before rebuilding.
-    markersRef.current.forEach((marker) => {
-      const stash = marker as unknown as { __mdeaiClick?: EventListener };
-      if (stash.__mdeaiClick) {
-        marker.removeEventListener('gmp-click', stash.__mdeaiClick);
-        stash.__mdeaiClick = undefined;
-      }
-      marker.map = null;
+    const liveIds = new Set(itemsWithCoords.map((i) => i.id));
+
+    // (1) Remove stale markers + their listeners.
+    markersRef.current.forEach((entry, id) => {
+      if (liveIds.has(id)) return;
+      entry.marker.removeEventListener("gmp-click", entry.clickHandler);
+      entry.marker.map = null;
+      markersRef.current.delete(id);
     });
-    markersRef.current = [];
 
     if (itemsWithCoords.length === 0) return;
 
     const bounds = new google.maps.LatLngBounds();
 
+    // (2) + (3) Update existing or add new.
     itemsWithCoords.forEach((item, index) => {
       const position = { lat: item.latitude!, lng: item.longitude! };
       bounds.extend(position);
 
       const isSelected = selectedItemId === item.id;
+      const existing = markersRef.current.get(item.id);
+
+      if (existing) {
+        existing.marker.content = createMarkerContent(item, index, isSelected);
+        existing.marker.position = position;
+        existing.marker.zIndex = isSelected ? 1000 : index;
+        return;
+      }
 
       const marker = new google.maps.marker.AdvancedMarkerElement({
         map: mapRef.current!,
@@ -239,16 +270,10 @@ export function GoogleMapView({
         gmpClickable: true,
       });
 
-      // Use the modern `gmp-click` event per Google's recent guidance.
-      // <gmp-advanced-marker> deprecates plain 'click'; using addListener
-      // logs a console warning. The handler is captured separately so we
-      // can removeEventListener on cleanup below.
-      const onClick = () => onItemSelect?.(item);
-      marker.addEventListener("gmp-click", onClick);
-      // Stash the handler on the element for cleanup.
-      (marker as unknown as { __mdeaiClick?: EventListener }).__mdeaiClick = onClick;
-
-      markersRef.current.push(marker);
+      // Modern `gmp-click` (legacy `click` triggers deprecation warning).
+      const clickHandler: EventListener = () => onItemSelect?.(item);
+      marker.addEventListener("gmp-click", clickHandler);
+      markersRef.current.set(item.id, { marker, clickHandler });
     });
 
     // Fit bounds with padding
@@ -261,7 +286,9 @@ export function GoogleMapView({
       });
       mapRef.current.setZoom(15);
     }
-  }, [itemsWithCoords, selectedItemId, isMapLoaded, createMarkerContent, onItemSelect]);
+    // selectedItemId intentionally NOT in deps — the next effect handles it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsWithCoords, isMapLoaded, createMarkerContent, onItemSelect]);
 
   // Update route polyline when directions result changes
   useEffect(() => {
@@ -291,18 +318,29 @@ export function GoogleMapView({
     }
   }, [directionsResult, isMapLoaded]);
 
-  // Update markers when selection changes
+  // Selection-change effect: mutate ONLY the previous-selected and the
+  // new-selected markers. Compared with the prior implementation which
+  // rebuilt content for every marker on every click, this is O(2)
+  // instead of O(n). At 50 pins that's 50× → 2 DOM rewrites per click.
   useEffect(() => {
     if (!isMapLoaded) return;
+    const prevId = prevSelectedRef.current;
+    const newId = selectedItemId ?? null;
+    if (prevId === newId) return;
 
-    markersRef.current.forEach((marker, index) => {
-      const item = itemsWithCoords[index];
-      if (item) {
-        const isSelected = selectedItemId === item.id;
-        marker.content = createMarkerContent(item, index, isSelected);
-        marker.zIndex = isSelected ? 1000 : index;
-      }
-    });
+    const updateOne = (id: string | null, isSelected: boolean) => {
+      if (!id) return;
+      const idx = itemsWithCoords.findIndex((i) => i.id === id);
+      if (idx === -1) return;
+      const entry = markersRef.current.get(id);
+      if (!entry) return;
+      entry.marker.content = createMarkerContent(itemsWithCoords[idx], idx, isSelected);
+      entry.marker.zIndex = isSelected ? 1000 : idx;
+    };
+
+    updateOne(prevId, false);
+    updateOne(newId, true);
+    prevSelectedRef.current = newId;
   }, [selectedItemId, itemsWithCoords, createMarkerContent, isMapLoaded]);
 
   // Empty state

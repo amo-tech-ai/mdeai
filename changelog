@@ -1,5 +1,220 @@
 # Changelog — mdeai.co
 
+## 2026-04-28 — sprint rollup (PR #6, 7 commits since main)
+
+The Day 2 / 3 / 4 sprint plus audit § 6 plus a code-splitting pass all landed on `fix/chat-production-hardening` over 24 hours. Production readiness moves from **96 → 98** pending PR #6 merge + post-merge migration push.
+
+**What shipped (in commit order — see entries below for details):**
+| # | Commit | Scope |
+|---|---|---|
+| 1 | `f419848` | PostHog wiring (was on branch unmerged) |
+| 2 | `8ce589a` | Mobile fullscreen map drawer + observability env activation |
+| 3 | `cea3972` | Outbound click tracking + Airbnb / Booking / VRBO rewriter (12 unit tests) |
+| 4 | `bae4aba` | SEO → chat handoff + InfoWindow peek on pin click |
+| 5 | `78a6258` | Booking dialog polish (photo strip + amenity grid) + verify:edge confirmed green |
+| 6 | `a3a4a4c` | Audit § 6 — 10 surgical map cleanups + new `google-maps-loader.test.ts` (4 Vitests) |
+| 7 | `a802093` | Code-split + lazy routes — 597 KB → 118 KB gzip first-paint (80% smaller) |
+
+**Aggregate test deltas:**
+| | Before sprint | After sprint |
+|---|---|---|
+| Unit tests | 28 / 28 (5 files) | **44 / 44** (7 files) |
+| Entry bundle gzip | 597 KB | **118 KB** |
+| Total chunks emitted | 1 | **51** |
+| Build time | 4.21 s | 3.95 s |
+| `verify:edge` | broken (stale note) | **11 / 11 deno tests pass** |
+
+**Status of Week 2 exit-test prerequisites (`tasks/CHAT-CENTRAL-PLAN.md` §5):** all **5 / 5 done** — chat / Save / Add-to-trip / social proof / affiliate attribution. Remaining: live end-to-end run after PR #6 merge + `supabase db push`.
+
+---
+
+## 2026-04-28 late-night (Code-splitting + route-level lazy loading — 80% smaller initial bundle)
+
+Closes the **"Code-split + lazy-load map / detail pages"** tech-debt item. Anonymous landing on `/` now ships **118 KB gzip** instead of **597 KB gzip** — the LATAM 4G first-paint hit is gone.
+
+**Vite config — manual vendor chunks ([vite.config.ts](vite.config.ts))**
+- New `manualChunks(id)` function with three tiers:
+  - **Tier 1 (entry)**: react / react-dom / react-router / scheduler — needed before paint, splitting costs more than it saves.
+  - **Tier 2 (always-needed vendors)**: `radix` (95 KB gzip), `supabase` (51 KB), `tanstack` (12 KB), `forms` (23 KB, react-hook-form + zod), `dates` (18 KB, date-fns + react-day-picker), `icons` (12 KB, lucide-react). Cacheable separately so deploys touching `src/` keep these warm.
+  - **Tier 3 (route-specific)**: `maps` (8 KB, @googlemaps/markerclusterer — only `/chat` + `/trips/:id`), `gadget` (24 KB — only `/coffee`), `posthog` (62 KB), `sentry` (29 KB), `charts` (recharts + d3, only dashboards), `motion` (framer-motion).
+- `chunkSizeWarningLimit: 800` — bumped from default 500. Entry chunk now sits comfortably below this, but the warning still fires on regressions.
+
+**App.tsx — route-level lazy loading ([src/App.tsx](src/App.tsx))**
+- Eager imports collapsed to **only `Home` and `NotFound`**. Home is the most-trafficked anonymous landing target; NotFound is the catch-all and must always be available even when chunks fail.
+- All 33 other routes converted to `React.lazy(() => import(...))`. Default-export pages use the simple form; the named export (`ChatCanvas`) uses the `.then(m => ({ default: m.X }))` shim.
+- New `<RouteFallback>` Suspense fallback — minimal centered spinner with `bg-background` so cold-loads don't flash white. Wraps the entire `<Routes>` block so any lazy component triggers it.
+- Admin pages lazy-loaded individually (one chunk per admin page) so the admin bundle never ships to non-admin users.
+
+**Bundle measurements (proof)**
+
+| Metric | Before | After |
+|---|---|---|
+| Single bundle (`index-*.js`) | 2,135 KB / 597 KB gzip | — |
+| Entry chunk (`index-*.js`) | — | **420 KB / 118 KB gzip** |
+| Route chunks | — | 4–90 KB each, lazy on nav |
+| Vendor chunks (parallel-fetch on first visit, cached separately) | — | radix 95 KB · supabase 51 KB · posthog 62 KB · sentry 29 KB · forms 23 KB · gadget 24 KB · dates 18 KB · icons 12 KB · tanstack 12 KB · maps 8 KB |
+| Build time | 4.21 s | 3.95 s |
+| Total chunks emitted | 1 | **51** |
+
+**Initial-paint payload (gzip)** — anonymous landing on `/`:
+- **Before**: 597 KB (one bundle, every route + every dep eagerly loaded).
+- **After**: ~118 KB entry + parallel-fetched vendor chunks for what `Home` actually uses (radix, supabase, react-query, icons). Routes only load when navigated.
+
+**Live verification (Claude Preview MCP)**
+- Loaded `/` (Home redirected to `/chat` for the authed session) — 70 src fetches recorded.
+- Navigated to `/login` (previously unvisited lazy route) — **22 NEW fetches** appeared in `performance.getEntriesByType('resource')`, including `src/pages/Login.tsx` itself. The Login chunk was NOT in the initial 70 — proving lazy loading is working as designed.
+- `npm run lint` clean. `npm run build` clean (3.95 s). `npm run test` 44 / 44 across 7 files. `npm run verify:edge` 11 / 11.
+
+**What this unlocks for follow-up**
+- Service-worker tile cache (90-day backlog) becomes meaningful — vendor chunks rarely change so SW caching is highly effective.
+- A/B framework via PostHog (90-day) — the `posthog` chunk is now isolated for selective preload.
+- The maps chunk (8 KB gzip) is small enough that pre-fetching on hover over `/chat` link would be near-instant.
+
+---
+
+## 2026-04-28 night (Audit § 6 surgical cleanups — 10 fixes + new Vitest)
+
+Closes the entire **Code-quality cleanup (audit § 6)** section of `tasks/todo.md`. Each fix is small / surgical / low-risk, but the cumulative effect is meaningfully better lifecycle hygiene + less DOM thrash on the maps surfaces.
+
+**Backend / lib polish ([src/lib/google-maps-loader.ts](src/lib/google-maps-loader.ts))**
+- **Fix #1 — docstring corrected** to match actual return shape. The example now shows the typed `loadGoogleMapsLibrary<google.maps.MapsLibrary>('maps', key)` form (the function returns the *whole* library — destructure on the call site).
+- **Fix #2 — dead `void UUID_RE;` removed** (audit found this was kept "for future referrer-test parity" but never wired up).
+- **Fix #3 — `installAuthFailureHandler` → `_installAuthFailureHandler`** (private convention; only invoked from `installBootstrap`). Verified post-rename via dynamic import: module exports are now exactly `[isMapsAuthFailed, loadGoogleMapsLibrary, onMapsAuthFailed]` — the underscore-prefixed handler is correctly module-internal.
+
+**Lib tests ([src/lib/google-maps-loader.test.ts](src/lib/google-maps-loader.test.ts))**
+- **Fix #4 — Vitest test for the shim recursion contract.** 4 tests that stub `document.createElement('script')` and `document.head.append()` to prevent a real network fetch, then synthesize Google's "real importLibrary lands → bootstrap callback fires" sequence and assert the recursive call lands in the REAL impl, not in a stale shim closure. Also asserts:
+  - script `src` is built with `key`, `loading=async`, `callback=google.maps.__mdeaiMapsCb__`
+  - missing apiKey rejects with a clear error
+  - `gm_authFailure` toggles `isMapsAuthFailed()` from false → true
+
+**ChatMap polish ([src/components/chat/ChatMap.tsx](src/components/chat/ChatMap.tsx))**
+- **Fix #5 — pin-lifecycle cross-reference comment** added at the top of the component, pointing to ChatCanvas as the source-of-truth for pin lifecycle. ChatMap renders pins, never owns them.
+- **Fix #6 — `MEDELLIN_CENTER` → smart initial center.** First geo-pinned listing already in context wins; falls back to the Medellín default only when the chat hasn't surfaced anything yet. fitBounds in the pins-update effect overrides this once we have ≥1 pin, but the pre-batch pose now matches the user's actual search area.
+
+**ChatCanvas polish ([src/components/chat/ChatCanvas.tsx](src/components/chat/ChatCanvas.tsx))**
+- **Fix #7 — explicit pin-merge comment**, replacing the ambiguous "Keep pins across turns" line. New comment block documents the policy: each tool response REPLACES pins (no merge across turns); two scope-change effects clear pins (message-list emptied, conversation-id changed); the cleanup is intentionally empty since pins belong to the conversation, not the effect.
+
+**MapContext typing ([src/context/MapContext.tsx](src/context/MapContext.tsx))**
+- **Fix #10 — `RentalPinMeta` type added** alongside `MapPin`. Producers (ChatCanvas) now build `meta: RentalPinMeta = { source_url, neighborhood, image, rating, bedrooms, bathrooms }` instead of an inline object literal; consumers (ChatMap's InfoWindow) narrow with `pin.meta as RentalPinMeta` instead of casting each field individually. `MapPin.meta` itself stays loosely typed (`Record<string, unknown>`) so the addition of new verticals (restaurant, event, attraction) doesn't require touching the base interface — they each get their own `<Vertical>PinMeta` and consumers branch on `pin.category`.
+
+**GoogleMapView refactor ([src/components/itinerary/GoogleMapView.tsx](src/components/itinerary/GoogleMapView.tsx))**
+- **Fix #9 — id-keyed marker map** (parity with `ChatMap.markersRef`). Replaced the array `AdvancedMarkerElement[]` with `Map<string, MarkerEntry>` (entry = `{ marker, clickHandler }`). The items-update effect now diffs in three phases:
+  1. REMOVE markers whose id dropped out of the live set + detach their listeners.
+  2. UPDATE existing markers in-place with new content / position / zIndex.
+  3. ADD fresh markers for new ids only.
+  Same id reuses the same DOM element + click handler, so listener rewiring is gone, and a hovered/focused pin survives sibling-list updates.
+- **Fix #8 — surgical selection mutation.** Split the previous `[selectedItemId, itemsWithCoords, …]` mega-effect into two: items-update (without selection in deps) and selection-change. The selection-change effect uses a `prevSelectedRef` and only mutates the prev → new pin pair (O(2) DOM rewrites per click), down from O(n) (50 pins → 50 rewrites). Prev = unselected, new = selected; the rest are untouched.
+
+**Verification (this round)**
+- `npm run lint` — 0 errors. 2 pre-existing fast-refresh warnings on `MapContext.tsx` (non-component exports — `PIN_CATEGORY_CONFIG` already triggered the rule; `RentalPinMeta` is a type-only export so doesn't add runtime impact).
+- `npm run build` — 4.21 s. Bundle 2.13 MB / 596 KB gzip (+1.6 KB gzip vs previous).
+- `npm run test` — **44 / 44** passing across **7** files (was 40 / 40 across 6 — the 4 new google-maps-loader tests are all green).
+- `npm run verify:edge` — deno check clean + 11 / 11 deno tests pass.
+- Browser smoke (Claude Preview MCP): `/chat` mounts, Google Map renders (`gm-style` present), no `map_init_failed` / `TypeError` / `Uncaught` in console; loader exports correctly hide the renamed `_installAuthFailureHandler`.
+
+---
+
+## 2026-04-28 later (Booking dialog review polish + verify:edge confirmed green)
+
+**Day 4 #2 — Booking dialog polish** ([src/components/apartments/BookingDialog.tsx](src/components/apartments/BookingDialog.tsx))
+- Review step now renders two new sections above the existing dates/pricing rows:
+  - **`<ReviewPhotoStrip>`** — horizontal scroll strip with snap-x, up to 4 thumbnails (96×96 px). Listings with more than 4 photos get a "+N more" tile that links to the detail page in a new tab. Falls through cleanly (renders nothing) when `apartment.images` is empty/missing. `onerror` on the `<img>` hides any broken thumbs rather than leaving a busted-image icon next to the title.
+  - **`<ReviewAmenityGrid>`** — 2-column grid of small chips with `<Check>` icons (emerald). Caps at 8 visible amenities; if more, a "+N more →" link opens the detail page. `truncate` per cell so long amenity names don't break the grid alignment.
+- Both helpers are local (not exported); they live below the main component file. No runtime cost when the listing has no images / amenities — they early-return null.
+- **Verified end-to-end** on `/apartments/30000000-...-0001` (Poblado Penthouse): `Check Availability` → fill dates → `Continue` → review step renders PHOTOS strip + WHAT'S INCLUDED grid (wifi, ac, kitchen, washer with check icons) above the existing pricing breakdown. Screenshot in PR #6.
+
+**`npm run verify:edge` confirmed green**
+- The "pre-existing CI gate broken" line in `tasks/todo.md` was stale. Re-ran it: deno check passes on all 10 functions + 4 shared modules; 11 / 11 deno tests pass. The earlier blocker self-resolved — deno fetched the `@supabase/supabase-js` dep on the first run after the `p1-crm` change and cached it for subsequent runs. Updated `todo.md` to reflect the resolved status.
+
+**Verification:**
+- `npm run lint` 0 new errors. `npm run build` 4.29 s. `npm test` 40 / 40 across 6 files.
+- `npm run verify:edge` clean (deno check + 11 deno tests).
+- Browser smoke (Claude Preview MCP): screenshot confirms photo strip + amenity grid render in the dialog's review step.
+
+---
+
+## 2026-04-28 (SEO → chat handoff + map InfoWindow peek)
+
+Two tactical UX wins from `tasks/todo.md`:
+
+**Day 3 #2 — SEO page → chat handoff** ([src/pages/ApartmentDetail.tsx](src/pages/ApartmentDetail.tsx))
+- New "Ask mdeai about this →" button in the right-rail Quick Actions card. Composes a contextual prompt naming the listing + neighborhood, calls `savePendingPrompt`, navigates to `/chat?send=pending`. ChatCanvas auto-fires the prompt as the user's first turn — Gemini's response is grounded in the specific listing, not a cold open.
+- PostHog `prompt_send` event fires (`source: 'chat_input'`) so the SEO entry point shows up in the conversion funnel alongside hero-prompt entries.
+- **Live verified end-to-end:** clicked button on `/apartments/<seed-uuid>` → URL replaced to `/chat` (auto-fire stripped `?send=pending`) → user message appeared with the apartment context → Gemini responded with `What I Searched For` + `Best Option` + 9-listing rental_search payload.
+
+**Day 4 #1 — InfoWindow peek on pin click** ([src/components/chat/ChatMap.tsx](src/components/chat/ChatMap.tsx) + [src/components/chat/ChatCanvas.tsx](src/components/chat/ChatCanvas.tsx))
+- Map pin click now opens a Google Maps InfoWindow with a peek (photo + title + neighborhood/BR/BA + price/rating + "View details →" button) instead of immediately navigating away. Preserves the chat session — anon users don't lose their conversation just to peek a listing.
+- Power-user shortcuts preserved: Cmd/Ctrl-click + middle-click + Enter-on-keyboard still navigate directly. The branching is at the `clickHandler` level, not by intercepting the marker event globally.
+- One InfoWindow instance reused across all pins (Mindtrip's "only one peek visible at a time" pattern). `setContent()` + `open()` at the new anchor each click.
+- Cleanup: `useEffect` closes the open peek on `pins` change so it can't outlive its anchor when the conversation switches.
+- Pin metadata extended in `ChatCanvas` to include `image`, `rating`, `bedrooms`, `bathrooms` (loose-typed today; will tighten when the audit's `RentalPin extends MapPin` typing improvement lands).
+- **Bug fix in this change:** initial draft used `new mapsLib.Size(0, -8)` for the InfoWindow `pixelOffset`, but `Size` is in the `core` library, not `maps`. The throw was caught by the existing `map_init_failed` handler, dropping the user into the fallback pin list. Fixed by dropping the cosmetic offset (Google's default places the bubble above the anchor).
+
+**Verification:**
+- `npm run lint` 0 new errors. `npm run build` 4.17 s. `npm test` 40 / 40 across 6 files.
+- Browser smoke (Claude Preview MCP): `google.maps.InfoWindow` ctor + `setContent({...DOM...})` succeed; map mounts cleanly with no `map_init_failed` in console; SEO handoff round-trip verified end-to-end including Gemini response.
+- Bundle audit: `Ask mdeai about this`, `View details →`, `mdeai-info-peek`, `InfoWindow`, `prompt_send` literals all present in `dist/assets/index-*.js`.
+
+**Known limitation:** Couldn't fully verify the click-pin-see-InfoWindow flow in the preview sandbox because the anon-chat quota exhausted before I could land more pins on the map. The init code path is verified (no init crash, ctor works, content DOM builds correctly); the user-facing click flow needs to be confirmed on the merged-to-prod deploy.
+
+---
+
+## 2026-04-27 late evening (Affiliate attribution + outbound click tracking)
+
+**Day 3 #1 from `tasks/todo.md`.** Closes the only blocker on the Week 2 exit test — the user can now click outbound to Airbnb / Booking.com / VRBO with affiliate-tag rewriting + Postgres logging + PostHog conversion event.
+
+**Backend:**
+- New migration `supabase/migrations/20260427210000_outbound_clicks.sql`:
+  - Table `outbound_clicks(id, user_id nullable, listing_id, source_url, affiliate_tag, surface, created_at)` with indexes on `(listing_id, created_at)` and `(user_id, created_at WHERE user_id IS NOT NULL)`. RLS enabled with no public read; service role only for analytics queries.
+  - RPC `log_outbound_click(p_listing_id, p_source_url, p_affiliate_tag, p_surface)` — `SECURITY DEFINER`, `GRANT EXECUTE TO anon, authenticated`, auto-fills `user_id` from `auth.uid()`. Defense-in-depth http(s) regex check on `source_url`.
+  - `surface` is a CHECK-enforced enum (`chat_card | detail_page | map_info_window`) so analytics can answer "which surface drives outbound?" without joining route history.
+
+**Libs:**
+- New `src/lib/affiliate.ts` — `applyAffiliateTag(url, env?)` rewriter with three rules (Booking.com → `aid`, Airbnb → `af`, VRBO → `utm_source`). Behaviors: unknown domain → unchanged; known domain + env tag missing → unchanged but tag still surfaced for "lost-revenue" analytics; existing param → preserved (no override of upstream attribution); malformed / non-http → unchanged. Env keys: `VITE_BOOKING_AID`, `VITE_AIRBNB_AFFILIATE_TAG`, `VITE_VRBO_AFFILIATE_TAG` (safe to ship in client bundle — partner IDs are public-facing).
+- New `src/lib/affiliate.test.ts` — 12 tests covering: append, no-www, international TLD (airbnb.com.co), subdomain (m.airbnb.com), missing env, upstream-param preservation, unknown domain, malformed, non-http, query-string preservation, all three programs.
+- New `src/lib/track-outbound.ts` — `trackOutboundClick({ listingId, sourceUrl, surface })`. Side-effect order: (1) `window.open` synchronously so user-facing nav is never gated; (2) RPC `log_outbound_click` in background, swallows errors; (3) PostHog `outbound_clicked` event. Returns `{ url, tag }` so call sites can also use the rewritten URL for `<a href>` rendering.
+
+**Frontend wiring:**
+- `src/components/chat/embedded/RentalCardInline.tsx` — converted the decorative hover-only `<ExternalLink>` icon into a real clickable "View on Airbnb" / "View on Booking" button (responsive: text hidden on `<sm`, icon-only). Stops Link propagation so outbound-vs-detail-page intents don't conflict.
+- `src/components/rentals/RentalsListingDetail.tsx` — replaced the bare `<a href={listing.source_url}>` "View Original Listing" anchor with a Button + onClick that fires `trackOutboundClick({ surface: 'detail_page' })`.
+
+**PostHog event:** `outbound_clicked { apartmentId, sourceUrl }` — typed in `posthog.ts` AppEvent union since the PostHog wiring landed; this is the first call site that emits it.
+
+**Verification:**
+- `npm run lint` — 0 new errors.
+- `npm run build` — 4.02 s, +1 KB gzip vs previous (`index-D3oRSWhe.js`).
+- `npm test` — 40 / 40 across 6 files (12 new affiliate tests).
+- Live browser smoke: `applyAffiliateTag('https://www.airbnb.com.co/rooms/123', {VITE_AIRBNB_AFFILIATE_TAG:'mdeai-test'})` → `?af=mdeai-test` appended; booking with existing `aid=999` → preserved (no override); fazwaz / malformed → unchanged.
+- Bundle audit: `log_outbound_click`, `outbound_clicked`, `chat_card`, `detail_page`, all three `VITE_*_AFFILIATE_*` env keys all present in `dist/assets/index-*.js`.
+
+**Action required after merge:**
+- Run `supabase db push` to deploy the migration. (Or `supabase migration up` for local — pgvector / RLS extension prerequisites are already met from prior migrations.)
+- Optional: add `VITE_BOOKING_AID` / `VITE_AIRBNB_AFFILIATE_TAG` / `VITE_VRBO_AFFILIATE_TAG` to Vercel + `.env.local` once partner accounts are signed up. Until set, clicks are logged with `affiliate_tag = NULL` (URL passes through unchanged) — useful baseline data for "we'd have earned X% commission on Y clicks" analysis.
+- Run `supabase gen types typescript --linked --schema public > src/integrations/supabase/database.types.ts` to refresh types so `log_outbound_click` is statically known. Until then, `track-outbound.ts` casts the rpc call (documented in-line).
+
+---
+
+## 2026-04-27 evening (Observability live: Sentry + PostHog wired)
+
+**Closes the "prod is blind" gap from `tasks/todo.md`.** SDKs were installed and the wiring code already existed in `src/lib/sentry.ts`, `src/lib/posthog.ts`, and `src/main.tsx` — both inits silently no-op when their env vars are empty. Today we added the env vars; that flips both on.
+
+**`.env.local`:**
+- Added `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST` (names match what `import.meta.env` reads — *not* the `VITE_PUBLIC_*` Next.js convention; rule documented in `.claude/rules/env-management.md`).
+- Removed duplicate `VITE_GOOGLE_MAPS_API_KEY` line (line 27 had a copy of line 25 with a trailing space).
+
+**Vercel (production + preview targets):**
+- Pushed all three vars via REST API (`POST /v10/projects/$ID/env?upsert=true`). HTTP 201 each.
+- Deleted stale `VITE_PUBLIC_POSTHOG_KEY` + `VITE_PUBLIC_POSTHOG_HOST` (created earlier with the wrong-name convention, would never be read by code).
+
+**Verified:**
+- `npm run build` ✓ 4.27 s.
+- Bundle scan of `dist/assets/index-DzfVi9P5.js` (2.1 MB): `phc_rpJoHQUZ5...` literal present, `o4510109062070273.ingest.us.sentry.io` literal present, 3 posthog SDK refs, 8 sentry SDK refs.
+- `vercel/v9/projects/$ID/env` lists exactly the three correct keys, no `VITE_PUBLIC_*` leftovers.
+
+**What this unlocks:** every `setMapTelemetrySink` event now becomes a Sentry breadcrumb on errors; every `*_failed` map event becomes a Sentry issue with `tags: { component: 'maps', kind: ... }`; PostHog already has 6 typed event call sites firing (`prompt_send`, `prompt_autofired`, `viewport_search`, `pin_click`, `cluster_expand`, `booking_submitted`). Local dev fires immediately; next Vercel deploy goes live in prod.
+
+---
+
 ## 2026-04-27 (Production: marketing homepage + AI prompt auth handoff + bug fix)
 
 Shipped to **`www.mdeai.co`** via three merges to `main` today:
