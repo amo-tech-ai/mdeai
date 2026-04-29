@@ -1,5 +1,42 @@
 # CLAUDE.md — mdeai.co
 
+## 🚨 RULE: Never sweep untracked files (incident 2026-04-29)
+
+**Do NOT run** `git stash push -u`, `git stash push --include-untracked`, `git clean`, `rm -rf` against directories with untracked content, or any command that bulk-removes/hides untracked files **without explicit user confirmation that LISTS the directories about to be touched.**
+
+### What happened
+On 2026-04-29 during the D3 kickoff, I ran `git stash push -u -m "pre-D3 unrelated local changes"` to clean the working tree. The `-u` flag sweeps all untracked files into `stash@{0}^3` — which silently moved **700+ files** out of the working tree, including:
+- `tasks/audit/`, `tasks/best-practices/`, `tasks/docs/`, `tasks/hermes/`, `tasks/mermaid/`, `tasks/notes/`, `tasks/openclaw/`, `tasks/originals/`, `tasks/paperclip/`, `tasks/prompts/` (66 task prompts), `tasks/real-estate/`, `tasks/wireframes/`, `tasks/plan/01-…07.md` (the planning docs)
+- `.agents/skills/` (~30 installed agent skills), parts of `.claude/skills/`, `.claude/rules/env-management.md`, `.claude/rules/library-references.md`
+- `supabase/functions/p1-crm/`, `supabase/functions/tests/`, `supabase/seed.sql`
+- `src/lib/p1-crm-api.ts`, `p1-crm-envelope.ts/.test.ts`, `src/hooks/useP1Crm.ts`, `useP1Pipeline.ts`, `src/components/rentals/ApartmentRentActions.tsx`, `src/pages/DashboardRentals.tsx`
+- `deno.lock`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `AGENTS.md`, `claude.local.md`, root-level `plan/`, `prd.md`, `system.md`, `todo.md`, `screenshots/`, `mdeai-tech-audit.html`, etc.
+
+Files were technically recoverable from the stash, but the user discovered they were missing 4 days later and had to flag it as urgent recovery. Nothing was *deleted*, but the user-visible effect was identical.
+
+### What to do instead
+1. **Always run `git status -uall` first** and quote the file count back to the user.
+2. **If untracked count > 5**, treat the situation as "user has working work in progress" — do NOT auto-clean. Ask:
+   > "There are N untracked files/dirs (list: …). Safe options: (a) leave them alone — work alongside them, (b) stash a specific path you call out, (c) commit them on a temp branch first. Pick one."
+3. **Never use `-u` on `git stash`** unless the user has explicitly said "stash untracked too" *in this turn*. Default is `git stash push -m "..."` (tracked-modifications only).
+4. **Never use `git clean -fd`, `git checkout .`, `git reset --hard`** without confirmation listing what would be destroyed.
+5. **Selective stash pattern** when only some changes need parking:
+   ```bash
+   git add -p     # interactively stage just what's needed
+   git stash --keep-index  # stash everything else
+   ```
+   Or skip stash entirely and `git diff --no-index <file>` to inspect without touching state.
+
+### How to recover if it happens again
+- `git stash list` — find the stash
+- `git ls-tree -r --name-only stash@{0}^3` — list untracked files inside it
+- `git checkout stash@{0}^3 -- <path>` — restore specific paths (one at a time or via xargs)
+- `git restore --staged <path>` — unstage so they return to untracked state
+
+This rule is enforced by review only — there's no hook today. The hook ticket lives in `tasks/todo.md` under continuous-testing.
+
+---
+
 ## Project Overview
 
 **mdeai.co** is an AI-powered marketplace connecting travelers and locals to premium coffee, luxury stays, and experiences in Medellin, Colombia. It's a "Digital Concierge" vendor marketplace with AI discovery, automated payouts, and zero-friction purchasing.

@@ -413,6 +413,43 @@ Every page wraps in our existing `useIsMobile()` hook. Specific mobile adaptatio
 
 ## 5. Build Roadmap (Day-by-Day)
 
+### 5.0 Skills atlas — what to invoke per task type
+
+Before writing code for a given V1 deliverable, invoke the matching skill from `.claude/skills/` (preferred) or `.agents/skills/` (fallback). Skipping these is the source of multiple bugs we already shipped (e.g. D3 Rules-of-Hooks; D4 storage RLS gap on owner_id) — every one was covered by an existing skill we didn't load.
+
+| Task type | Primary skill | Secondary | Notes |
+|---|---|---|---|
+| **DB migration / RLS** | `supabase` | `supabase-postgres-best-practices` (FK indexes, RLS perf), `supabase-auth` (auth.users / identities) | Run `get_advisors` after every DDL |
+| **Edge function (Deno)** | `supabase-edge-functions` | `supabase-auth` (JWT), `supabase-postgres-best-practices` (INSERT perf) | Use `_shared/http.ts` + Zod template |
+| **Storage bucket / policies** | `supabase` | `supabase-edge-functions` (signed URLs from server) | Path convention `<auth.uid()>/...` |
+| **React component (form)** | `shadcn` | `frontend-design` (distinctive UI), `ui-ux-pro-max` (states/spacing) | Use existing `Form`/`Input` primitives |
+| **React component (data fetching / mutation)** | `vercel-react-best-practices` | `supabase` (typed client) | TanStack Query patterns |
+| **Form validation** | `vercel-react-best-practices` | — | react-hook-form + Zod |
+| **Telemetry / PostHog event** | — *(GAP — see §5.0.1)* | `vercel-react-best-practices` | Discriminated-union pattern in `lib/posthog.ts` |
+| **Vitest unit test** | — *(GAP — see §5.0.1)* | — | RTL + `vi.mock` patterns |
+| **Browser proof / E2E walk-through** | — *(GAP — see §5.0.1)* | — | Claude Preview MCP + signed-in QA user |
+| **Project gates (lint/test/build/edge/bundle)** | — *(GAP — see §5.0.1)* | — | `npm run` aliases tracked in `package.json` |
+| **Mermaid diagrams** | `mermaid-diagrams` | — | For architecture / sequence / state |
+| **WhatsApp integration (D11+, D8 onwards)** | `automate-whatsapp` | `integrate-whatsapp`, `whatsapp-automation` | Use `wa.me/` deep-link in V1 |
+| **Real-estate domain logic** | `real-estate` | `real-estate-expert`, `real-estate-workflows` | For listing semantics, fair-housing copy |
+| **Listing scraping (V2 — Firecrawl)** | `firecrawl-scraper` | — | Out of V1 scope |
+| **Marketing copy / landing page** | `content-creation` | `frontend-design`, `ui-ux-pro-max` | If §6 outreach scripts need refresh |
+| **CHANGELOG / runbook / plan / docs** | `mde-writing-plans` | `plan-writing`, `documentation`, `prd` | mdeai-specific tone |
+| **Memory / context decoding** | `memory-management` | — | When user uses shorthand |
+| **Sentry** | `sentry-react-sdk` | `sentry-fix-issues`, `sentry-create-alert` | After D11 (reply-rate alerts) |
+| **Gemini AI calls** | `gemini` | — | D8 `lead-classify` only |
+| **Commit / PR** | `commit-commands:commit-push-pr` | `commit-commands:commit` | Slash command, global plugin |
+
+#### 5.0.1 Skill gaps to create
+
+These tasks recur in every V1 day and have no matching skill — captured in `tasks/todo.md` CT backlog as CT-14 / CT-15 / CT-16:
+
+- **`vitest-component-testing`** — RTL render + `vi.mock` + JSDOM polyfills (`ResizeObserver` / `scrollIntoView` / pointer-capture, all live in `src/test/setup.ts`) + form interaction patterns. Reusable across every D2-D30 task.
+- **`claude-preview-browser-testing`** — Claude Preview MCP workflow: `preview_start` → `preview_eval` for nav + supabase-js sign-in injection → `preview_snapshot` for a11y tree → `preview_click` for interactions → `preview_screenshot` for proof. Includes the qa-landlord seed user pattern from D5.
+- **`mdeai-project-gates`** — `npm run lint` (444 pre-existing baseline), `test`, `build`, `verify:edge` (when `supabase/functions/` changed), `check:bundle` (when bundle could grow). Failure-mode recovery (lint baseline drift, JSDOM polyfills, bundle budget bump procedure).
+
+Until these exist, the per-day testing block (§13) carries the patterns inline.
+
 ### 5.1 Days 1–7: Landlords can sign up + list a property
 
 | Day | Deliverable | Files | Commit |
@@ -832,12 +869,13 @@ If we're wrong (kill criteria in §8.3), we pause and figure out what we missed 
 
 ### Required artifacts per V1-day PR (all four — no exceptions)
 
-| # | Test type | What it proves | Tool | Required when |
-|---|---|---|---|---|
-| 1 | **Vitest unit test** | Pure logic, callbacks, type narrowing | `npm run test` (file colocated as `*.test.tsx`) | Any new component with non-trivial logic OR any new lib file |
-| 2 | **Browser preview verification** | UI renders, interactions work, console clean | Claude Preview MCP — `preview_snapshot` + `preview_click` + `preview_screenshot`. **Attach the screenshot to the PR description.** | Any UI change |
-| 3 | **PostHog event smoke** | The right event fires once with the right payload | Either `preview_eval` of `(window).posthog?.__loaded` + manual filter on `i.posthog.com` POSTs in `preview_network`, OR live PostHog Live Events tab on the deploy preview | Any new `AppEvent` arm |
-| 4 | **Edge fn deno test** | Auth gate + Zod validation + happy path | `npm run verify:edge` (or `deno test` against a Supabase branch) | Any `supabase/functions/` change |
+| # | Test type | What it proves | Tool | Skill | Required when |
+|---|---|---|---|---|---|
+| 1 | **Vitest unit test** | Pure logic, callbacks, type narrowing | `npm run test` (file colocated as `*.test.tsx`) | `vitest-component-testing` *(GAP — §5.0.1)* | Any new component with non-trivial logic OR any new lib file |
+| 2 | **Browser preview verification** | UI renders, interactions work, console clean | Claude Preview MCP — `preview_snapshot` + `preview_click` + `preview_screenshot`. **Attach the screenshot to the PR description.** | `claude-preview-browser-testing` *(GAP — §5.0.1)* | Any UI change |
+| 3 | **PostHog event smoke** | The right event fires once with the right payload | Either `preview_eval` of `(window).posthog?.__loaded` + manual filter on `i.posthog.com` POSTs in `preview_network`, OR live PostHog Live Events tab on the deploy preview | `vercel-react-best-practices` (analytics patterns) | Any new `AppEvent` arm |
+| 4 | **Edge fn deno test** | Auth gate + Zod validation + happy path | `npm run verify:edge` (or `deno test` against a Supabase branch) | `supabase-edge-functions` | Any `supabase/functions/` change |
+| 5 | **Project gates pass** | lint / build / bundle within budget | `npm run lint && npm run test && npm run build && npm run check:bundle` | `mdeai-project-gates` *(GAP — §5.0.1)* | Every PR |
 
 ### What "working real world" means for V1
 

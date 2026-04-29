@@ -1,10 +1,41 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-30 evening — **Landlord V1 D4 shipped + audit-fix landed.** D4 (`98ed20d`): listing-creation wizard (`Step1Address` Google Places + `Step2Specs` + `Step3Photos`) at `/host/listings/new`, `listing-photos` PUBLIC Storage bucket + 5 RLS policies, `useListingDraft` hook (with skipNextPersist bug-fix caught in test cycle), upload helper with named errors, 2 new PostHog events, 21 new Vitest tests (83/83 total), 3 browser proofs (auth gate + bucket SQL + anon-write 403). New `npm run check:bundle` gate (CT-2). Audit fix (`3111cb9`): 2 missing FK indexes backfilled (`landlord_inbox_events.actor_user_id`, `verification_requests.reviewed_by`) via migration `20260430130000`. **Next:** D5 — `listing-create` edge fn + auto-moderation + Step4Description + qa-landlord seed user (unblocks live walkthrough), drag-and-drop photos, client-side image resize. See "DONE 2026-04-30 audit" section for the 6 enhancement items (A-F) sequenced for D5.
+> **Last updated:** 2026-05-01 — **D4 shipped + audit-fix landed (`98ed20d` + `3111cb9`); D5 in flight, partially drafted on disk, not yet committed.** D5 has 4 files locally (edge fn `listing-create/index.ts` + pure-module `auto-moderation.ts` + 12 deno tests + `qa-landlord@mdeai.co` seed migration `20260501000000`). **Remaining for D5 ship:** register edge fn in `config.toml`, apply seed migration, deploy edge fn, build `Step4Description.tsx` + `useListingCreate.ts` hook + wire into `ListingNew.tsx`, add Vitest + browser-proof walkthrough using the seeded QA user (now possible without burning the email rate limit), then commit `feat(host): listing-create edge fn + auto-moderation (D5)`. See **WIP 2026-05-01 — Landlord V1 D5** section below for the full punch list. After D5 must-have: enhancements B-F from `tasks/plan/07.md`.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+---
+
+## 🛠️ Skills atlas — invoke before writing code (added 2026-04-29)
+
+> Load the matching skill from `.claude/skills/` (preferred) or `.agents/skills/` (fallback) BEFORE writing code for that task type. Skipping skills shipped multiple bugs already (D3 Rules-of-Hooks; D4 missing FK indexes; D5 GoTrue auth-row schema). Full per-task-type table lives in `tasks/plan/06-landlord-v1-30day.md` §5.0; this is the quick lookup.
+
+| Task type | Use skill | Notes |
+|---|---|---|
+| Migration / RLS / schema | `supabase` + `supabase-postgres-best-practices` (+ `supabase-auth` for auth.users / identities) | Always run `get_advisors` after DDL |
+| Edge function (Deno) | `supabase-edge-functions` | Use `_shared/http.ts` template + Zod |
+| Storage bucket / policies | `supabase` (path convention `<auth.uid()>/...`) | |
+| React form | `shadcn` + `frontend-design` + `ui-ux-pro-max` | react-hook-form + Zod required |
+| React data hook | `vercel-react-best-practices` + `supabase` | TanStack Query patterns |
+| Mermaid / sequence / state diagram | `mermaid-diagrams` | |
+| Real-estate domain logic | `real-estate` (+ `real-estate-expert`, `real-estate-workflows`) | |
+| Listing scraping (V2) | `firecrawl-scraper` | |
+| Marketing copy / outreach | `content-creation` | §6 Spanish scripts |
+| Plan / runbook / changelog | `mde-writing-plans` (+ `plan-writing`, `documentation`, `prd`) | |
+| WhatsApp integration (D8+) | `automate-whatsapp` (+ `integrate-whatsapp`, `whatsapp-automation`) | V1 = `wa.me/` deep-link only |
+| Sentry alerts / fixes (post-D11) | `sentry-react-sdk` + `sentry-create-alert` + `sentry-fix-issues` | |
+| Gemini AI calls (D8 lead-classify) | `gemini` | |
+| Commit / PR | `commit-commands:commit-push-pr` (slash command) | Global plugin |
+
+### Skill GAPS — to be created (CT-14, CT-15, CT-16 below)
+
+| Gap | Used by | Hours |
+|---|---|---|
+| `vitest-component-testing` | Every D2-D30 unit test | 2 |
+| `claude-preview-browser-testing` | Every D2-D30 UI proof | 2 |
+| `mdeai-project-gates` | Every PR | 1 |
 
 ---
 
@@ -290,19 +321,27 @@ These tasks add the missing automation. Each should ship with its own PR, ordere
 - [ ] **CT-11 — Migration smoke test** — apply every migration to a fresh local DB and run `pg_restore --schema-only` diff. ~2 hrs.
 - [ ] **CT-12 — Landlord V1 critical-path Playwright spec** — `e2e/landlord-v1-signup-to-listing.spec.ts` covering AccountTypeStep → email signup → /host/onboarding → (D7) host dashboard → (D5) listing-create → (D9) lead inbox. Lands incrementally as each V1 day ships. **Files**: new `e2e/landlord-v1-*.spec.ts` (one per critical path). **First milestone (D7):** signup → onboarding stub gate. ~2 hrs initial, +1 hr per V1 day.
 - [ ] **CT-13 — Per-V1-day testing block** — every V1 day's PR must include: (a) Vitest unit test for any new component with non-trivial logic, (b) Claude Preview MCP browser verification (snapshot + click + screenshot in commit description), (c) PostHog event firing confirmed via `network` filter or `posthog._isIdentified()` eval, (d) for edge-fn changes, deno test added. Codified in `tasks/plan/06-landlord-v1-30day.md` §13. ~0 hrs (process), enforced via PR review.
+- [ ] **CT-14 — Skill: `vitest-component-testing`** *(NEW SKILL TO CREATE)* — codify the RTL + `vi.mock` + JSDOM polyfill patterns we already use in `src/test/setup.ts`. Should cover: ResizeObserver / scrollIntoView / pointer-capture polyfills, `vi.mock('@/integrations/supabase/client')` BEFORE importing module-under-test (caught a real bug in D4), MemoryRouter wrapping, file-input mocking with real File objects, accessible-query patterns. **Files**: `.claude/skills/vitest-component-testing/SKILL.md` + references. ~2 hrs.
+- [ ] **CT-15 — Skill: `claude-preview-browser-testing`** *(NEW SKILL TO CREATE)* — codify the Claude Preview MCP workflow: `preview_start` → `preview_eval` for nav + supabase-js sign-in injection (with the QA-landlord pattern from D5) → `preview_snapshot` for accessibility-tree assertions → `preview_click` for interactions → `preview_screenshot` for proof. Includes the GoTrue auth gotcha (`confirmation_token` etc. need empty strings, not NULL) caught during D5. **Files**: `.claude/skills/claude-preview-browser-testing/SKILL.md`. ~2 hrs.
+- [ ] **CT-16 — Skill: `mdeai-project-gates`** *(NEW SKILL TO CREATE)* — codify what each `npm run *` script means, when each is required, what failure looks like, and how to recover. Include the lint baseline (444 pre-existing problems — track new vs existing), `verify:edge` for `supabase/functions/` changes, `check:bundle` budget bump procedure (requires PR note + reviewer signoff). **Files**: `.claude/skills/mdeai-project-gates/SKILL.md`. ~1 hr.
 
 ### Per-V1-day testing pattern (codified in plan §13)
 
 For every day D2-D30, the PR closing the day MUST include all four:
 
-| # | Test type | Target | Tool | Required when |
-|---|---|---|---|---|
-| 1 | **Unit (Vitest)** | Pure logic, callbacks, type safety | `vitest run src/**/*.test.{ts,tsx}` | Any new component with non-trivial logic OR any new lib file |
-| 2 | **Browser preview** | UI rendering, interaction, route transitions, console clean | Claude Preview MCP (`preview_snapshot` + `preview_click` + `preview_screenshot`) | Any UI change |
-| 3 | **PostHog event check** | Event fires once with the right payload | `preview_eval` of `(window).posthog?._isIdentified()` + network filter for `i.posthog.com` | Any new event arm |
-| 4 | **Edge fn deno test** | Auth gate + Zod validation + happy path | `npm run verify:edge` | Any `supabase/functions/` change |
+| # | Test type | Target | Tool | Skill | Required when |
+|---|---|---|---|---|---|
+| 1 | **Unit (Vitest)** | Pure logic, callbacks, type safety | `vitest run src/**/*.test.{ts,tsx}` | `vitest-component-testing` *(GAP — CT-14)* | Any new component with non-trivial logic OR any new lib file |
+| 2 | **Browser preview** | UI rendering, interaction, route transitions, console clean | Claude Preview MCP (`preview_snapshot` + `preview_click` + `preview_screenshot`) | `claude-preview-browser-testing` *(GAP — CT-15)* | Any UI change |
+| 3 | **PostHog event check** | Event fires once with the right payload | `preview_eval` of `(window).posthog?._isIdentified()` + network filter for `i.posthog.com` | `vercel-react-best-practices` (analytics patterns) | Any new event arm |
+| 4 | **Edge fn deno test** | Auth gate + Zod validation + happy path | `npm run verify:edge` | `supabase-edge-functions` (.claude / .agents) | Any `supabase/functions/` change |
+| 5 | **Project gates** | lint / build / bundle within budget | `npm run lint && npm run test && npm run build && npm run check:bundle` | `mdeai-project-gates` *(GAP — CT-16)* | Every PR |
 
 The first V1 day to fully follow this is **D2** — see `src/components/auth/AccountTypeStep.test.tsx` (4 vitest tests) + browser screenshots in the D2 PR.
+
+### Skills atlas (linked from plan §5.0)
+
+For per-task-type skill mapping (DB / edge fn / React component / form / telemetry / docs / commit), see `tasks/plan/06-landlord-v1-30day.md` §5.0. Key principle: **load the skill BEFORE writing code for that task type**. Skipping skills was the source of multiple bugs already shipped (D3 Rules-of-Hooks, D4 missing FK indexes, D5 GoTrue auth-row schema mismatch) — every one was covered by an existing skill we didn't load.
 
 ---
 
@@ -528,6 +567,40 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [x] No duplicate items between phases
 - [x] No item depends on something later in the same phase
 - [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## WIP 2026-05-01 — Landlord V1 D5 (listing-create edge fn) — uncommitted on disk
+
+Local-only work present but not yet committed/applied/deployed/verified. Land in this order on the next D5 commit.
+
+**Already drafted on disk** (review before commit):
+- [x] `supabase/functions/listing-create/auto-moderation.ts` — pure module, 5 rules from plan §3.1 (photos ≥ 5, Medellín bbox, contact-info regex, COP/USD price range, description ≥ 80 chars)
+- [x] `supabase/functions/listing-create/index.ts` — edge fn: CORS → auth (verify_jwt + getUserId) → durable rate-limit (10/hr/user) → Zod payload → landlord_profiles ownership check → auto-mod → service-role apartments INSERT. `rejected` returns 422 + reasons; `auto_approved` → `moderation_status='approved'`; `needs_review` → `'pending'` (still goes live optimistically per plan).
+- [x] `supabase/functions/tests/listing_create_auto_moderation_test.ts` — 12 deno tests (clean / single / double / price / metro / phone / email / short-desc / boundary cases for `isInMedellinMetro` + `containsContactInfo`)
+- [x] `supabase/migrations/20260501000000_landlord_v1_qa_user_seed.sql` — qa-landlord@mdeai.co with email_confirmed_at + auth.identities + landlord_profiles row, password `Qa-Landlord-V1-2026`, idempotent. **D5 enhancement A** from `tasks/plan/07.md`.
+
+**Still missing for D5 to ship**:
+- [ ] **Register `listing-create` in `supabase/config.toml`** with `verify_jwt = true` (currently absent from the 9-function block)
+- [ ] **Apply the qa-user seed migration** (`mcp execute_sql` against project `zkwcbyxiwklihegjhuql` + register to schema_migrations)
+- [ ] **Deploy `listing-create` edge fn** (`mcp deploy_edge_function`)
+- [ ] **`Step4Description.tsx`** — title (8-100) + description (80-4000) react-hook-form + Zod, with live char counter + plan-§3.1 rule hints (photos ≥ 5, no contact info, etc.)
+- [ ] **`useListingCreate.ts`** — TanStack mutation wrapping the edge fn POST + fold into the wizard's submit handler. On success: `clearDraft()` + nav to `/dashboard?listing=<id>` (D7 will surface it). On `AUTO_REJECTED` (422): show reasons + keep draft.
+- [ ] **Wire Step4 into `ListingNew.tsx`** — replaces the D4 D5-placeholder block; stepper progresses 4 → done
+- [ ] **Vitest** — Step4Description (Zod boundaries + counter) + useListingCreate (success / 422 reject / 401 / 403 onboarding gate) + a wizard integration test
+- [ ] **Browser proof via Claude Preview MCP** — sign in as qa-landlord@mdeai.co (now possible without burning the email rate limit), step through wizard 1→4, submit, verify `apartments` row + `moderation_status` via SQL, screenshot in PR
+- [ ] **2 new PostHog event arms** — `listing_published` (`apartmentId`, `autoModerated: bool`, `verdict`) + extend `listing_create_step` to include step 4. (Events 8 + 9 of 12 V1 taxonomy)
+- [ ] **Gates** — `npm run lint` 0 new · `npm run test` (target ~95+) · `npm run verify:edge` (target ~23 deno tests with the new 12) · `npm run build` · `npm run check:bundle` 10/10 within budget
+- [ ] **Commit** `feat(host): listing-create edge fn + auto-moderation (D5)` + audit pass per the D3/D4 pattern
+
+**D5 enhancements B-F from `tasks/plan/07.md`** — sequence after the must-have lands:
+- [ ] **B** — drag-and-drop photo upload via `@dnd-kit` (1 hr)
+- [ ] **C** — client-side image resize (`canvas.toBlob` 1920px max, 0.85 JPEG) (1.5 hr)
+- [ ] **D** — debounce sessionStorage writes in `useListingDraft` (300 ms) (15 min)
+- [ ] **E** — CT-12 Playwright spec `e2e/landlord-v1-create-listing.spec.ts` (4 hr; depends on A which now exists)
+- [ ] **F** — CT-1 pre-commit gate `scripts/gate-pr.sh` (lint + test + check:bundle) wired into `pre-push` (30 min)
+
+**Hidden risk to address pre-D22**: bump Supabase project's `MAILER_RATE_LIMIT_BURST` (or move email confirmations to Resend magic-links) before founder onboards 20 landlords in a day. Dashboard-only setting; document in D11 email-template PR.
 
 ---
 
