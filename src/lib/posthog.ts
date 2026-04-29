@@ -74,7 +74,9 @@ export type AppEvent =
   | { name: 'landlord_signup_completed'; method: 'email' | 'google' }
   | { name: 'onboarding_step_completed'; step: 1 | 2 | 3; durationSec: number }
   | { name: 'onboarding_completed'; totalDurationSec: number }
-  | { name: 'verification_doc_uploaded'; docKind: 'national_id' | 'passport' | 'rut' | 'property_deed' | 'utility_bill' };
+  | { name: 'verification_doc_uploaded'; docKind: 'national_id' | 'passport' | 'rut' | 'property_deed' | 'utility_bill' }
+  | { name: 'listing_create_step'; step: 1 | 2 | 3 | 4; durationSec: number }
+  | { name: 'listing_photo_uploaded'; sizeBytes: number; totalCount: number };
 
 /**
  * Capture a domain event. Silent no-op when PostHog isn't initialized.

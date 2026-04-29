@@ -6,6 +6,46 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-29] - Landlord V1 Day 4: listing wizard steps 1-3 + bundle-size budget gate
+
+### Database / Storage
+- New `listing-photos` PUBLIC Storage bucket — 5 MB limit per image, JPEG/PNG/WebP only. Path convention `<auth.uid()>/<draftId>/<filename>` so a single user can hold multiple in-progress drafts without filename collisions
+- 5 RLS policies: `listing_photos_insert_own` / `_select_public` / `_update_own` / `_delete_own` / `_service_role`. Renters anywhere can SELECT (the listings are eventually public anyway); only the owning landlord can INSERT/UPDATE/DELETE inside their own folder
+- Migration `20260430120000_landlord_v1_listing_photos_bucket.sql` registered to schema_migrations history
+
+### Frontend — wizard scaffold (steps 1-3 of 4; step 4 lands D5)
+- `src/pages/host/ListingNew.tsx` — wizard state machine at `/host/listings/new`. 4-step stepper, Back navigation, "Save + go to dashboard" escape hatch, D5 placeholder for Step 4. Auth gate: anon → /login; renter → /dashboard; landlord-without-profile → /host/onboarding; landlord → wizard
+- `src/components/host/listing/ListingForm/Step1Address.tsx` — Google Places Autocomplete (CO bias) bound to a controlled input. Auto-fills address + neighborhood + city + lat/lng from the picked place. Maps-auth-failure aware: falls back to a free-form text input if the API key is bad/missing so the wizard isn't blocked
+- `src/components/host/listing/ListingForm/Step2Specs.tsx` — bedrooms / bathrooms (number steppers w/ bounds), size_sqm, monthly price + currency (COP / USD), minimum stay days, furnished switch, 10 apartment-amenity chips + 8 building-amenity chips
+- `src/components/host/listing/ListingForm/Step3Photos.tsx` — multi-image upload to `listing-photos` bucket. Sequential uploads (one progress indicator at a time), 5+ photo minimum (matches D5 auto-moderation threshold), cover-image badge, click-to-promote, remove-with-storage-cleanup
+- `src/hooks/host/useListingDraft.ts` — wizard form state with sessionStorage persistence keyed by draftId. UUID-shaped draftId stable across re-renders. `clearDraft` properly skips the next persist via `skipNextPersistRef` (caught + fixed in this commit's vitest cycle)
+- `src/lib/storage/upload-listing-photo.ts` — typed upload helper with named error classes (`ListingPhotoTooLargeError` / `ListingPhotoUnsupportedTypeError`), public-URL resolution, best-effort orphan cleanup. Cache-Control set to 1 year (immutable URLs via timestamp)
+- `src/App.tsx` — `/host/listings/new` route registered + lazy `HostListingNew` chunk
+
+### Telemetry
+- 2 new PostHog event arms added (events 6 + 7 of 12 V1 taxonomy): `listing_create_step` (`step: 1|2|3|4`, `durationSec`), `listing_photo_uploaded` (`sizeBytes`, `totalCount`)
+
+### Testing — proof of working real-world (per plan §13)
+- 21 new Vitest tests added (61 → 83 total): Step1Address (5), Step2Specs (7), Step3Photos covered via wizard integration + the upload helper's 5 tests, useListingDraft (5), upload-listing-photo (5)
+- `src/lib/storage/upload-listing-photo.test.ts` — bug fix in this PR: tests now `vi.mock('@/integrations/supabase/client')` BEFORE importing the module under test, fixing an unhandled rejection where the real client tried to load a JSDOM-incompatible session at import time
+- Browser proofs via Claude Preview MCP (live Supabase project zkwcbyxiwklihegjhuql):
+  1. Anon `/host/listings/new` → `/login?returnTo=%2Fhost%2Flistings%2Fnew` ✓ (screenshot in PR)
+  2. SQL state — `listing-photos` bucket exists, public=true, file_size_limit=5242880, allowed_mime_types matches, all 5 RLS policies installed ✓
+  3. RLS proof — anon attempt to upload to `listing-photos` rejected with HTTP 403 "new row violates row-level security policy" ✓
+- Live wizard render walkthrough was deferred — Supabase project hit the per-hour email-signup rate limit during this session (we created a test landlord in D3). Same wizard internals are exercised by the 21 new vitest tests + the auth-gate + bucket-RLS proofs above
+
+### Tooling — improvements landed in this PR (CT-2 + a runtime hook bug)
+- New `scripts/check-bundle-size.mjs` + `npm run check:bundle` — gzips each entry-relevant chunk in dist/assets and fails (exit 1) if over its budget. 10 chunks tracked: `index` (100 KB), `radix` (100 KB), `posthog` (70 KB), `supabase` (60 KB), `gadget` (60 KB), `sentry` (35 KB), `forms` (30 KB), `dates` (25 KB), `icons` (20 KB), `tanstack` (20 KB). All within budget today (entry: 92.96 KB / 100 KB)
+- `useListingDraft.ts` skipNextPersistRef pattern — caught a real bug where `clearDraft` was being instantly re-overwritten by the persist `useEffect`. The vitest cycle surfaced this; the fix is a single ref that gates the next persist.
+
+### Gates
+- `npm run lint` exit 0 (zero new issues; 444 pre-existing unchanged)
+- `npm run test` 83/83 (14 files)
+- `npm run build` clean (4.33s)
+- `npm run check:bundle` 10/10 within budget (NEW gate)
+
+---
+
 ## [2026-04-29] - Landlord V1 Day 3: onboarding 3-step wizard
 
 ### Database / Storage

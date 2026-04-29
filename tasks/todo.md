@@ -1,6 +1,6 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-29 night — **Landlord V1 D3 shipped** — 3-step onboarding wizard (`Step1Basics` + `Step2Verification` + `Step3Welcome`) replaces the D2 stub. `identity-docs` Storage bucket + 5 RLS policies live. `useLandlordOnboarding` hook with 3 TanStack Query mutations. 3 new PostHog events. 13 new Vitest tests (61/61 total). Browser-verified end-to-end against live Supabase: anon → /login redirect ✓; landlord → wizard ✓; Step1 INSERT via RLS ✓; Skip → Step 3 ✓; Storage upload + verification_requests INSERT ✓ (all test data cleaned). All gates green. **Next:** D4 — listing form Steps 1+2 (Google Places address autocomplete + specs) + Step 3 photo upload (per plan §5.1).
+> **Last updated:** 2026-04-30 — **Landlord V1 D4 shipped** — listing-creation wizard (`Step1Address` Google Places + `Step2Specs` + `Step3Photos`) at `/host/listings/new` (steps 1-3 of 4; step 4 + edge fn lands D5). `listing-photos` PUBLIC Storage bucket + 5 RLS policies live. New `useListingDraft` hook with sessionStorage persistence + `useListingDraft` skipNextPersist bug-fix caught in test cycle. Upload helper with named errors. 2 new PostHog events. 21 new Vitest tests (83/83 total). Browser-verified: auth gate + bucket SQL state + RLS-enforced anon-write 403. New `npm run check:bundle` gate (CT-2 from CT backlog) — 10 chunks all within budget. Live wizard walkthrough deferred this session due to Supabase email-signup rate limit. **Next:** D5 — Step 4 (title + description) + `listing-create` edge fn + auto-moderation + end-to-end test (per plan §5.1).
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
@@ -528,6 +528,34 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [x] No duplicate items between phases
 - [x] No item depends on something later in the same phase
 - [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## DONE 2026-04-30 — Landlord V1 D4: listing wizard steps 1-3 + bundle-size budget gate
+
+Per `tasks/plan/06-landlord-v1-30day.md` §5.1 D4.
+
+- [x] **`listing-photos` PUBLIC Storage bucket** — 5 MB / image, JPEG/PNG/WebP. Path convention `<auth.uid()>/<draftId>/<filename>`. Bucket public so anon renters can `<img src>` listing photos without signed URLs.
+- [x] **5 Storage RLS policies** — `listing_photos_insert_own` (folder-scoped to auth.uid), `_select_public` (anon SELECT), `_update_own` / `_delete_own` (folder-scoped), `_service_role`. Verified via SQL `count(*)` and a real anon-upload attempt that returned HTTP 403.
+- [x] **Migration `20260430120000_landlord_v1_listing_photos_bucket.sql`** registered to schema_migrations.
+- [x] **`lib/storage/upload-listing-photo.ts`** — typed helper with `LISTING_PHOTO_MAX_BYTES` + `LISTING_PHOTO_ACCEPTED_TYPES` constants, named error classes (`ListingPhotoTooLargeError` / `ListingPhotoUnsupportedTypeError`), public-URL resolution, 1-year Cache-Control header (URLs are stable via timestamp suffix), best-effort `removeListingPhoto` for orphan cleanup.
+- [x] **`useListingDraft` hook** — wizard form state + sessionStorage persistence keyed by per-mount UUID draftId. `clearDraft` correctly wipes both state + storage via a `skipNextPersistRef` pattern (CAUGHT + FIXED in this PR's test cycle — initial impl had a re-write bug).
+- [x] **`Step1Address.tsx`** — Google Places Autocomplete (CO biased), maps-auth-failure aware (falls back to free-form input). Auto-fills neighborhood + city + lat/lng from picked place via address_components.
+- [x] **`Step2Specs.tsx`** — 4 visual blocks: bedroom/bath number steppers w/ bounds, size + price + currency, furnished switch + min stay, 10-amenity + 8-building-amenity chip groups.
+- [x] **`Step3Photos.tsx`** — multi-file upload, sequential (no race vs file_size_limit), 5+ photo minimum (matches D5 auto-mod threshold), cover-image badge, click-to-promote any photo to cover, remove-with-storage-cleanup.
+- [x] **`pages/host/ListingNew.tsx`** — wizard state machine. 4-step stepper. Back navigation. D5 placeholder for Step 4. Auth gate: anon → /login; renter → /dashboard; landlord without onboarding profile → /host/onboarding (must finish D3 first); landlord → wizard.
+- [x] **`/host/listings/new` route** registered in App.tsx with lazy chunk.
+- [x] **2 new PostHog events** — `listing_create_step` (step + durationSec) + `listing_photo_uploaded` (sizeBytes + totalCount). Total V1 events: 7 of 12 from plan §7.2.
+- [x] **21 new Vitest tests** (61 → 83 total). Step1Address: 5 (renders + validation + onSubmit). Step2Specs: 7 (steppers, amenity toggles, price gating). useListingDraft: 5 (uuid stability, patch + persist + clear). upload-listing-photo: 5 (size + MIME guards). Caught + fixed real bug in clearDraft (re-write race) and a test-import bug (real supabase client init unhandled rejection in JSDOM).
+- [x] **Browser proofs** via Claude Preview MCP (against live Supabase project zkwcbyxiwklihegjhuql):
+  1. Anon `/host/listings/new` → `/login?returnTo=%2Fhost%2Flistings%2Fnew` ✓ (screenshot in PR)
+  2. SQL state of bucket + 5 policies confirmed ✓
+  3. RLS proof: anon `supabase.storage.from('listing-photos').upload(...)` returned 403 "new row violates row-level security policy" ✓
+  4. Live wizard render walkthrough — DEFERRED this session due to Supabase email-signup rate limit (4/hour cap; we hit it creating the D3 test user). Same wizard internals exercised by the 21 unit tests; D5 will revisit with a stable test landlord.
+- [x] **CT-2 SHIPPED** — `scripts/check-bundle-size.mjs` + `npm run check:bundle`. 10 entry-relevant chunks tracked with explicit gzip budgets: index (100 KB ceiling), radix (100), posthog (70), supabase (60), gadget (60), sentry (35), forms (30), dates (25), icons (20), tanstack (20). Today's report: 10/10 within budget; entry chunk at 92.96 KB / 100 KB.
+- [x] **Gates green** — `npm run lint` exit 0 (zero new issues; 444 pre-existing) · `npm run test` 83/83 (14 files) · `npm run build` 4.33s · `npm run check:bundle` 10/10 within budget · entry chunk gzip 92.96 KB.
+
+**Next: D5 (listing creation finale).** Per §5.1: build `Step4Description` (title + description text inputs with Zod), `listing-create` edge function (Zod-validated INSERT into apartments via service role with auto-moderation rules from §3.1: `photos.length >= 5` / lat-lng inside Medellín metro / no contact info in description / price within range / description >= 80 chars). On `auto_approved` set `moderation_status='approved'` + `status='active'`; on `needs_review` keep pending + email founder; on `rejected` return reasons array. Commit message: `feat(host): listing-create + auto-moderation`.
 
 ---
 

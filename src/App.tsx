@@ -68,6 +68,7 @@ const Notifications = lazy(() => import("./pages/Notifications"));
 // renter side. RoleProtectedRoute lands D7; for D2 the route is gated
 // inside the page (anon -> /login, renter -> /dashboard, landlord -> ok).
 const HostOnboarding = lazy(() => import("./pages/host/Onboarding"));
+const HostListingNew = lazy(() => import("./pages/host/ListingNew"));
 // Admin pages — default exports per file, lazy-loaded individually so
 // the admin bundle only ships when an admin actually navigates here.
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -132,6 +133,8 @@ const App = () => (
                 D2: post-signup landing only. D3: 3-step onboarding wizard.
                 D7: full host shell (HostShell + HostLeftNav + dashboard). */}
             <Route path="/host/onboarding" element={<HostOnboarding />} />
+            {/* D4: 4-step listing wizard. Steps 1-3 functional; Step 4 + submit land D5. */}
+            <Route path="/host/listings/new" element={<HostListingNew />} />
             {/* Marketing Routes */}
             <Route path="/how-it-works" element={<HowItWorks />} />
             <Route path="/pricing" element={<Pricing />} />
