@@ -1,6 +1,6 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-30 — **Landlord V1 D4 shipped** — listing-creation wizard (`Step1Address` Google Places + `Step2Specs` + `Step3Photos`) at `/host/listings/new` (steps 1-3 of 4; step 4 + edge fn lands D5). `listing-photos` PUBLIC Storage bucket + 5 RLS policies live. New `useListingDraft` hook with sessionStorage persistence + `useListingDraft` skipNextPersist bug-fix caught in test cycle. Upload helper with named errors. 2 new PostHog events. 21 new Vitest tests (83/83 total). Browser-verified: auth gate + bucket SQL state + RLS-enforced anon-write 403. New `npm run check:bundle` gate (CT-2 from CT backlog) — 10 chunks all within budget. Live wizard walkthrough deferred this session due to Supabase email-signup rate limit. **Next:** D5 — Step 4 (title + description) + `listing-create` edge fn + auto-moderation + end-to-end test (per plan §5.1).
+> **Last updated:** 2026-04-30 evening — **Landlord V1 D4 shipped + audit-fix landed.** D4 (`98ed20d`): listing-creation wizard (`Step1Address` Google Places + `Step2Specs` + `Step3Photos`) at `/host/listings/new`, `listing-photos` PUBLIC Storage bucket + 5 RLS policies, `useListingDraft` hook (with skipNextPersist bug-fix caught in test cycle), upload helper with named errors, 2 new PostHog events, 21 new Vitest tests (83/83 total), 3 browser proofs (auth gate + bucket SQL + anon-write 403). New `npm run check:bundle` gate (CT-2). Audit fix (`3111cb9`): 2 missing FK indexes backfilled (`landlord_inbox_events.actor_user_id`, `verification_requests.reviewed_by`) via migration `20260430130000`. **Next:** D5 — `listing-create` edge fn + auto-moderation + Step4Description + qa-landlord seed user (unblocks live walkthrough), drag-and-drop photos, client-side image resize. See "DONE 2026-04-30 audit" section for the 6 enhancement items (A-F) sequenced for D5.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
@@ -528,6 +528,32 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [x] No duplicate items between phases
 - [x] No item depends on something later in the same phase
 - [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## DONE 2026-04-30 evening — Landlord V1 D4 audit follow-up
+
+Post-D4 schema audit via `information_schema.table_constraints`. Two FK columns from D1 had no covering index, violating the existing "schema-foreign-key-indexes" convention.
+
+- [x] **Migration `20260430130000_landlord_v1_fk_indexes.sql`** — partial indexes on `landlord_inbox_events.actor_user_id WHERE actor_user_id IS NOT NULL` + `verification_requests.reviewed_by WHERE reviewed_by IS NOT NULL`. Both confirmed live in `pg_indexes`. Applied via `execute_sql` + registered to `supabase_migrations.schema_migrations`.
+- [x] **Audit pass clean elsewhere** — zero `TODO/FIXME/XXX`, zero `console.log`, zero `any` casts, throws limited to mutation guards (correct pattern).
+- [x] **Commit `3111cb9`** pushed to origin.
+
+### D5 enhancement candidates (came out of the audit — sequence for D5+)
+
+| # | Enhancement | Why | Effort |
+|---|---|---|---|
+| **A** | **Seed permanent `qa-landlord@mdeai.co` test user** via one-off migration with email_confirmed + landlord_profile pre-set. NOT in seed.sql (avoid prod accidents). | Today's D4 live walkthrough was deferred — Supabase project hit the per-hour email-signup rate limit. Same wall blocks CT-12 Playwright spec. | 30 min |
+| **B** | **Drag-and-drop photo upload** (use existing `@dnd-kit` deps) | Better UX, especially mobile. Matches D7 dashboard sortable-card pattern. | 1 hr |
+| **C** | **Client-side image resize** before upload (`canvas.toBlob` at 1920px max width, 0.85 JPEG) | Drops phone-photo upload size 60-80%; users hit 5 MB ceiling far less often. | 1.5 hr |
+| **D** | **Debounce sessionStorage writes** in `useListingDraft` (300ms) | Currently writes on every keystroke; debounce keeps DevTools quiet + storage events bounded. | 15 min |
+| **E** | **CT-12 Playwright spec** — `e2e/landlord-v1-create-listing.spec.ts` (signup → onboarding → listing 1→4 → submit → moderation → visible on /apartments). Depends on enhancement A. | Per plan §13 + tasks/todo.md CT-12. The actual end-to-end automated proof. | 4 hr |
+| **F** | **CT-1 pre-commit gate script** — `scripts/gate-pr.sh` runs lint + test + check:bundle. Wire into git pre-push hook. | Prevents the "I forgot to run check:bundle" failure. ~30 min. | 30 min |
+
+### Hidden risk worth flagging (not yet ticketed)
+
+- **Supabase email-signup rate limit (4/hr default)** blocked our live D4 walkthrough this session and will block the founder if they manually onboard 20 landlords in a single day during D22-D30. **Recommendation:** during D5, bump the project's `MAILER_RATE_LIMIT_BURST` setting (or move to magic-link via Resend if confirmation emails dominate the budget). Requires Supabase dashboard access; can include in D5 docs but the actual setting change is user-side.
+- **FK-index drift** as a class of bug: today's audit caught 2 missing indexes that were only spotted via a `SELECT … FROM information_schema.table_constraints` query. **Recommendation:** add `npm run check:schema` (separate from `check:bundle`) that runs the same FK-coverage query and fails on any uncovered FK. ~30 min.
 
 ---
 

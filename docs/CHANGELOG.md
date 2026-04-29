@@ -6,6 +6,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-30] - Landlord V1 D4 audit follow-up: 2 missing FK indexes
+
+Caught by a post-D4 schema audit (`SELECT … FROM information_schema.table_constraints WHERE constraint_type='FOREIGN KEY'…`). Two FK columns from D1 had no covering index, in violation of the existing "schema-foreign-key-indexes" convention used by the P1-CRM tables.
+
+### Fixed
+- New migration `20260430130000_landlord_v1_fk_indexes.sql` — partial indexes on `landlord_inbox_events.actor_user_id WHERE actor_user_id IS NOT NULL` and `verification_requests.reviewed_by WHERE reviewed_by IS NOT NULL`. `WHERE … IS NOT NULL` keeps the indexes tiny while still serving the founder-side queries (e.g. "show me docs I reviewed").
+- Applied via Supabase MCP `execute_sql` + registered to `supabase_migrations.schema_migrations` history. `CREATE INDEX IF NOT EXISTS` is online-safe; no data backfill needed.
+- Verified live: both indexes present in `pg_indexes` (`landlord_inbox_events_actor_idx`, `verification_requests_reviewed_by_idx`).
+
+### Why this slipped past D1
+The original D1 migration index list was column-driven (the schema designer added indexes for the obvious filter columns) rather than constraint-driven (every FK gets an index by default). The convention is documented; we just didn't enforce it programmatically. **Follow-up for D5+:** add an FK-index check to `npm run check:bundle` or a separate `npm run check:schema` step so this can't regress silently.
+
+### Audit findings — clean (no action required this PR)
+- Zero `TODO/FIXME/XXX` in D1-D4 code
+- Zero `console.log` in shipped files
+- Zero `as any` / `: any` casts
+- Throws limited to RLS-violation passthroughs and explicit guards in mutations (the right pattern — TanStack Query catches + surfaces)
+
+### Commit
+`3111cb9 fix(db): backfill 2 missing FK indexes (D4 audit follow-up)`
+
+---
+
 ## [2026-04-29] - Landlord V1 Day 4: listing wizard steps 1-3 + bundle-size budget gate
 
 ### Database / Storage
