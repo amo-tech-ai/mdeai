@@ -1,6 +1,6 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-28 evening — PR #6 merged to `main` (commit `ec92105`). `outbound_clicks` migration + `log_outbound_click` RPC deployed to hosted Supabase (live + smoke-tested). `database.types.ts` regenerated; `track-outbound.ts` rpc cast removed. **Production readiness 99/100** — only the money-path edge functions remain before launch-grade.
+> **Last updated:** 2026-04-29 — **Landlord V1 D1 shipped** — schema migration `20260429000000_landlord_v1.sql` applied to hosted Supabase (5 new tables, 1 view, 14 RLS policies, 3 triggers); `database.types.ts` regenerated (4326 lines); plan §1/§7/§8/§9 refined per external review (Founding Beta framing, stretch/acceptable bands, quality-first scorecard, signed-JWT verification, renter-demand weekly check). All gates green. **Next:** D2 — signup branch + `AccountTypeStep` + post-signup redirect (per `tasks/plan/06-landlord-v1-30day.md` §5.1).
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
@@ -54,9 +54,9 @@ Catalogued for visibility — see "Phase B" below for fixes.
 
 ---
 
-## 📋 NEXT — Sequenced 22-item plan (4 phases)
+## 📋 NEXT — Sequenced 5-phase plan (44 items total: 22 feature + 22 RWT)
 
-Each phase is one PR. Items within a phase can ship together. Order respects dependencies (an item's "unblocks" target is downstream).
+Each phase is one PR (batched where indicated). Order respects dependencies — an item's "unblocks" target is downstream. **Phase E (Real-World Testing) is parallel to B/C and gates pre-launch sign-off** — see "Why this is its own phase" below.
 
 ### Phase A — Quick wins batch (target: 1 PR, ~6 hrs)
 
@@ -122,6 +122,63 @@ Visual + interaction parity on the maps surface. Ships after Phase A.
 
 ---
 
+### Phase E — Real-World Testing (~71 hrs total, runs in parallel with B + C)
+
+> **Why this is its own phase.** Synthetic gates (lint / tsc / unit / Lighthouse) all pass on a perfect browser at full speed with clean data. Real users hit edge cases those gates can't catch — tab switches mid-flow, email-link in new tab, slow LATAM 4G, double-submits, hostile inputs. Phase E builds the infrastructure + the 22 RWT specs (RWT-1 through RWT-22) defined in the **Real-World User Tests** section below. **Critical-path RWTs (1, 3, 4, 5) are pre-launch blockers** — without them, B2/B3 (money path) cannot be marked production-ready.
+
+**E0 — Test infrastructure batch** (1 PR, ~10 hrs, blocks everything else in this phase)
+- [ ] **E0.1 — Playwright project matrix** — chromium / firefox / webkit / iPhone 13 / Pixel 7. **Files**: `playwright.config.ts`. ~1 hr.
+- [ ] **E0.2 — Throttled-network fixture** — `slow-3g` / `4g-latam` / `wifi` profiles via CDP `Network.emulateNetworkConditions`. **Files**: `e2e/fixtures/network.ts`. ~2 hrs.
+- [ ] **E0.3 — Test inbox for magic links** — Mailpit (local) + Inbucket (Supabase preview). Helper `getMagicLinkFromInbox(email)`. **Files**: `e2e/fixtures/inbox.ts`, `docker-compose.test.yml`. ~3 hrs.
+- [ ] **E0.4 — Supabase test project / branch DB** — separate `mdeai-test` project OR per-PR branch DB so e2e doesn't pollute prod. CI step pushes migrations via `supabase db push --project-ref $TEST_PROJECT_REF`. ~2 hrs.
+- [ ] **E0.5 — Test-data factories** — typed fixtures for apartments / users / leads / outbound-clicks with cleanup. **Files**: `e2e/fixtures/factories.ts`. ~3 hrs.
+- [ ] **E0.6 — Geographic simulation** — Vercel preview with `VERCEL_REGION=gru1` (São Paulo) for TTFB testing. Documented procedure, not automated. ~30 min user-side.
+
+**E1 — Critical-path RWTs** (1 PR per spec, runs after E0; blocks any pre-launch sign-off)
+- [ ] **E1.1 — RWT-1** Anonymous → authed prompt handoff (3 hrs)
+- [ ] **E1.2 — RWT-3** Search → Save → Add-to-trip → Outbound click (Week 2 exit test) (6 hrs)
+- [ ] **E1.3 — RWT-4** SEO → chat handoff with listing context (2 hrs)
+- [ ] **E1.4 — RWT-5** Booking + idempotency on double-submit (4 hrs, depends on B2)
+
+**E2 — Reliability + edge-case RWTs** (1 PR per spec, parallel with C-phase work)
+- [ ] **E2.1 — RWT-2** Email link in NEW TAB (the R7 case) (4 hrs, depends on D7)
+- [ ] **E2.2 — RWT-6** Tab refresh mid-stream (3 hrs)
+- [ ] **E2.3 — RWT-7** Browser back button after pin click (2 hrs)
+- [ ] **E2.4 — RWT-8** Anon → authed transition preserves conversation (3 hrs)
+- [ ] **E2.5 — RWT-9** Sign out resets observability identity (2 hrs)
+- [ ] **E2.6 — RWT-10** Two-tab session sync (3 hrs)
+
+**E3 — Performance + perception under stress** (chromium + 4g-latam profiles)
+- [ ] **E3.1 — RWT-11** Slow 3G first-paint (3 hrs)
+- [ ] **E3.2 — RWT-12** Time-to-first-pin on slow 4G with `ttfp_ms` reported to PostHog (3 hrs)
+- [ ] **E3.3 — RWT-13** Concurrent users + rate-limit observability (4 hrs, depends on B6)
+
+**E4 — Mobile + iOS quirks** (mobile-safari + mobile-chrome)
+- [ ] **E4.1 — RWT-14** iOS Safari 100vh + safe-area + 100dvh map drawer (3 hrs)
+- [ ] **E4.2 — RWT-15** Touch-tap behavior — no stuck hover, ≥ 44 × 44 px (2 hrs)
+
+**E5 — Accessibility** (`@axe-core/playwright` + keyboard sim)
+- [ ] **E5.1 — RWT-16** Screen-reader navigation through chat (4 hrs)
+- [ ] **E5.2 — RWT-17** Reduced-motion respect (2 hrs)
+
+**E6 — Security + hostile inputs**
+- [ ] **E6.1 — RWT-18** XSS payload in chat input (2 hrs)
+- [ ] **E6.2 — RWT-19** SQL injection attempt in chat-context chips (2 hrs)
+- [ ] **E6.3 — RWT-20** Anon user attempts admin endpoint (2 hrs, depends on B4)
+
+**E7 — Geographic + network reality**
+- [ ] **E7.1 — RWT-21** LATAM TTFB from São Paulo VPS — manual one-shot procedure (30 min user-side)
+- [ ] **E7.2 — RWT-22** Lighthouse CI cold-cache real-user load (2 hrs)
+
+**Phase E acceptance:**
+- [ ] E0 batch PR merged (Playwright + network fixture + inbox + branch DB + factories + geo procedure)
+- [ ] All 4 critical-path RWTs (E1.1–E1.4) green for **5 consecutive runs** on chromium + firefox + webkit + mobile-safari, on `wifi` AND `4g-latam`
+- [ ] All edge-case RWTs (E2–E7) green on chromium with the relevant browser/network knob
+- [ ] Failures auto-attach Playwright trace + screenshot + console + network HAR to the PR comment
+- [ ] Perf RWTs (E3.2 RWT-12, E7.2 RWT-22) report measurements to PostHog `test_perf_*` events so prod regressions show up in real-data dashboards
+
+---
+
 ## 🆕 Newly identified (added 2026-04-28 evening)
 
 Not yet phased — review and slot into A / B / C / D:
@@ -136,24 +193,40 @@ Not yet phased — review and slot into A / B / C / D:
 
 ---
 
-## 🎯 Recommended sequencing (next 2-week sprint)
+## 🎯 Recommended sequencing (next 3-week sprint, real-user-test-driven)
 
-**Week 1 (Mon–Fri, 22 hrs):**
-- Day 1–2: **Phase A** (8 items in 1 PR — ~6 hrs total). Gives compounding wins immediately.
-- Day 3: **B1 Playwright E2E** (6 hrs). Without this, every PR after Phase A flies blind.
-- Day 4–5: **B2 booking-create + B3 payment-webhook** (1.5 days combined). Closes the money-path gap.
+**Week 1 — Foundation + critical money-path (Mon–Fri, ~28 hrs)**
+- **Day 1**: ✅ **Phase A** (5 of 7 items shipped on commit `49855b8`). A7 + A8 = manual user-side actions to schedule.
+- **Day 2**: **E0 — RWT infrastructure batch** (~10 hrs, 1 PR). Playwright matrix + network fixture + magic-link inbox + branch DB + factories + geo procedure. **Blocks all subsequent E-phase specs** so this lands first.
+- **Day 3**: **E1.1 RWT-1** anon→authed handoff (3 hrs) + **E1.3 RWT-4** SEO→chat handoff (2 hrs) + **E1.2 RWT-3** Week 2 exit test (6 hrs ÷ 2 days). Critical-path RWTs that don't depend on B-phase.
+- **Day 4**: Finish RWT-3 + start **B2 booking-create** (Stripe vs Wompi decision must be made now or pick Stripe-only as default).
+- **Day 5**: Finish **B2** + start **B3 payment-webhook**.
 
-**Week 2 (Mon–Fri, 22 hrs):**
-- Day 1: **B4 + B5 + B6 + B7** (security batch — RBAC + CSP + durable rate-limit + Sentry release tag). 1 PR.
-- Day 2–3: **B8 Showing-reminder cron** (3 hrs) + **C1 MapContext → zustand** (3 hrs) + **C3 useMarkerLayer** (2 hrs). 1 PR each.
-- Day 4–5: **C2 MapShell** (1 day) — unblocks C4/C6.
+**Week 2 — Money path + idempotency + security batch (~28 hrs)**
+- **Day 1**: Finish **B3**. Then **E1.4 RWT-5** booking + idempotency on double-submit (4 hrs, depends on B2 + B3). Closes PRC-1 with end-to-end real-user proof.
+- **Day 2**: **B4 RBAC + B5 CSP + B6 durable rate-limit + B7 Sentry release tag** (security batch, 1 PR, ~10 hrs combined — they share `_shared/` infra). Then **E6.3 RWT-20** anon-as-admin (2 hrs, depends on B4).
+- **Day 3**: **B8 Showing-reminder cron** (3 hrs) + **E3.3 RWT-13** concurrent users + rate-limit (4 hrs, depends on B6).
+- **Day 4–5**: **E2.2 RWT-6** refresh mid-stream + **E2.3 RWT-7** browser back + **E2.4 RWT-8** anon→authed conversation + **E2.5 RWT-9** signout identity + **E2.6 RWT-10** two-tab sync (~13 hrs total, edge-case batch in 1 PR).
+
+**Week 3 — Mindtrip parity + remaining RWTs (~22 hrs)**
+- **Day 1**: **C1 MapContext → zustand** (3 hrs) + **C3 useMarkerLayer** (2 hrs).
+- **Day 2**: **C2 MapShell** (1 day) — unblocks C4 / C6 for next sprint.
+- **Day 3**: **E3.1 RWT-11** Slow 3G first-paint (3 hrs) + **E3.2 RWT-12** time-to-first-pin (3 hrs).
+- **Day 4**: **E4.1 RWT-14** iOS Safari quirks + **E4.2 RWT-15** touch-tap (~5 hrs combined).
+- **Day 5**: **E5.1 RWT-16** screen-reader nav + **E5.2 RWT-17** reduced-motion + **E6.1 RWT-18** XSS + **E6.2 RWT-19** SQLi (~10 hrs, but each spec ≤ 4 hrs so multiple can ship).
+
+**Backlog (post-week-3, parallel with D-phase)**:
+- **D7 → E2.1** Email-in-new-tab fix + RWT (R7 + RWT-2 closure)
+- **E7.1 RWT-21** LATAM TTFB manual + **E7.2 RWT-22** Lighthouse CI
 
 **Why this ordering:**
-1. Phase A first — compounding wins ship before bigger work begins; review surface stays small.
-2. B1 (Playwright) immediately after — every PR from this point benefits from automated smoke.
-3. B2 + B3 (money path) is the last pre-launch blocker — must land before any marketing push.
-4. Security batch (B4-B7) ships as one PR — they share `_shared/` infrastructure.
-5. Phase C unblocks Mindtrip parity for the 60-day plan; runs in parallel with B once B1 + B2 + B3 are merged.
+1. **Phase A done first (compounding wins)** — already shipped.
+2. **E0 RWT infrastructure (Day 2 W1)** — without this, every B-phase task ships with synthetic-only verification and cannot pass the new "production-ready" definition.
+3. **Critical-path RWTs (E1.x) before B2/B3** where possible — RWT-1 / 3 / 4 don't depend on money path. Build the regression net before building the money path.
+4. **B2 + B3 with RWT-5 attached** — the money-path edge functions ship with their idempotency real-user test in the same PR-pair, so the launch blocker (R1) closes with proof, not synthetic verification.
+5. **Security batch (B4–B7) + RWT-20** — same lane. RWT-20 (anon-as-admin) verifies B4 closes R3 in real-user terms.
+6. **Edge-case RWTs (E2.x)** ship as one batch in W2 once B-phase infra is settled — they share fixtures.
+7. **Phase C in W3** runs after the regression net is live, so map refactors don't silently break critical flows.
 
 ---
 
@@ -415,6 +488,31 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [x] No duplicate items between phases
 - [x] No item depends on something later in the same phase
 - [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## DONE 2026-04-29 — Landlord V1 D1: schema migration + plan refinements
+
+Per `tasks/plan/06-landlord-v1-30day.md` §5.1 D1.
+
+- [x] **Migration `20260429000000_landlord_v1.sql` applied** to hosted Supabase via MCP `apply_migration`. 5 new tables (`landlord_profiles`, `landlord_inbox`, `landlord_inbox_events`, `verification_requests`, `analytics_events_daily`), 1 view (`landlord_profiles_public`, security_invoker), 4 `apartments` columns (`landlord_id` FK, `moderation_status`, `rejection_reason`, `source`), 14 RLS policies, 2 functions (`acting_landlord_ids()`, `auto_create_landlord_inbox_from_message()`), 3 triggers.
+- [x] **43 seed apartments backfilled** — `moderation_status='approved'`, `source='seed'`. Renter-side queries unchanged (still filter `status='active'`).
+- [x] **Existing P1-CRM `leads` table preserved** — 6 rows + FKs from `showings` (4) and `rental_applications` (4) untouched. V1 uses `landlord_inbox` instead (Option C).
+- [x] **Trigger SQL fixed** — plan §2.8 referenced `NEW.body` / `NEW.user_id` / `NEW.metadata` (don't exist on `messages`). Live trigger uses `NEW.content`, JOINs `conversations.user_id`, reads `session_data->>'apartment_id'`. SECURITY DEFINER + search_path locked.
+- [x] **`database.types.ts` regenerated** — 3940 → 4326 lines via `supabase gen types typescript --linked --schema public`. 24 references to new landlord tables.
+- [x] **Plan doc patched** — §2.3, §2.4, §2.7, §2.8 renamed to `landlord_inbox`/`landlord_inbox_events` with rationale callout. §5.1 D1 row updated.
+- [x] **Plan refinements landed** (external review feedback):
+  - §1 reframed "free for everyone" → "Founding Beta, free for first 100 landlords permanently"
+  - §1 + §8.1 D30 targets split into Acceptable / Stretch bands (kill criteria unchanged)
+  - §7.1 daily scorecard reorders quality-first (reply rate + time-to-reply + active landlords) above count metrics; adds weekly renter-demand health check
+  - §9.1 routine notes founder time shifts to outreach once D11 email automation lands
+  - §9.4 verification swaps naked magic-link for signed JWT (24h expiry, single-use)
+- [x] **Gates green** — `npm run lint` exit 0 · `npm run test` 44/44 · `npm run verify:edge` 11/11 · `npm run build` succeeds in 4.04s.
+
+**Verification queries (live on hosted Supabase):**
+- 5 new tables exist · 1 view exists · 4 apartment columns added · 43 apartments backfilled · 2 functions registered · 3 triggers active · 14 policies installed · 6 existing leads rows untouched.
+
+**Next: D2 (signup branch).** Per §5.1: extend `src/pages/Signup.tsx` with `AccountTypeStep` ("renter" or "landlord"), add post-signup redirect logic to `useAuth.tsx`, add `landlord_signup_started` PostHog event. Commit message: `feat(auth): landlord account-type toggle`.
 
 ---
 

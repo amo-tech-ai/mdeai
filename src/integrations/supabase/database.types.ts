@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -250,6 +251,60 @@ export type Database = {
           },
         ]
       }
+      analytics_events_daily: {
+        Row: {
+          affiliate_revenue_cents: number
+          date: string
+          landlord_id: string
+          leads_received: number
+          leads_viewed: number
+          listings_created: number
+          listings_edited: number
+          logins: number
+          replies_marked: number
+          whatsapp_clicks: number
+        }
+        Insert: {
+          affiliate_revenue_cents?: number
+          date: string
+          landlord_id: string
+          leads_received?: number
+          leads_viewed?: number
+          listings_created?: number
+          listings_edited?: number
+          logins?: number
+          replies_marked?: number
+          whatsapp_clicks?: number
+        }
+        Update: {
+          affiliate_revenue_cents?: number
+          date?: string
+          landlord_id?: string
+          leads_received?: number
+          leads_viewed?: number
+          listings_created?: number
+          listings_edited?: number
+          logins?: number
+          replies_marked?: number
+          whatsapp_clicks?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_daily_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_events_daily_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       apartments: {
         Row: {
           address: string | null
@@ -274,6 +329,7 @@ export type Database = {
           host_response_time: string | null
           id: string
           images: string[] | null
+          landlord_id: string | null
           last_checked_at: string | null
           latitude: number | null
           location: unknown
@@ -281,6 +337,7 @@ export type Database = {
           maximum_stay_days: number | null
           metadata: Json | null
           minimum_stay_days: number | null
+          moderation_status: string
           neighborhood: string
           parking_included: boolean | null
           pet_friendly: boolean | null
@@ -289,10 +346,12 @@ export type Database = {
           price_weekly: number | null
           rating: number | null
           raw_amenities: Json | null
+          rejection_reason: string | null
           review_count: number | null
           size_sqm: number | null
           slug: string | null
           smoking_allowed: boolean | null
+          source: string | null
           source_listing_id: string | null
           source_url: string | null
           status: string | null
@@ -328,6 +387,7 @@ export type Database = {
           host_response_time?: string | null
           id?: string
           images?: string[] | null
+          landlord_id?: string | null
           last_checked_at?: string | null
           latitude?: number | null
           location?: unknown
@@ -335,6 +395,7 @@ export type Database = {
           maximum_stay_days?: number | null
           metadata?: Json | null
           minimum_stay_days?: number | null
+          moderation_status?: string
           neighborhood: string
           parking_included?: boolean | null
           pet_friendly?: boolean | null
@@ -343,10 +404,12 @@ export type Database = {
           price_weekly?: number | null
           rating?: number | null
           raw_amenities?: Json | null
+          rejection_reason?: string | null
           review_count?: number | null
           size_sqm?: number | null
           slug?: string | null
           smoking_allowed?: boolean | null
+          source?: string | null
           source_listing_id?: string | null
           source_url?: string | null
           status?: string | null
@@ -382,6 +445,7 @@ export type Database = {
           host_response_time?: string | null
           id?: string
           images?: string[] | null
+          landlord_id?: string | null
           last_checked_at?: string | null
           latitude?: number | null
           location?: unknown
@@ -389,6 +453,7 @@ export type Database = {
           maximum_stay_days?: number | null
           metadata?: Json | null
           minimum_stay_days?: number | null
+          moderation_status?: string
           neighborhood?: string
           parking_included?: boolean | null
           pet_friendly?: boolean | null
@@ -397,10 +462,12 @@ export type Database = {
           price_weekly?: number | null
           rating?: number | null
           raw_amenities?: Json | null
+          rejection_reason?: string | null
           review_count?: number | null
           size_sqm?: number | null
           slug?: string | null
           smoking_allowed?: boolean | null
+          source?: string | null
           source_listing_id?: string | null
           source_url?: string | null
           status?: string | null
@@ -413,7 +480,22 @@ export type Database = {
           virtual_tour_url?: string | null
           wifi_speed?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "apartments_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apartments_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bookings: {
         Row: {
@@ -1037,6 +1119,208 @@ export type Database = {
           key?: string
           response?: Json
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      landlord_inbox: {
+        Row: {
+          apartment_id: string | null
+          archived_at: string | null
+          archived_reason: string | null
+          channel: string
+          conversation_id: string | null
+          created_at: string
+          first_reply_at: string | null
+          id: string
+          landlord_id: string | null
+          raw_message: string
+          renter_email: string | null
+          renter_id: string | null
+          renter_name: string | null
+          renter_phone_e164: string | null
+          status: string
+          structured_profile: Json
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          apartment_id?: string | null
+          archived_at?: string | null
+          archived_reason?: string | null
+          channel?: string
+          conversation_id?: string | null
+          created_at?: string
+          first_reply_at?: string | null
+          id?: string
+          landlord_id?: string | null
+          raw_message: string
+          renter_email?: string | null
+          renter_id?: string | null
+          renter_name?: string | null
+          renter_phone_e164?: string | null
+          status?: string
+          structured_profile?: Json
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          apartment_id?: string | null
+          archived_at?: string | null
+          archived_reason?: string | null
+          channel?: string
+          conversation_id?: string | null
+          created_at?: string
+          first_reply_at?: string | null
+          id?: string
+          landlord_id?: string | null
+          raw_message?: string
+          renter_email?: string | null
+          renter_id?: string | null
+          renter_name?: string | null
+          renter_phone_e164?: string | null
+          status?: string
+          structured_profile?: Json
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_inbox_apartment_id_fkey"
+            columns: ["apartment_id"]
+            isOneToOne: false
+            referencedRelation: "apartments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "landlord_inbox_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "landlord_inbox_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "landlord_inbox_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landlord_inbox_events: {
+        Row: {
+          actor_kind: string | null
+          actor_user_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          inbox_id: string
+          metadata: Json
+        }
+        Insert: {
+          actor_kind?: string | null
+          actor_user_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          inbox_id: string
+          metadata?: Json
+        }
+        Update: {
+          actor_kind?: string | null
+          actor_user_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          inbox_id?: string
+          metadata?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landlord_inbox_events_inbox_id_fkey"
+            columns: ["inbox_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_inbox"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landlord_profiles: {
+        Row: {
+          active_listings: number
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          display_name: string
+          id: string
+          kind: string
+          languages: string[]
+          median_response_time_minutes: number | null
+          notes: string | null
+          phone_e164: string | null
+          primary_neighborhood: string | null
+          source: string | null
+          total_leads_received: number
+          total_listings: number
+          total_replies_sent: number
+          updated_at: string
+          user_id: string
+          verification_status: string
+          verified_at: string | null
+          whatsapp_e164: string | null
+        }
+        Insert: {
+          active_listings?: number
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          kind?: string
+          languages?: string[]
+          median_response_time_minutes?: number | null
+          notes?: string | null
+          phone_e164?: string | null
+          primary_neighborhood?: string | null
+          source?: string | null
+          total_leads_received?: number
+          total_listings?: number
+          total_replies_sent?: number
+          updated_at?: string
+          user_id: string
+          verification_status?: string
+          verified_at?: string | null
+          whatsapp_e164?: string | null
+        }
+        Update: {
+          active_listings?: number
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          kind?: string
+          languages?: string[]
+          median_response_time_minutes?: number | null
+          notes?: string | null
+          phone_e164?: string | null
+          primary_neighborhood?: string | null
+          source?: string | null
+          total_leads_received?: number
+          total_listings?: number
+          total_replies_sent?: number
+          updated_at?: string
+          user_id?: string
+          verification_status?: string
+          verified_at?: string | null
+          whatsapp_e164?: string | null
         }
         Relationships: []
       }
@@ -2616,6 +2900,60 @@ export type Database = {
         }
         Relationships: []
       }
+      verification_requests: {
+        Row: {
+          doc_kind: string
+          expires_at: string | null
+          id: string
+          landlord_id: string
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          storage_path: string
+          uploaded_at: string
+        }
+        Insert: {
+          doc_kind: string
+          expires_at?: string | null
+          id?: string
+          landlord_id: string
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          storage_path: string
+          uploaded_at?: string
+        }
+        Update: {
+          doc_kind?: string
+          expires_at?: string | null
+          id?: string
+          landlord_id?: string
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          storage_path?: string
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_requests_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_requests_landlord_id_fkey"
+            columns: ["landlord_id"]
+            isOneToOne: false
+            referencedRelation: "landlord_profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_conversations: {
         Row: {
           created_at: string
@@ -2729,6 +3067,51 @@ export type Database = {
         }
         Relationships: []
       }
+      landlord_profiles_public: {
+        Row: {
+          active_listings: number | null
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          display_name: string | null
+          id: string | null
+          is_verified: boolean | null
+          languages: string[] | null
+          median_response_time_minutes: number | null
+          primary_neighborhood: string | null
+          total_leads_received: number | null
+          verified_at: string | null
+        }
+        Insert: {
+          active_listings?: number | null
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string | null
+          is_verified?: never
+          languages?: string[] | null
+          median_response_time_minutes?: number | null
+          primary_neighborhood?: string | null
+          total_leads_received?: number | null
+          verified_at?: string | null
+        }
+        Update: {
+          active_listings?: number | null
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string | null
+          is_verified?: never
+          languages?: string[] | null
+          median_response_time_minutes?: number | null
+          primary_neighborhood?: string | null
+          total_leads_received?: number | null
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       _postgis_deprecate: {
@@ -2820,6 +3203,7 @@ export type Database = {
         Returns: unknown
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      acting_landlord_ids: { Args: never; Returns: string[] }
       addauth: { Args: { "": string }; Returns: boolean }
       addgeometrycolumn:
         | {
@@ -3938,3 +4322,5 @@ export const Constants = {
     },
   },
 } as const
+A new version of Supabase CLI is available: v2.95.4 (currently installed v2.90.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

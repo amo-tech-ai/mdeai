@@ -12,13 +12,13 @@
 
 | | |
 |---|---|
-| **Mission** | Get 20 Medellín landlords onboarded with ≥1 published listing each, generating ≥200 renter leads, in 30 calendar days. |
-| **Why no billing yet** | We don't know what landlords actually value until we watch them use a free product. Pre-PMF pricing is a guess; post-30-day data answers it for us. |
+| **Mission** | Get the first 10–20 Medellín landlords onboarded with ≥1 published listing each, generating 100–200 renter leads, in 30 calendar days. |
+| **Why no billing yet** | This is a **Founding Beta**: free for the first 100 landlords, permanently. We don't know what landlords actually value until we watch them use a free product; pre-PMF pricing is a guess. Day-60 data tells us what to charge later cohorts — never the founding 100. |
 | **Engineering scope** | 6 edge functions · 6 new tables · 9 frontend pages · 1 migration. ~12 engineer-days of code. |
 | **Founder scope** | 18 calendar-days of code (lead engineer), 12 calendar-days of outreach (founder). They can run in parallel from D8. |
-| **First paying landlord** | Not in V1. We unlock that decision at Day 60 once cohorts reveal which landlords are power users vs. casual. |
-| **What we instrument from Day 1** | Every landlord action → PostHog with typed events. Daily aggregate `landlord_engagement` table for cohort SQL. Outbound revenue (already shipping via affiliate clicks) attributed per-landlord so we know who's actually generating value. |
-| **V1 success criteria (Day 30)** | (a) ≥20 landlords with ≥1 published listing; (b) ≥200 leads captured from renter chat; (c) ≥50 leads with a "Reply on WhatsApp" click recorded; (d) median time-to-first-reply < 6 hours; (e) ≥5 of the 20 landlords logged in 3+ separate days. |
+| **First paying landlord** | Not in V1, and not from the founding 100. Day-60 cohort review picks a monetisation model for new sign-ups #101+. |
+| **What we instrument from Day 1** | Every landlord action → PostHog with typed events. Daily aggregate `analytics_events_daily` table for cohort SQL. Outbound revenue (already shipping via affiliate clicks) attributed per-landlord so we know who's actually generating value. |
+| **V1 targets (Day 30)** | **Stretch:** 20 landlords / 50 listings / 200 leads / median time-to-first-reply < 6h / 5+ landlords logged in 3+ days. **Acceptable:** 10 landlords / 25 listings / 100 leads / 25%+ reply rate / 3+ active landlords. **Kill criteria** (§8.3): <5 landlords or <20 leads after 100 outreach attempts → pause and diagnose. |
 
 ---
 
@@ -139,10 +139,12 @@ CREATE INDEX IF NOT EXISTS apartments_landlord_idx ON apartments(landlord_id)
 CREATE INDEX IF NOT EXISTS apartments_moderation_idx ON apartments(moderation_status, created_at DESC);
 ```
 
-### 2.3 `leads`
+### 2.3 `landlord_inbox`
+
+> **Naming divergence (locked 2026-04-28, Option C):** the V1 table is `landlord_inbox`, not `leads`. A pre-existing `leads` table from the P1-CRM pipeline (renter→agent prospect funnel) ships with 6 live rows + FKs from `showings` and `rental_applications`. Renaming the V1 table avoids that clash. UX-level "lead" terminology (URLs `/host/leads`, hooks `useLeads`, PostHog events `leads_viewed`) intentionally keeps the landlord's mental model.
 
 ```sql
-CREATE TABLE public.leads (
+CREATE TABLE public.landlord_inbox (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   -- Source
   channel           text NOT NULL DEFAULT 'chat'
@@ -170,17 +172,18 @@ CREATE TABLE public.leads (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX leads_landlord_status_idx ON leads(landlord_id, status, created_at DESC);
-CREATE INDEX leads_apartment_idx ON leads(apartment_id, created_at DESC) WHERE apartment_id IS NOT NULL;
-CREATE INDEX leads_renter_idx ON leads(renter_id, created_at DESC) WHERE renter_id IS NOT NULL;
+CREATE INDEX landlord_inbox_landlord_status_idx ON landlord_inbox(landlord_id, status, created_at DESC);
+CREATE INDEX landlord_inbox_apartment_idx ON landlord_inbox(apartment_id, created_at DESC) WHERE apartment_id IS NOT NULL;
+CREATE INDEX landlord_inbox_renter_idx ON landlord_inbox(renter_id, created_at DESC) WHERE renter_id IS NOT NULL;
+CREATE INDEX landlord_inbox_conversation_idx ON landlord_inbox(conversation_id) WHERE conversation_id IS NOT NULL;
 ```
 
-### 2.4 `lead_events` (audit + analytics)
+### 2.4 `landlord_inbox_events` (audit + analytics)
 
 ```sql
-CREATE TABLE public.lead_events (
+CREATE TABLE public.landlord_inbox_events (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  lead_id         uuid NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  inbox_id        uuid NOT NULL REFERENCES landlord_inbox(id) ON DELETE CASCADE,
   event_type      text NOT NULL CHECK (event_type IN (
                     'created','viewed','whatsapp_clicked','marked_replied',
                     'archived','spam_marked','reopened','admin_assigned'
@@ -191,8 +194,8 @@ CREATE TABLE public.lead_events (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX lead_events_lead_idx ON lead_events(lead_id, created_at DESC);
-CREATE INDEX lead_events_type_time_idx ON lead_events(event_type, created_at DESC);
+CREATE INDEX landlord_inbox_events_inbox_idx ON landlord_inbox_events(inbox_id, created_at DESC);
+CREATE INDEX landlord_inbox_events_type_time_idx ON landlord_inbox_events(event_type, created_at DESC);
 ```
 
 ### 2.5 `verification_requests`
@@ -252,15 +255,15 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT id FROM landlord_profiles WHERE user_id = (SELECT auth.uid());
 $$;
 
--- leads
-ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
-CREATE POLICY leads_landlord_select ON leads FOR SELECT
+-- landlord_inbox
+ALTER TABLE landlord_inbox ENABLE ROW LEVEL SECURITY;
+CREATE POLICY landlord_inbox_select ON landlord_inbox FOR SELECT
   USING (landlord_id IN (SELECT acting_landlord_ids()) OR renter_id = (SELECT auth.uid()));
-CREATE POLICY leads_landlord_update ON leads FOR UPDATE
+CREATE POLICY landlord_inbox_update ON landlord_inbox FOR UPDATE
   USING (landlord_id IN (SELECT acting_landlord_ids()))
   WITH CHECK (landlord_id IN (SELECT acting_landlord_ids()));
 
--- lead_events: same pattern
+-- landlord_inbox_events: same pattern
 -- verification_requests: landlord can see own, admin can see all
 -- analytics_events_daily: landlord can see own, service-role can read all
 ```
@@ -268,26 +271,51 @@ CREATE POLICY leads_landlord_update ON leads FOR UPDATE
 ### 2.8 Triggers (V1 — minimal, 2 only)
 
 ```sql
--- Auto-create lead from a new chat conversation that mentions an apartment
-CREATE OR REPLACE FUNCTION public.auto_create_lead_from_message() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE v_landlord_id uuid; v_apartment_id uuid;
+-- Auto-create a landlord_inbox row from a new chat conversation that mentions
+-- an apartment. SECURITY DEFINER so the trigger can write the inbox row even
+-- when the renter inserting the message has no direct INSERT grant.
+--
+-- NOTE: the actual schema differs from earlier drafts in two ways:
+--   - messages.content (not .body)
+--   - messages has no user_id column; renter id lives on conversations.user_id
+-- See migration 20260429000000_landlord_v1.sql for the live version.
+CREATE OR REPLACE FUNCTION public.auto_create_landlord_inbox_from_message()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user_id        uuid;
+  v_apartment_id   uuid;
+  v_landlord_id    uuid;
+  v_user_msg_count integer;
+  v_already_exists boolean;
 BEGIN
-  -- Only act on first user message in a conversation
-  IF (SELECT COUNT(*) FROM messages WHERE conversation_id = NEW.conversation_id) = 1 THEN
-    -- Try to extract apartment_id from session_data if AI router classified it
-    v_apartment_id := (NEW.metadata->>'apartment_id')::uuid;
-    IF v_apartment_id IS NOT NULL THEN
-      v_landlord_id := (SELECT landlord_id FROM apartments WHERE id = v_apartment_id);
-    END IF;
-    INSERT INTO leads (channel, conversation_id, apartment_id, landlord_id, renter_id, raw_message, status)
-    VALUES ('chat', NEW.conversation_id, v_apartment_id, v_landlord_id,
-            NEW.user_id, NEW.body, 'new');
+  IF NEW.role <> 'user' THEN RETURN NEW; END IF;
+
+  SELECT count(*) INTO v_user_msg_count
+    FROM messages WHERE conversation_id = NEW.conversation_id AND role = 'user';
+  IF v_user_msg_count <> 1 THEN RETURN NEW; END IF;
+
+  SELECT user_id, NULLIF(session_data->>'apartment_id','')::uuid
+    INTO v_user_id, v_apartment_id
+    FROM conversations WHERE id = NEW.conversation_id;
+
+  IF v_apartment_id IS NOT NULL THEN
+    SELECT landlord_id INTO v_landlord_id FROM apartments WHERE id = v_apartment_id;
   END IF;
+
+  SELECT EXISTS (SELECT 1 FROM landlord_inbox WHERE conversation_id = NEW.conversation_id)
+    INTO v_already_exists;
+  IF v_already_exists THEN RETURN NEW; END IF;
+
+  INSERT INTO landlord_inbox (channel, conversation_id, apartment_id, landlord_id,
+                              renter_id, raw_message, status)
+  VALUES ('chat', NEW.conversation_id, v_apartment_id, v_landlord_id,
+          v_user_id, NEW.content, 'new');
   RETURN NEW;
 END $$;
 
--- Auto-touch updated_at on every UPDATE (existing pattern)
+-- Auto-touch updated_at on every UPDATE — reuses the existing
+-- public.update_updated_at() function (already used by leads, etc.).
 ```
 
 ---
@@ -389,7 +417,7 @@ Every page wraps in our existing `useIsMobile()` hook. Specific mobile adaptatio
 
 | Day | Deliverable | Files | Commit |
 |---|---|---|---|
-| **D1 Mon** | Single migration + types regen — `landlord_profiles` + `apartments` extensions + `leads` + `lead_events` + `verification_requests` + `analytics_events_daily` + RLS + triggers | `supabase/migrations/20260429_landlord_v1.sql` + `src/integrations/supabase/database.types.ts` | `feat(db): landlord V1 schema` |
+| **D1 Mon** | Single migration + types regen — `landlord_profiles` + `apartments` extensions + `landlord_inbox` + `landlord_inbox_events` + `verification_requests` + `analytics_events_daily` + RLS + triggers | `supabase/migrations/20260429000000_landlord_v1.sql` + `src/integrations/supabase/database.types.ts` | `feat(db): landlord V1 schema` |
 | **D2 Tue** | Signup branch + AccountTypeStep + post-signup redirect logic | `src/pages/Signup.tsx`, `AccountTypeStep.tsx`, `useAuth.tsx` (extend) | `feat(auth): landlord account-type toggle` |
 | **D3 Wed** | Onboarding 3 steps + verification-submit edge fn | `pages/host/Onboarding.tsx`, `Step1Basics.tsx`, `Step2Verification.tsx`, `Step3Welcome.tsx`, `landlord-onboarding-step`, `verification-submit` | `feat(host): onboarding wizard` |
 | **D4 Thu** | Listing form Steps 1+2 (address + specs) + photo upload | `ListingForm/Step1Address.tsx` (Google Places autocomplete), `Step2Specs.tsx`, `Step3Photos.tsx`, `lib/storage/upload-listing-photo.ts` | `feat(host): listing form steps 1-3` |
@@ -565,22 +593,27 @@ This is the most expensive landlord-acquisition cost we'll ever pay, and the mos
 
 ## 7. Metrics To Track
 
-### 7.1 The five numbers that matter
+### 7.1 The numbers that matter (quality first)
 
-Posted in a Slack channel, updated daily by a single SQL query:
+Posted in a Slack channel, updated daily by a single SQL query. Quality metrics lead — count metrics follow, because 200 leads no one replies to is a bad outcome that *looks* like a good one.
 
 ```
 DAILY V1 SCORECARD                   Day [N] of 30
 ─────────────────────────────────────────────────────────
-Landlord signups (cumulative)             [X] / 20 target
-Listings published (live)                 [X] / 50 target
-Leads received (last 24h / cumulative)    [X] / [Y]
-Median time to first WA-click reply       [X] minutes
-Active landlords (logged in last 7d)      [X] / target [signups × 0.6]
+QUALITY (lead first)
+  Median time to first WA-click reply     [X] minutes        (target <360)
+  Reply rate (WA-click ÷ leads, 7d)        [X] %              (target ≥25%)
+  Active landlords (logged ≥3 days, 7d)   [X] / target ⌈signups × 0.4⌉
+COUNT (lag indicators)
+  Landlord signups (cumulative)            [X] / 10–20 target band
+  Listings published (live)                [X] / 25–50 target band
+  Leads received (last 24h / cumulative)   [X] / [Y]
+RENTER-DEMAND HEALTH (weekly check)
+  Renter conversations (7d) vs. baseline   [X] / baseline [Y]  (alert if -25%)
 ─────────────────────────────────────────────────────────
 ```
 
-These five numbers tell us if V1 is working. Not 50 metrics — five.
+The quality metrics surface "is the loop working" before the count metrics tell us "is the loop big." If quality drops while count holds, fix the experience before more outreach. If renter-demand drops, pause landlord onboarding entirely — empty inboxes churn landlords fast.
 
 ### 7.2 PostHog event taxonomy (V1)
 
@@ -625,19 +658,27 @@ These come from `analytics_events_daily` SQL — used for V2 monetisation decisi
 
 ## 8. V1 Success Criteria + V2 Decision Gate
 
-### 8.1 V1 is "done" when (Day 30):
+### 8.1 V1 outcome bands (Day 30):
 
-- [ ] ≥20 landlords have signed up
-- [ ] ≥15 of those have published ≥1 listing (75% activation)
-- [ ] ≥50 listings live across the platform (counting seeded + landlord-uploaded)
-- [ ] ≥200 leads captured from chat / form / direct
-- [ ] ≥50 leads have a `whatsapp_reply_clicked` event (= 25% reply rate)
-- [ ] Median time-to-first-reply < 6 hours
-- [ ] ≥5 active landlords (logged in 3+ separate days in Days 22–30)
-- [ ] Auto-moderation pass rate ≥75% (founder reviews <25% of listings manually)
+Two thresholds. Hitting **Acceptable** means V1 worked enough to choose a V2 direction. Hitting **Stretch** means V1 over-delivered and we have a strong signal for monetisation. Below acceptable → §8.3 kill criteria.
+
+| Metric | Acceptable | Stretch |
+|---|---|---|
+| Landlord signups | ≥10 | ≥20 |
+| Activation (published ≥1 listing) | ≥7 (70%) | ≥15 (75%) |
+| Listings live (incl. seed) | ≥25 | ≥50 |
+| Leads captured (chat / form / direct) | ≥100 | ≥200 |
+| Reply rate (`whatsapp_reply_clicked` ÷ leads) | ≥25% | ≥30% |
+| Median time-to-first-reply | <12h | <6h |
+| Active landlords (logged 3+ days, D22–D30) | ≥3 | ≥5 |
+| Auto-moderation pass rate | ≥60% | ≥75% |
+
+Plus tooling, regardless of band:
+
 - [ ] PostHog dashboard shows daily-engagement breakdown
 - [ ] `analytics_events_daily` has 30 days of rows
 - [ ] Cohort SQL queries run in <3s
+- [ ] Renter-side conversation volume hasn't dropped >25% from D1 baseline
 
 ### 8.2 V2 decision matrix
 
@@ -669,15 +710,18 @@ If by Day 30 any of these hit:
 
 ### 9.1 Daily founder routine (D22–D30)
 
+Once D11 email-notification automation ships, manual moderation drops from ~30 min/day to <5 min/day. That hour goes back into outreach. Weekly (Mondays), check renter-side conversation volume against D1 baseline — if it dropped >25%, *pause new landlord onboarding* until renter side recovers.
+
 ```
 07:00  Check overnight signups in landlord_profiles
-07:30  Check email for verification submissions; click approve/reject magic-links
+07:30  Verification queue: approve/reject via signed magic-link emails (≤5 min)
 08:00  Daily scorecard SQL → post to Slack
+       (Mon only: weekly renter-demand check vs. baseline)
 08:30  Reply to any WhatsApp DM responses from outreach
 09:00  Outreach block: 10 WhatsApp DMs OR 1 building walk OR 1 Facebook Group post
 12:00  User-interview block (if scheduled): 1×30-min video call
 13:00  Lunch + clear inbox
-14:00  Outreach block 2
+14:00  Outreach block 2  (longer once D11 email automation removes manual ops)
 17:00  Engineering response: review on-call tickets from new-landlord friction
 19:00  End of day: update tracking spreadsheet
 ```
@@ -704,11 +748,11 @@ This doesn't scale past ~100/day, but at <50 it's how we learn what renters actu
 When a landlord uploads docs:
 
 1. `verification-submit` edge fn inserts `verification_requests` row
-2. Sends founder an email with two magic-link buttons: **Approve** / **Reject (with reason)**
-3. Founder clicks one — `verification-decide` edge fn called via the link's signed token
-4. `landlord_profiles.verification_status` updated; landlord notified via email
+2. Sends founder an email with two action buttons: **Approve** / **Reject (with reason)**
+3. Each button URL carries a **signed JWT with 24h expiry** scoped to that single `verification_requests.id` and decision verb. Replay/forward attacks fail after 24h or after first use (token consumed). Use `SUPABASE_JWT_SECRET` for signing — same secret stack as the rest of edge auth.
+4. Founder clicks → `verification-decide` edge fn validates signature + expiry + single-use, then updates `landlord_profiles.verification_status`. Landlord notified via email.
 
-No admin UI needed. Total founder time per landlord: ~30 seconds.
+No admin UI needed. Total founder time per landlord: ~30 seconds. Token-based approach swaps in for the V2 admin panel without breaking existing email links.
 
 ---
 
@@ -717,8 +761,8 @@ No admin UI needed. Total founder time per landlord: ~30 seconds.
 ```
 NEW (D1–D14)
 ────────────
-supabase/migrations/20260429_landlord_v1.sql       ─ all 6 tables + RLS + triggers
-supabase/migrations/20260506_analytics_aggregator.sql ─ analytics_events_daily + pg_cron job
+supabase/migrations/20260429000000_landlord_v1.sql ─ all 6 tables (landlord_profiles, landlord_inbox, landlord_inbox_events, verification_requests, analytics_events_daily, apartments extensions) + RLS + 3 triggers + landlord_profiles_public view  ✅ SHIPPED D1
+supabase/migrations/20260506_analytics_aggregator.sql ─ analytics_events_daily pg_cron job (D14)
 
 supabase/functions/landlord-onboarding-step/        D3
 supabase/functions/verification-submit/             D3
