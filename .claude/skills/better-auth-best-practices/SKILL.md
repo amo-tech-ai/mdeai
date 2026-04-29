@@ -122,13 +122,15 @@ A token issued with 1-hour expiry will work for that hour even after `auth.users
 - For "high-stakes" actions (booking confirmation, payment), validate session_id against `auth.sessions` server-side
 - Or `supabase.auth.signOut({ scope: 'global' })` to revoke all sessions
 
-## Rule 7 — Service role key NEVER in client-shipped code
+## Rule 7 — Service role key stays server-side
 
-Project conventions (see `.env`):
-- `VITE_SUPABASE_PUBLISHABLE_KEY` (anon key) — safe in browser
-- `SUPABASE_SERVICE_ROLE_KEY` — edge functions only, NEVER VITE_*
+The service-role key bypasses RLS — it has full read/write on every table. Its only safe home is edge functions, where it's loaded from Supabase dashboard secrets and never reaches the client.
 
-If you ever see `service_role` in `src/`, fail the PR. Period.
+Project conventions (`.env`):
+- `VITE_SUPABASE_PUBLISHABLE_KEY` (anon key) — safe in browser. Vite ships any `VITE_*` env var to the bundle.
+- `SUPABASE_SERVICE_ROLE_KEY` — edge functions only, no `VITE_*` prefix. Vite strips the var; even if a developer accidentally references it from `src/`, it'll be `undefined` at runtime — but the literal would still appear in source if someone hardcoded it.
+
+If `service_role` shows up anywhere under `src/`, the PR isn't safe to merge — anyone with view-source on the deployed site gets full DB control.
 
 ## Companion skills
 

@@ -33,7 +33,8 @@ The real `@/integrations/supabase/client.ts` constructs a session at import time
 ```ts
 import { describe, it, expect, vi } from "vitest";
 
-// MUST be before the import-under-test
+// Order matters here — vi.mock has to register the mock factory before
+// the module-under-test imports the supabase client at parse time.
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     storage: {

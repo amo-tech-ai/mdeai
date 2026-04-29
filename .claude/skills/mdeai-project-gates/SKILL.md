@@ -15,6 +15,16 @@ metadata:
 
 Five gates, in order. **Skipping any of these has shipped real bugs in V1** — D3 Rules-of-Hooks would've been caught by gate 4 before merge; D4 missing FK indexes by `get_advisors` after gate 3.
 
+## Quick path — bundled script
+
+For most PRs, just run the bundled wrapper. It detects what changed and only runs the relevant gates:
+
+```bash
+bash .claude/skills/mdeai-project-gates/scripts/run-gates.sh
+```
+
+The script always runs lint + test + build, and conditionally adds `verify:edge` (if `supabase/functions/` changed) and `check:bundle` (if `src/` or build config changed). Fails fast on any non-zero exit. Use the matrix below when you need to run individual gates by hand.
+
 ## Gate matrix
 
 | # | Command | When required | Expected |
@@ -101,12 +111,21 @@ D4 audit caught 2 missing FK indexes this way. D1 would've caught them too if we
 Once all 5 gates green + browser proof attached + schema audit clean:
 
 ```bash
-git add <only-the-files-this-PR-touches>  # NEVER `git add .`
-git commit -m "..."  # follow the commit-commands:commit skill
-git -c http.version=HTTP/1.1 push https://x-access-token:$TOKEN@github.com/amo-tech-ai/mdeai.git fix/chat-production-hardening
-```
+# Stage only the files THIS PR touches — list them explicitly. `git add .`
+# is dangerous because it can sweep in untracked drafts, secrets that
+# weren't supposed to be tracked, or files from a parallel experiment.
+# The 2026-04-29 incident (700 files swept by `git stash push -u`) is
+# the same risk class.
+git add <file-1> <file-2> ...
 
-The `http.version=HTTP/1.1` flag is needed because the network drops HTTP/2 push streams — caught during D2.
+git commit -m "..."  # follow the commit-commands:commit skill
+
+# HTTP/1.1 fallback: Vercel/GitHub sometimes drops HTTP/2 push streams
+# from this network. Caught during D2 — the flag bypasses the issue.
+git -c http.version=HTTP/1.1 push \
+  https://x-access-token:$TOKEN@github.com/amo-tech-ai/mdeai.git \
+  fix/chat-production-hardening
+```
 
 ## The contract
 
