@@ -69,9 +69,12 @@ export type AppEvent =
   | { name: 'booking_submitted'; apartmentId: string; estimatedTotal: number; nights: number }
   | { name: 'inquiry_sent'; apartmentId: string }
   | { name: 'outbound_clicked'; apartmentId: string; sourceUrl: string }
-  // — Landlord V1 (D2 ships the first two; rest follow per plan §7.2) —
+  // — Landlord V1 (D2 + D3 events; rest follow per plan §7.2) —
   | { name: 'landlord_signup_started'; from: 'signup_page' | 'host_redirect' }
-  | { name: 'landlord_signup_completed'; method: 'email' | 'google' };
+  | { name: 'landlord_signup_completed'; method: 'email' | 'google' }
+  | { name: 'onboarding_step_completed'; step: 1 | 2 | 3; durationSec: number }
+  | { name: 'onboarding_completed'; totalDurationSec: number }
+  | { name: 'verification_doc_uploaded'; docKind: 'national_id' | 'passport' | 'rut' | 'property_deed' | 'utility_bill' };
 
 /**
  * Capture a domain event. Silent no-op when PostHog isn't initialized.

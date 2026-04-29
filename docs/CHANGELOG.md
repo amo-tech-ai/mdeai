@@ -6,6 +6,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-29] - Landlord V1 Day 3: onboarding 3-step wizard
+
+### Database / Storage
+- New `identity-docs` private Storage bucket — 10 MB limit, JPEG/PNG/WebP/PDF only. Path convention `<auth.uid()>/<filename>` so uploads work even before `landlord_profiles` row exists
+- 5 RLS policies on `storage.objects` for the bucket: `identity_docs_insert_own` / `_select_own` / `_update_own` / `_delete_own` / `_service_role`. Landlords gated to their own folder via `(storage.foldername(name))[1] = auth.uid()::text`; admin reads all
+- Migration `20260430000000_landlord_v1_identity_docs_bucket.sql` registered to schema_migrations history. Apply via execute_sql, not apply_migration (the MCP role lacks ownership of `storage.objects`; documented in the migration's comment)
+
+### Frontend
+- `src/pages/host/Onboarding.tsx` — replaces D2 stub. 3-step state machine with stepper, per-step duration timers (PostHog), Back navigation, "Finish later" escape hatch. Auth gate kept (anon → /login, renter → /dashboard, landlord → wizard). Re-entry: if `landlord_profiles` row already exists, Step 1 pre-fills from it
+- `src/components/host/onboarding/Step1Basics.tsx` — react-hook-form + zod. Fields: display_name (2–80 chars), kind (individual/agent/property_manager), whatsapp_e164 (E.164 regex `^\+[1-9]\d{7,14}$`), primary_neighborhood (Select with 11 curated Medellín options + optional). Default `+57` prefix on WhatsApp
+- `src/components/host/onboarding/Step2Verification.tsx` — optional ID upload. doc_kind Select (national_id / passport / rut / property_deed / utility_bill), drag-n-drop area with 10 MB + MIME validation, "Skip for now" + "Submit & continue" buttons
+- `src/components/host/onboarding/Step3Welcome.tsx` — first-name greeting, Profile/Verification status cards, CTAs to `/host/listings/new` (D5) + `/dashboard`, founder WhatsApp link
+- `src/hooks/host/useLandlordOnboarding.ts` — 3 TanStack Query hooks: `useOwnLandlordProfile` (gated by RLS `landlord_profiles_select_own`), `useSubmitStep1Basics` (UPSERT with onConflict=user_id), `useSubmitVerification` (storage upload + INSERT verification_requests with orphan-cleanup on DB error)
+
+### Telemetry
+- 3 PostHog event arms added: `onboarding_step_completed` (`step: 1|2|3`, `durationSec`), `onboarding_completed` (`totalDurationSec`), `verification_doc_uploaded` (`docKind`). Plan §7.2 V1 events 3–5 of 12
+
+### Testing — proof of working real-world
+- Vitest: 13 new tests across `Step1Basics.test.tsx` (6), `Step2Verification.test.tsx` (5 — file-size + MIME guards real `File` objects), `Step3Welcome.test.tsx` (5). Total 48 → 61
+- `src/test/setup.ts` extended: ResizeObserver polyfill + scrollIntoView/pointer-capture mocks so Radix Select renders in JSDOM
+- Browser-verified end-to-end via Claude Preview MCP against live Supabase (project zkwcbyxiwklihegjhuql):
+  1. Anon `/host/onboarding` → `/login?returnTo=%2Fhost%2Fonboarding` ✓
+  2. Authed landlord (test user with `account_type='landlord'`) → wizard Step 1 renders with stepper ✓
+  3. Step 1 form submission → `landlord_profiles` row created via RLS (verified via SQL: id=`da688800-…`, user_id matches, whatsapp_e164=`+573001112233`, kind=`individual`, verification_status=`pending`) ✓
+  4. Step 1 → Step 2 advance with stepper progressing ✓
+  5. Skip → Step 3 "Welcome aboard, D3." with both CTAs verified ✓
+  6. Storage upload + verification_requests INSERT path (`identity-docs/<user_id>/national_id_<stamp>_test-id.pdf`) verified — both rows + storage object confirmed via SQL `count(*)` joins
+  7. Test user + landlord row + verification + storage object all cleaned up; live DB has 0 leftover D3 test data
+- 2 React-bug fixes caught + landed in this session: (a) Rules-of-Hooks violation (useRef after early returns) → moved all hooks above conditional returns, (b) ResizeObserver missing in JSDOM → polyfilled in setup
+
+### Tooling
+- Gates: `npm run lint` exit 0 · `npm run test` 61/61 · `npm run build` 4.64s. Bundle entry chunk gzip: 94.99 KB (under 100 KB budget)
+
+---
+
 ## [2026-04-29] - Landlord V1 Day 2: signup branch + per-day testing block
 
 ### Frontend

@@ -1,6 +1,6 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-29 evening — **Landlord V1 D2 shipped** — signup branch with AccountTypeStep + post-signup redirect + 4 Vitest tests + browser-verified via Claude Preview MCP. Per-day testing block codified as plan §13 (4 required artifacts per V1 day). 5 new RWT scenarios (RWT-23–27) + 2 new CT items (CT-12, CT-13). All gates green (48/48 unit tests). **Next:** D3 — onboarding 3-step wizard + `landlord-onboarding-step` + `verification-submit` edge fns (per `tasks/plan/06-landlord-v1-30day.md` §5.1).
+> **Last updated:** 2026-04-29 night — **Landlord V1 D3 shipped** — 3-step onboarding wizard (`Step1Basics` + `Step2Verification` + `Step3Welcome`) replaces the D2 stub. `identity-docs` Storage bucket + 5 RLS policies live. `useLandlordOnboarding` hook with 3 TanStack Query mutations. 3 new PostHog events. 13 new Vitest tests (61/61 total). Browser-verified end-to-end against live Supabase: anon → /login redirect ✓; landlord → wizard ✓; Step1 INSERT via RLS ✓; Skip → Step 3 ✓; Storage upload + verification_requests INSERT ✓ (all test data cleaned). All gates green. **Next:** D4 — listing form Steps 1+2 (Google Places address autocomplete + specs) + Step 3 photo upload (per plan §5.1).
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
@@ -528,6 +528,39 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [x] No duplicate items between phases
 - [x] No item depends on something later in the same phase
 - [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## DONE 2026-04-29 night — Landlord V1 D3: onboarding 3-step wizard
+
+Per `tasks/plan/06-landlord-v1-30day.md` §5.1 D3.
+
+- [x] **`identity-docs` Storage bucket** — private, 10 MB limit, JPEG/PNG/WebP/PDF only. Path convention `<auth.uid()>/<filename>`. Migration `20260430000000_landlord_v1_identity_docs_bucket.sql` registered.
+- [x] **5 Storage RLS policies** — `identity_docs_insert_own` / `_select_own` / `_update_own` / `_delete_own` / `_service_role`. Landlord gated to own folder via `storage.foldername(name)[1] = auth.uid()::text`. Admin reads all.
+- [x] **`useLandlordOnboarding.ts` hook** — `useOwnLandlordProfile` (RLS-gated SELECT), `useSubmitStep1Basics` (UPSERT on user_id), `useSubmitVerification` (storage upload + verification_requests INSERT, with orphan-cleanup on DB error).
+- [x] **`Step1Basics.tsx`** — react-hook-form + zod schema; display_name + kind radios + WhatsApp E.164 regex + neighborhood Select. 11 curated Medellín neighborhoods.
+- [x] **`Step2Verification.tsx`** — doc_kind Select (5 types) + drag-n-drop file picker with 10 MB + MIME validation + "Skip for now" + "Submit & continue".
+- [x] **`Step3Welcome.tsx`** — first-name greeting, Profile + Verification status cards, CTAs to `/host/listings/new` + `/dashboard`, founder WhatsApp.
+- [x] **`pages/host/Onboarding.tsx`** — wizard state machine. Stepper with progress bars. Per-step `durationSec` PostHog timer. Back button. "Finish later" escape hatch. Re-entry: existing `landlord_profiles` row pre-fills Step 1.
+- [x] **3 PostHog events** — `onboarding_step_completed` (step + durationSec), `onboarding_completed` (totalDurationSec), `verification_doc_uploaded` (docKind). Plan §7.2 events 3-5 of 12.
+- [x] **13 Vitest unit tests** added (48 → 61 total). Step1Basics: 6 (validation + onSubmit contract). Step2Verification: 5 (file-size + MIME guards real File objects). Step3Welcome: 5 (greeting + CTA hrefs).
+- [x] **`src/test/setup.ts` extended** — ResizeObserver polyfill + scrollIntoView/pointer-capture mocks so Radix Select renders in JSDOM.
+- [x] **Browser verification end-to-end** via Claude Preview MCP against live Supabase:
+  1. Anon `/host/onboarding` → `/login?returnTo=%2Fhost%2Fonboarding` ✓
+  2. Test landlord user (account_type='landlord' in user_metadata) signed in via supabase-js ✓
+  3. Wizard renders Step 1 with stepper ("1. Your basics" current, 2 + 3 upcoming) ✓
+  4. Form filled (display_name=`D3 Test Landlord`, whatsapp=`+573001112233`) → Continue ✓
+  5. `landlord_profiles` row created via RLS — confirmed via direct SQL query (id=`da688800-…`, user_id matches authed user, all columns correct) ✓
+  6. Step 2 advances with stepper showing 1=complete, 2=current, 3=upcoming ✓
+  7. "Skip for now" → Step 3 "Welcome aboard, D3." with both CTAs (`/host/listings/new` + `/dashboard`) rendered ✓
+  8. File upload happy path: Storage upload to `identity-docs/<user_id>/national_id_<stamp>_test-id.pdf` + verification_requests INSERT (status=`pending`) — both confirmed via SQL `count(*)` joins ✓
+  9. Test user + landlord_profile + verification + storage object all cleaned up; 0 leftover D3 test data in live DB ✓
+- [x] **2 React bugs caught + fixed in-session via the browser verify cycle:**
+  - Rules-of-Hooks violation (`useRef` after early returns) → moved all hooks above conditional returns
+  - ResizeObserver missing in JSDOM blocked Radix Select rendering → polyfilled in `src/test/setup.ts`
+- [x] **Gates green** — `npm run lint` exit 0 (zero new issues; 444 pre-existing) · `npm run test` 61/61 · `npm run build` 4.64s · entry chunk gzip 94.99 KB (under 100 KB budget).
+
+**Next: D4 (listing form steps 1-3).** Per §5.1: build `Step1Address` (Google Places autocomplete) + `Step2Specs` (bedrooms/baths/price/amenities) + `Step3Photos` (multi-image upload to `listing-photos` bucket) + `lib/storage/upload-listing-photo.ts`. Commit message: `feat(host): listing form steps 1-3`.
 
 ---
 
