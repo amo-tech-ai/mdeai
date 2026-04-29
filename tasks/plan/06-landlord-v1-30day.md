@@ -426,9 +426,12 @@ Before writing code for a given V1 deliverable, invoke the matching skill from `
 | **React component (data fetching / mutation)** | `vercel-react-best-practices` | `supabase` (typed client) | TanStack Query patterns |
 | **Form validation** | `vercel-react-best-practices` | — | react-hook-form + Zod |
 | **Telemetry / PostHog event** | — *(GAP — see §5.0.1)* | `vercel-react-best-practices` | Discriminated-union pattern in `lib/posthog.ts` |
-| **Vitest unit test** | — *(GAP — see §5.0.1)* | — | RTL + `vi.mock` patterns |
-| **Browser proof / E2E walk-through** | — *(GAP — see §5.0.1)* | — | Claude Preview MCP + signed-in QA user |
-| **Project gates (lint/test/build/edge/bundle)** | — *(GAP — see §5.0.1)* | — | `npm run` aliases tracked in `package.json` |
+| **Vitest unit test** | `vitest-component-testing` ✅ | `systematic-debugging` (when a test fails) | RTL + `vi.mock` patterns. Installed 2026-04-29. |
+| **Browser proof / E2E walk-through** | `claude-preview-browser-testing` ✅ | `systematic-debugging` | Claude Preview MCP + the qa-landlord auth pattern. Installed 2026-04-29. |
+| **Project gates (lint/test/build/edge/bundle)** | `mdeai-project-gates` ✅ | — | `npm run` aliases + bundle budgets. Installed 2026-04-29. |
+| **Bug diagnosis** | `systematic-debugging` ✅ | — | Hypothesis-then-evidence loop. Installed 2026-04-29. |
+| **Auth / RLS / signed tokens** | `better-auth-best-practices` ✅ | `supabase` + `supabase-auth` | Supabase-Auth gotchas + RLS rules. Installed 2026-04-29. |
+| **MLS / IDX / V2 platform scale** | `real-estate-tech` ✅ | `real-estate` (V1 single-listing) | V2-only — do not invoke for V1 work. Installed 2026-04-29. |
 | **Mermaid diagrams** | `mermaid-diagrams` | — | For architecture / sequence / state |
 | **WhatsApp integration (D11+, D8 onwards)** | `automate-whatsapp` | `integrate-whatsapp`, `whatsapp-automation` | Use `wa.me/` deep-link in V1 |
 | **Real-estate domain logic** | `real-estate` | `real-estate-expert`, `real-estate-workflows` | For listing semantics, fair-housing copy |
@@ -440,15 +443,21 @@ Before writing code for a given V1 deliverable, invoke the matching skill from `
 | **Gemini AI calls** | `gemini` | — | D8 `lead-classify` only |
 | **Commit / PR** | `commit-commands:commit-push-pr` | `commit-commands:commit` | Slash command, global plugin |
 
-#### 5.0.1 Skill gaps to create
+#### 5.0.1 Skills installed (was gaps) — 2026-04-29
 
-These tasks recur in every V1 day and have no matching skill — captured in `tasks/todo.md` CT backlog as CT-14 / CT-15 / CT-16:
+All three V1 testing/gates gaps closed by skills installed at `.claude/skills/`:
 
-- **`vitest-component-testing`** — RTL render + `vi.mock` + JSDOM polyfills (`ResizeObserver` / `scrollIntoView` / pointer-capture, all live in `src/test/setup.ts`) + form interaction patterns. Reusable across every D2-D30 task.
-- **`claude-preview-browser-testing`** — Claude Preview MCP workflow: `preview_start` → `preview_eval` for nav + supabase-js sign-in injection → `preview_snapshot` for a11y tree → `preview_click` for interactions → `preview_screenshot` for proof. Includes the qa-landlord seed user pattern from D5.
-- **`mdeai-project-gates`** — `npm run lint` (444 pre-existing baseline), `test`, `build`, `verify:edge` (when `supabase/functions/` changed), `check:bundle` (when bundle could grow). Failure-mode recovery (lint baseline drift, JSDOM polyfills, bundle budget bump procedure).
+- ✅ **`vitest-component-testing`** — RTL render + `vi.mock` + JSDOM polyfills + form interaction patterns. Built on `test-driven-development` from skills.sh + our actual test files.
+- ✅ **`claude-preview-browser-testing`** — Claude Preview MCP workflow with the qa-landlord auth pattern from D5. Built on `playwright-best-practices` from skills.sh.
+- ✅ **`mdeai-project-gates`** — `npm run lint` baseline (444 pre-existing), test (86/86), build, verify:edge, check:bundle, plus schema audit via `get_advisors`. Built on `verification-before-completion` from skills.sh.
 
-Until these exist, the per-day testing block (§13) carries the patterns inline.
+Plus 3 bonus skills installed in the same pass:
+
+- ✅ **`systematic-debugging`** — hypothesis-then-evidence loop. Captures the lessons from D3 Rules-of-Hooks, D4 FK indexes, D4 clearDraft race, D5 GoTrue empty-string-vs-NULL.
+- ✅ **`better-auth-best-practices`** — `user_metadata` vs `app_metadata` rule, GoTrue auth.users defaults, RLS UPDATE-needs-SELECT, `(SELECT auth.uid())` perf, signed-token expiry + jti.
+- ✅ **`real-estate-tech`** — V2 prep for MLS/IDX/PostGIS/AVM. NOT for V1 — kept dormant until cohort review.
+
+Sources: skills.sh, alirezarezvani/claude-skills, rohitg00/awesome-claude-code-toolkit. Each SKILL.md cites its origin.
 
 ### 5.1 Days 1–7: Landlords can sign up + list a property
 

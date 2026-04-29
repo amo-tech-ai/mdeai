@@ -29,13 +29,18 @@
 | Gemini AI calls (D8 lead-classify) | `gemini` | |
 | Commit / PR | `commit-commands:commit-push-pr` (slash command) | Global plugin |
 
-### Skill GAPS — to be created (CT-14, CT-15, CT-16 below)
+### Skills installed 2026-04-29 (was GAPs)
 
-| Gap | Used by | Hours |
+All 6 skills shipped at `.claude/skills/`. Sources: skills.sh + rohitg00/awesome-claude-code-toolkit.
+
+| Skill | Replaces / fills | Status |
 |---|---|---|
-| `vitest-component-testing` | Every D2-D30 unit test | 2 |
-| `claude-preview-browser-testing` | Every D2-D30 UI proof | 2 |
-| `mdeai-project-gates` | Every PR | 1 |
+| `vitest-component-testing` | CT-14 (testing patterns) | ✅ installed |
+| `claude-preview-browser-testing` | CT-15 (browser proof) | ✅ installed |
+| `mdeai-project-gates` | CT-16 (lint/test/build/edge/bundle) | ✅ installed |
+| `systematic-debugging` | CT-17 (bug diagnosis) | ✅ installed |
+| `better-auth-best-practices` | CT-18 (auth/RLS/tokens) | ✅ installed |
+| `real-estate-tech` | CT-19 (V2 platform scale prep) | ✅ installed |
 
 ---
 
@@ -321,9 +326,12 @@ These tasks add the missing automation. Each should ship with its own PR, ordere
 - [ ] **CT-11 — Migration smoke test** — apply every migration to a fresh local DB and run `pg_restore --schema-only` diff. ~2 hrs.
 - [ ] **CT-12 — Landlord V1 critical-path Playwright spec** — `e2e/landlord-v1-signup-to-listing.spec.ts` covering AccountTypeStep → email signup → /host/onboarding → (D7) host dashboard → (D5) listing-create → (D9) lead inbox. Lands incrementally as each V1 day ships. **Files**: new `e2e/landlord-v1-*.spec.ts` (one per critical path). **First milestone (D7):** signup → onboarding stub gate. ~2 hrs initial, +1 hr per V1 day.
 - [ ] **CT-13 — Per-V1-day testing block** — every V1 day's PR must include: (a) Vitest unit test for any new component with non-trivial logic, (b) Claude Preview MCP browser verification (snapshot + click + screenshot in commit description), (c) PostHog event firing confirmed via `network` filter or `posthog._isIdentified()` eval, (d) for edge-fn changes, deno test added. Codified in `tasks/plan/06-landlord-v1-30day.md` §13. ~0 hrs (process), enforced via PR review.
-- [ ] **CT-14 — Skill: `vitest-component-testing`** *(NEW SKILL TO CREATE)* — codify the RTL + `vi.mock` + JSDOM polyfill patterns we already use in `src/test/setup.ts`. Should cover: ResizeObserver / scrollIntoView / pointer-capture polyfills, `vi.mock('@/integrations/supabase/client')` BEFORE importing module-under-test (caught a real bug in D4), MemoryRouter wrapping, file-input mocking with real File objects, accessible-query patterns. **Files**: `.claude/skills/vitest-component-testing/SKILL.md` + references. ~2 hrs.
-- [ ] **CT-15 — Skill: `claude-preview-browser-testing`** *(NEW SKILL TO CREATE)* — codify the Claude Preview MCP workflow: `preview_start` → `preview_eval` for nav + supabase-js sign-in injection (with the QA-landlord pattern from D5) → `preview_snapshot` for accessibility-tree assertions → `preview_click` for interactions → `preview_screenshot` for proof. Includes the GoTrue auth gotcha (`confirmation_token` etc. need empty strings, not NULL) caught during D5. **Files**: `.claude/skills/claude-preview-browser-testing/SKILL.md`. ~2 hrs.
-- [ ] **CT-16 — Skill: `mdeai-project-gates`** *(NEW SKILL TO CREATE)* — codify what each `npm run *` script means, when each is required, what failure looks like, and how to recover. Include the lint baseline (444 pre-existing problems — track new vs existing), `verify:edge` for `supabase/functions/` changes, `check:bundle` budget bump procedure (requires PR note + reviewer signoff). **Files**: `.claude/skills/mdeai-project-gates/SKILL.md`. ~1 hr.
+- [x] **CT-14 — Skill: `vitest-component-testing`** **DONE 2026-04-29** — installed at `.claude/skills/vitest-component-testing/SKILL.md`. Codifies RTL + `vi.mock`-before-import + MemoryRouter + JSDOM polyfills (already in `src/test/setup.ts`) + 7 reference test files from D2-D5. Source: skills.sh `test-driven-development`, adapted.
+- [x] **CT-15 — Skill: `claude-preview-browser-testing`** **DONE 2026-04-29** — installed at `.claude/skills/claude-preview-browser-testing/SKILL.md`. 5-step browser proof flow: `preview_start` → navigate + auth-gate verify → sign in as `qa-landlord@mdeai.co` (uses migration `20260501000000`) → drive UI + assert state → screenshot + DB write proof + cleanup. Includes the GoTrue empty-string-vs-NULL gotcha. Source: skills.sh `playwright-best-practices`, adapted.
+- [x] **CT-16 — Skill: `mdeai-project-gates`** **DONE 2026-04-29** — installed at `.claude/skills/mdeai-project-gates/SKILL.md`. 7 gates: lint (444 baseline), test (86/86), build, check:bundle, verify:edge, browser proof, get_advisors. Source: skills.sh `verification-before-completion`, adapted.
+- [x] **CT-17 — Skill: `systematic-debugging`** **DONE 2026-04-29** — installed at `.claude/skills/systematic-debugging/SKILL.md`. Hypothesis-then-evidence 5-step loop with 4 mdeai.co bug case studies (D3 Rules-of-Hooks, D4 FK indexes, D4 clearDraft race, D5 GoTrue defaults). Source: skills.sh.
+- [x] **CT-18 — Skill: `better-auth-best-practices`** **DONE 2026-04-29** — installed at `.claude/skills/better-auth-best-practices/SKILL.md`. 7 rules: `user_metadata` vs `app_metadata`, GoTrue defaults, UPDATE-needs-SELECT, `(SELECT auth.uid())`, signed tokens, JWT post-delete, service-role-never-VITE. Source: skills.sh.
+- [x] **CT-19 — Skill: `real-estate-tech`** **DONE 2026-04-29** — installed at `.claude/skills/real-estate-tech/SKILL.md`. V2+ ramp for MLS/RETS/RESO ingestion, dedup, PostGIS clustering, AVM. NOT for V1 use. Source: rohitg00/awesome-claude-code-toolkit.
 
 ### Per-V1-day testing pattern (codified in plan §13)
 
