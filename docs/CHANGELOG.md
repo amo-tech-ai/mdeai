@@ -6,6 +6,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-29] - Landlord V1 Day 2: signup branch + per-day testing block
+
+### Frontend
+- New `src/components/auth/AccountTypeStep.tsx` — full-screen radiogroup gating signup with two options ("I'm looking for a place" vs "I'm a landlord or agent"). Renders before email/password form. Brand-aligned: BrandLogo, emerald primary on hover, focus-ring, 44px+ tap targets, `data-account-type` selectors for tests
+- Extended `src/pages/Signup.tsx` — two-step flow: AccountTypeStep first, then existing form. Form copy adapts (badge "LANDLORD / AGENT" vs "Renter", Founding-Beta hero blurb for landlords). "Change account type" back button replaces "Back to home" once a choice is made
+- Extended `src/hooks/useAuth.tsx` — `signUp` and `signInWithGoogle` accept optional `{ accountType }`. Landlords get `emailRedirectTo: window.location.origin + '/host/onboarding'`; renters get `/`. Account type persisted to `auth.users.raw_user_meta_data.account_type` so it survives email confirmation + OAuth round-trips. Exported `AccountType` type
+- New `src/pages/host/Onboarding.tsx` — D2 stub. Anon → `/login?returnTo=/host/onboarding`. Renter → `/dashboard`. Landlord → welcome screen with founder WhatsApp link + dashboard CTA. D3 fleshes out the 3-step wizard
+- Modified `src/App.tsx` — lazy `HostOnboarding` route + `/host/onboarding` registration
+
+### Telemetry
+- Added 2 PostHog event arms to `AppEvent` union: `landlord_signup_started` (`from: 'signup_page' | 'host_redirect'`) and `landlord_signup_completed` (`method: 'email' | 'google'`). Per plan §7.2 — first 2 of the 12 V1 events
+
+### Testing
+- New `src/components/auth/AccountTypeStep.test.tsx` — 4 Vitest tests: both options render as radios, each click fires onSelect with the correct literal, no auto-fire on mount
+- Browser-verified via Claude Preview MCP — `/signup` AccountTypeStep, landlord branch form, renter branch form, `/host/onboarding` anon redirect to `/login?returnTo=/host/onboarding` (all clean console)
+
+### Continuous testing — codified
+- New `tasks/plan/06-landlord-v1-30day.md` §13 — **Per-day testing block.** Every V1-day PR D2-D30 must include 4 artifacts: (1) Vitest unit tests for non-trivial logic, (2) Claude Preview MCP browser verification with screenshot in PR, (3) PostHog event smoke test, (4) deno test for any edge fn change. RWT scenarios remain the cross-cutting layer (RWT-23 through RWT-27 added for landlord V1)
+- New `tasks/todo.md` CT-12 (landlord critical-path Playwright specs, sequenced with V1 days) + CT-13 (per-V1-day testing block)
+- New RWT scenarios: RWT-23 (landlord signup happy path), RWT-24 (renter signup regression guard), RWT-25 (landlord OAuth via Google), RWT-26 (end-to-end loop renter→landlord inbox), RWT-27 (RLS isolation between landlords)
+
+### Tooling
+- Gates: lint exit 0 · 48/48 unit tests (44 prior + 4 AccountTypeStep) · 11/11 deno tests · build green
+
+---
+
 ## [2026-04-29] - Landlord V1 Day 1: schema migration
 
 Per `tasks/plan/06-landlord-v1-30day.md` — first commit of the 30-day landlord build.

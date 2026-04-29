@@ -64,6 +64,10 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+// Host pages — landlord V1. Lazy so the host bundle is zero cost on the
+// renter side. RoleProtectedRoute lands D7; for D2 the route is gated
+// inside the page (anon -> /login, renter -> /dashboard, landlord -> ok).
+const HostOnboarding = lazy(() => import("./pages/host/Onboarding"));
 // Admin pages — default exports per file, lazy-loaded individually so
 // the admin bundle only ships when an admin actually navigates here.
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -124,6 +128,10 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/onboarding" element={<Onboarding />} />
+            {/* Landlord V1 — see tasks/plan/06-landlord-v1-30day.md §5.1.
+                D2: post-signup landing only. D3: 3-step onboarding wizard.
+                D7: full host shell (HostShell + HostLeftNav + dashboard). */}
+            <Route path="/host/onboarding" element={<HostOnboarding />} />
             {/* Marketing Routes */}
             <Route path="/how-it-works" element={<HowItWorks />} />
             <Route path="/pricing" element={<Pricing />} />

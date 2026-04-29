@@ -1,24 +1,41 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, type AccountType } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Lock, ArrowLeft, User } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft } from "lucide-react";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { AccountTypeStep } from "@/components/auth/AccountTypeStep";
+import { trackEvent } from "@/lib/posthog";
 
 export default function Signup() {
+  // Two-step signup flow:
+  //   1. AccountTypeStep — pick "renter" or "landlord". Persists to
+  //      auth.users metadata so the post-confirmation redirect knows where
+  //      to land the user (renter -> /, landlord -> /host/onboarding).
+  //   2. Email/password or Google OAuth.
+  // The chosen type is also surfaced in the form header so the user knows
+  // what they're signing up for.
+  const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  
+
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+
+  const handleAccountTypeSelect = (next: AccountType) => {
+    setAccountType(next);
+    if (next === "landlord") {
+      trackEvent({ name: "landlord_signup_started", from: "signup_page" });
+    }
+  };
 
   // Same `returnTo` precedence as Login. Used for:
   //   - Google OAuth redirectTo (so user lands on /chat?send=pending
@@ -55,7 +72,9 @@ export default function Signup() {
 
     setLoading(true);
 
-    const { error } = await signUp(email, password);
+    const { error } = await signUp(email, password, {
+      accountType: accountType ?? "renter",
+    });
 
     if (error) {
       toast({
@@ -65,12 +84,17 @@ export default function Signup() {
       });
       setLoading(false);
     } else {
+      if (accountType === "landlord") {
+        trackEvent({ name: "landlord_signup_completed", method: "email" });
+      }
       toast({
         title: "Check your email",
         description: "We sent you a confirmation link. Please check your inbox.",
       });
       // Carry returnTo over to /login so the user resumes their flow after
-      // confirming. Same-origin paths only (validated above).
+      // confirming. Same-origin paths only (validated above). Landlords
+      // bypass returnTo because emailRedirectTo already lands them on
+      // /host/onboarding after confirmation.
       const target =
         returnTo && returnTo !== "/"
           ? `/login?returnTo=${encodeURIComponent(returnTo)}`
@@ -81,10 +105,15 @@ export default function Signup() {
 
   const handleGoogleSignup = async () => {
     setGoogleLoading(true);
-    // Google round-trips through Supabase and lands on `redirectTo`. Pass
-    // returnTo so an authed user touches down at /chat?send=pending
-    // and the auto-fire effect picks up the saved prompt.
-    const { error } = await signInWithGoogle(returnTo);
+    if (accountType === "landlord") {
+      trackEvent({ name: "landlord_signup_completed", method: "google" });
+    }
+    // Google round-trips through Supabase and lands on `redirectTo`. For
+    // landlords this is forced to /host/onboarding inside signInWithGoogle
+    // so the OAuth flow can't accidentally drop them on /chat.
+    const { error } = await signInWithGoogle(returnTo, {
+      accountType: accountType ?? "renter",
+    });
     if (error) {
       toast({
         title: "Google signup failed",
@@ -95,6 +124,25 @@ export default function Signup() {
     }
   };
 
+  // Step 1 — pick account type. AccountTypeStep is its own full-screen
+  // surface; we render nothing else around it. After selection, fall
+  // through to the email/Google form below.
+  if (accountType === null) {
+    return <AccountTypeStep onSelect={handleAccountTypeSelect} />;
+  }
+
+  const isLandlord = accountType === "landlord";
+  const headlineCopy = isLandlord
+    ? "List your first property"
+    : "Create your account";
+  const subhead = isLandlord
+    ? "Set up your host account in 3 minutes. Free for the first 100 landlords."
+    : "Start exploring Medellín like a local.";
+  const heroTitle = isLandlord ? "Join the Founding Beta" : "Join the Community";
+  const heroBlurb = isLandlord
+    ? "First 100 landlords get permanent free access. Renter inquiries land directly in your WhatsApp."
+    : "Create an account to save your favorite places and get personalized recommendations.";
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Left side - Branding */}
@@ -102,32 +150,35 @@ export default function Signup() {
         <div className="max-w-md text-center flex flex-col items-center">
           <BrandLogo variant="panel" />
           <h2 className="font-display text-3xl font-bold text-primary-foreground mt-8">
-            Join the Community
+            {heroTitle}
           </h2>
-          <p className="mt-4 text-primary-foreground/80">
-            Create an account to save your favorite places and get personalized recommendations.
-          </p>
+          <p className="mt-4 text-primary-foreground/80">{heroBlurb}</p>
         </div>
       </div>
 
       {/* Right side - Form */}
       <div className="flex-1 flex flex-col justify-center px-8 md:px-16 lg:px-24">
         <div className="max-w-md w-full mx-auto">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors"
+          <button
+            type="button"
+            onClick={() => setAccountType(null)}
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors text-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to home
-          </Link>
+            Change account type
+          </button>
 
           <div className="mb-8">
+            <span
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary uppercase tracking-wider mb-2"
+              data-testid="signup-account-type-badge"
+            >
+              {isLandlord ? "Landlord / Agent" : "Renter"}
+            </span>
             <h1 className="font-display text-3xl font-bold text-foreground">
-              Create your account
+              {headlineCopy}
             </h1>
-            <p className="mt-2 text-muted-foreground">
-              Start exploring Medellín like a local.
-            </p>
+            <p className="mt-2 text-muted-foreground">{subhead}</p>
           </div>
 
           <Button

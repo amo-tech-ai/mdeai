@@ -797,7 +797,7 @@ MODIFIED
 src/pages/Signup.tsx                                D2
 src/hooks/useAuth.tsx                               D2
 src/App.tsx                                         D2 (lazy /host/* routes)
-src/lib/posthog.ts                                  D13 (12 new event arms)
+src/lib/posthog.ts                                  D2 (2 events) + D13 (10 more event arms)
 src/components/chat/embedded/RentalCardInline.tsx   D16 ("Hosted by" link)
 src/integrations/supabase/database.types.ts         D1, D14 (regen)
 ```
@@ -826,5 +826,48 @@ If we're wrong (kill criteria in §8.3), we pause and figure out what we missed 
 
 ---
 
+## 13. Per-day testing block (added 2026-04-29 — codifies "working real world")
+
+> **Why this exists.** Lint + tsc + unit tests passing on a synthetic JSDOM tree is necessary but not sufficient. Real landlords hit the dev preview, log in via OAuth round-trips, navigate slow LATAM 4G, and submit forms in tabs they opened from email. Every V1 day MUST close with proof — captured in the PR — that the day's deliverable works in a real browser and emits the right telemetry. Anything else is a guess.
+
+### Required artifacts per V1-day PR (all four — no exceptions)
+
+| # | Test type | What it proves | Tool | Required when |
+|---|---|---|---|---|
+| 1 | **Vitest unit test** | Pure logic, callbacks, type narrowing | `npm run test` (file colocated as `*.test.tsx`) | Any new component with non-trivial logic OR any new lib file |
+| 2 | **Browser preview verification** | UI renders, interactions work, console clean | Claude Preview MCP — `preview_snapshot` + `preview_click` + `preview_screenshot`. **Attach the screenshot to the PR description.** | Any UI change |
+| 3 | **PostHog event smoke** | The right event fires once with the right payload | Either `preview_eval` of `(window).posthog?.__loaded` + manual filter on `i.posthog.com` POSTs in `preview_network`, OR live PostHog Live Events tab on the deploy preview | Any new `AppEvent` arm |
+| 4 | **Edge fn deno test** | Auth gate + Zod validation + happy path | `npm run verify:edge` (or `deno test` against a Supabase branch) | Any `supabase/functions/` change |
+
+### What "working real world" means for V1
+
+Specifically — and intentionally — these are NOT in the per-day block (covered separately by RWT scenarios in `tasks/todo.md`):
+
+- Cross-browser parity (chromium / firefox / webkit / mobile-safari) — RWT matrix
+- Network throttling (4g-latam / slow-3g) — RWT-11, 12
+- Magic-link inbox testing — RWT-2, 23
+- RLS isolation between landlords — RWT-27
+
+The per-day block is the **floor**, not the ceiling. The RWT scenarios add cross-cutting reality knobs at sprint boundaries.
+
+### Critical-path Playwright milestones
+
+Tracked as `CT-12` in `tasks/todo.md`. Each landlord critical path lands as a separate spec, sequenced with the V1 day that ships the underlying flow:
+
+| Spec | Lands with day | Covers |
+|---|---|---|
+| `e2e/landlord-v1-signup.spec.ts` | D7 (host shell exists) | AccountTypeStep → email signup → /host/onboarding stub gate. **D2 prereq met by D2 vitest + browser preview verification only — full E2E waits for the rest of the host shell to exist.** |
+| `e2e/landlord-v1-create-listing.spec.ts` | D7 | Login → dashboard → "Add listing" → 4-step form → auto-moderation pass → listing visible on /apartments |
+| `e2e/landlord-v1-lead-loop.spec.ts` | D11 | Two-context: renter chats → landlord receives email → opens /host/leads → clicks WhatsApp button. The RWT-26 end-to-end loop. |
+
+### How D2 met this block (reference for D3+)
+
+- ✅ Vitest: `src/components/auth/AccountTypeStep.test.tsx` — 4 tests covering both onSelect callbacks + the no-auto-fire invariant
+- ✅ Browser: snapshot of /signup AccountTypeStep + screenshot of landlord-branch form + eval-confirmed `/host/onboarding` redirects anon to `/login?returnTo=...`
+- ✅ PostHog: `landlord_signup_started` + `landlord_signup_completed` added to `AppEvent` union with discriminated `from` / `method` fields
+- ⚪ Edge fn: N/A — D2 ships no edge function changes
+
+---
+
 *End of plan v1.0. The 30-day clock starts when the first commit on this branch lands.*
-*Last edit: 2026-04-28 · Author: sk · Reviewer: Claude Opus 4.7 (1M context)*
+*Last edit: 2026-04-29 · Author: sk · Reviewer: Claude Opus 4.7 (1M context)*

@@ -1,6 +1,6 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-29 — **Landlord V1 D1 shipped** — schema migration `20260429000000_landlord_v1.sql` applied to hosted Supabase (5 new tables, 1 view, 14 RLS policies, 3 triggers); `database.types.ts` regenerated (4326 lines); plan §1/§7/§8/§9 refined per external review (Founding Beta framing, stretch/acceptable bands, quality-first scorecard, signed-JWT verification, renter-demand weekly check). All gates green. **Next:** D2 — signup branch + `AccountTypeStep` + post-signup redirect (per `tasks/plan/06-landlord-v1-30day.md` §5.1).
+> **Last updated:** 2026-04-29 evening — **Landlord V1 D2 shipped** — signup branch with AccountTypeStep + post-signup redirect + 4 Vitest tests + browser-verified via Claude Preview MCP. Per-day testing block codified as plan §13 (4 required artifacts per V1 day). 5 new RWT scenarios (RWT-23–27) + 2 new CT items (CT-12, CT-13). All gates green (48/48 unit tests). **Next:** D3 — onboarding 3-step wizard + `landlord-onboarding-step` + `verification-submit` edge fns (per `tasks/plan/06-landlord-v1-30day.md` §5.1).
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
@@ -288,6 +288,21 @@ These tasks add the missing automation. Each should ship with its own PR, ordere
 - [ ] **CT-9 — Sentry release tagging** (= B7) — `release: <commit SHA>` in `initSentry()` + Vite define plugin. ~30 min.
 - [ ] **CT-10 — Edge function E2E** — `deno test` against a Supabase branch DB; fires real auth-gated requests. ~3 hrs.
 - [ ] **CT-11 — Migration smoke test** — apply every migration to a fresh local DB and run `pg_restore --schema-only` diff. ~2 hrs.
+- [ ] **CT-12 — Landlord V1 critical-path Playwright spec** — `e2e/landlord-v1-signup-to-listing.spec.ts` covering AccountTypeStep → email signup → /host/onboarding → (D7) host dashboard → (D5) listing-create → (D9) lead inbox. Lands incrementally as each V1 day ships. **Files**: new `e2e/landlord-v1-*.spec.ts` (one per critical path). **First milestone (D7):** signup → onboarding stub gate. ~2 hrs initial, +1 hr per V1 day.
+- [ ] **CT-13 — Per-V1-day testing block** — every V1 day's PR must include: (a) Vitest unit test for any new component with non-trivial logic, (b) Claude Preview MCP browser verification (snapshot + click + screenshot in commit description), (c) PostHog event firing confirmed via `network` filter or `posthog._isIdentified()` eval, (d) for edge-fn changes, deno test added. Codified in `tasks/plan/06-landlord-v1-30day.md` §13. ~0 hrs (process), enforced via PR review.
+
+### Per-V1-day testing pattern (codified in plan §13)
+
+For every day D2-D30, the PR closing the day MUST include all four:
+
+| # | Test type | Target | Tool | Required when |
+|---|---|---|---|---|
+| 1 | **Unit (Vitest)** | Pure logic, callbacks, type safety | `vitest run src/**/*.test.{ts,tsx}` | Any new component with non-trivial logic OR any new lib file |
+| 2 | **Browser preview** | UI rendering, interaction, route transitions, console clean | Claude Preview MCP (`preview_snapshot` + `preview_click` + `preview_screenshot`) | Any UI change |
+| 3 | **PostHog event check** | Event fires once with the right payload | `preview_eval` of `(window).posthog?._isIdentified()` + network filter for `i.posthog.com` | Any new event arm |
+| 4 | **Edge fn deno test** | Auth gate + Zod validation + happy path | `npm run verify:edge` | Any `supabase/functions/` change |
+
+The first V1 day to fully follow this is **D2** — see `src/components/auth/AccountTypeStep.test.tsx` (4 vitest tests) + browser screenshots in the D2 PR.
 
 ---
 
@@ -383,6 +398,31 @@ These tasks add the missing automation. Each should ship with its own PR, ordere
 - [ ] **RWT-21 — LATAM TTFB** (PRC-25, manual) — Curl `https://www.mdeai.co/` from a São Paulo VPS (e.g. DigitalOcean SFO3). TTFB < 500 ms. Documented one-shot procedure. ~30 min.
 
 - [ ] **RWT-22 — Cold-cache real-user load** (PRC-20) — Lighthouse CI run from a 4G-throttled mobile preset on a cold cache. Performance score ≥ 85; LCP < 2.5 s; CLS < 0.1; INP < 200 ms. **Files**: `.github/workflows/lighthouse.yml` → adds `--throttling.cpuSlowdownMultiplier=4 --throttling-method=devtools`. ~2 hrs.
+
+#### Landlord V1 (added 2026-04-29 — sequenced with V1 build days)
+
+- [ ] **RWT-23 — Landlord signup → onboarding stub** (V1 D2 critical path)
+  - **Journey**: Anon user lands on `/signup`. Picks "I'm a landlord or agent." Submits email + password. Confirms via magic link in test inbox. Lands on `/host/onboarding`.
+  - **Reality knobs**: chromium + mobile-chrome (Pixel 7), wifi profile, fresh Supabase test user.
+  - **Pass criteria**: `landlord_signup_started` PostHog event fires once. `auth.users.raw_user_meta_data.account_type === 'landlord'` after confirm. `/host/onboarding` renders without redirecting away. `landlord_signup_completed` event fires once with `method: 'email'`. NO `landlord_inbox` row created (that's D8). NO `landlord_profiles` row created (that's D3).
+  - **Files**: `e2e/rwt-23-landlord-signup.spec.ts`. ~3 hrs (depends on test inbox = RWT infra item 3).
+- [ ] **RWT-24 — Renter signup unchanged after AccountTypeStep** (V1 D2 regression guard)
+  - **Journey**: Anon user lands on `/signup`. Picks "I'm looking for a place." Submits email + password. Confirms via magic link. Lands on `/`.
+  - **Pass criteria**: Renter signup still works exactly as it did pre-V1. No `landlord_*` PostHog events fire. `account_type === 'renter'`. Existing `pendingFiredRef` prompt-handoff flow still works if `?returnTo=/chat?send=pending` was on the URL.
+  - **Files**: `e2e/rwt-24-renter-signup-unchanged.spec.ts`. ~2 hrs.
+- [ ] **RWT-25 — Landlord OAuth signup via Google** (V1 D2 OAuth path)
+  - **Journey**: Anon user picks "landlord" → "Continue with Google" → completes Google OAuth → lands on `/host/onboarding`.
+  - **Reality knobs**: Stubbed Google OAuth (Supabase test mode); chromium.
+  - **Pass criteria**: `redirectTo` URL passed to Google contains `/host/onboarding`. Post-redirect URL pathname is `/host/onboarding`. `account_type` metadata set on first sign-in.
+  - **Files**: `e2e/rwt-25-landlord-oauth.spec.ts`. ~3 hrs.
+- [ ] **RWT-26 — Landlord lists apartment, renter chats, lead lands in inbox** (V1 D8-D10 end-to-end, the loop)
+  - **Journey**: Two browser contexts. Context A = landlord (signs up D2 flow, completes onboarding D3, creates listing D5). Context B = renter (anon, opens `/apartments/<new-listing-id>`, asks "Is this still available?"). Landlord reloads `/host/leads` → sees the new lead.
+  - **Pass criteria**: One `landlord_inbox` row, status='new', `apartment_id` matches, `landlord_id` matches A's profile, `raw_message` contains the renter's text. PostHog event chain: `listing_published` → renter `inquiry_sent` → landlord `lead_card_clicked` → landlord `whatsapp_reply_clicked` (if they click the WA button).
+  - **Files**: `e2e/rwt-26-end-to-end-loop.spec.ts`. ~6 hrs (depends on D5+D8+D9+D10).
+- [ ] **RWT-27 — RLS gate: landlord A cannot see landlord B's leads** (V1 D8 security)
+  - **Journey**: Two landlords + two listings. Landlord A queries `landlord_inbox` via the supabase-js client with their own JWT. Should return only A's rows.
+  - **Pass criteria**: Zero rows from B's listings; `acting_landlord_ids()` correctly scopes; service-role bypass still works for the trigger.
+  - **Files**: `e2e/rwt-27-rls-isolation.spec.ts` + supabase test fixtures. ~3 hrs.
 
 ### RWT testing matrix (every critical-path spec runs all combinations)
 
@@ -488,6 +528,37 @@ Cross-references R1–R12 + L1–L12 above. **Every checkbox below must be green
 - [x] No duplicate items between phases
 - [x] No item depends on something later in the same phase
 - [x] Each newly-identified item has an explicit slot to be triaged into
+
+---
+
+## DONE 2026-04-29 evening — Landlord V1 D2: signup branch + per-day testing block
+
+Per `tasks/plan/06-landlord-v1-30day.md` §5.1 D2.
+
+- [x] **`AccountTypeStep.tsx` shipped** — full-screen radiogroup at the top of `/signup`. Two options: "I'm looking for a place" (renter) and "I'm a landlord or agent" (landlord, with Founding-Beta blurb). 220px min-height tap targets, focus-ring, brand-aligned, `data-account-type` selectors for tests, BrandLogo header.
+- [x] **`Signup.tsx` two-step flow** — AccountTypeStep renders first, then the existing email/Google form gated behind it. Form headlines + hero blurb adapt to the chosen type. "Change account type" back button replaces "Back to home" after selection.
+- [x] **`useAuth.tsx` extended** — `signUp(email, password, { accountType })` + `signInWithGoogle(redirectTo, { accountType })` both accept the new option. Landlords get `emailRedirectTo: /host/onboarding`; renters get `/`. `account_type` persisted to `auth.users.raw_user_meta_data` so it survives email confirmation + OAuth round-trips. Exported `AccountType` type.
+- [x] **`/host/onboarding` stub page + route** — anon → `/login?returnTo=/host/onboarding`, renter → `/dashboard`, landlord → welcome screen with founder WhatsApp + "Go to dashboard" / "See live listings" CTAs. D3 fleshes out the wizard.
+- [x] **PostHog events added** — `landlord_signup_started` (`from`) + `landlord_signup_completed` (`method: 'email' \| 'google'`). First 2 of the 12 V1 events from plan §7.2.
+- [x] **Vitest unit tests** — 4 new tests in `src/components/auth/AccountTypeStep.test.tsx`: both options render as radios, each click fires onSelect with the correct literal, no auto-fire on mount. Total Vitest count: 44 → 48.
+- [x] **Browser verification via Claude Preview MCP** — 4 flows snapshotted/clicked/screenshotted:
+  1. `/signup` shows AccountTypeStep with both radios
+  2. Click landlord → form with "LANDLORD / AGENT" badge + landlord copy
+  3. Click renter → form with "Renter" badge + original copy
+  4. `/host/onboarding` (anon) → redirects to `/login?returnTo=%2Fhost%2Fonboarding`
+  All states: console clean (no errors).
+- [x] **Per-day testing block codified** as plan §13 — every V1 day D2-D30 PR must include (1) Vitest unit tests for non-trivial logic, (2) Claude Preview MCP browser verification with screenshot in PR description, (3) PostHog event smoke test, (4) deno test for any edge fn change. D2 met all four.
+- [x] **RWT scenarios added** for landlord V1 — RWT-23 (landlord signup happy path), RWT-24 (renter signup regression), RWT-25 (landlord OAuth Google), RWT-26 (end-to-end renter→landlord inbox loop), RWT-27 (RLS isolation between landlords). Each Playwright spec sequenced with the V1 day that ships its underlying flow.
+- [x] **CT items added** — CT-12 (landlord critical-path Playwright specs, ~2 hrs initial + 1 hr per V1 day) + CT-13 (per-V1-day testing block, ~0 hrs process).
+- [x] **Gates green** — `npm run lint` exit 0 · `npm run test` 48/48 · `npm run verify:edge` 11/11 · `npm run build` succeeds.
+
+**Verification artifacts (live on dev server during this session):**
+- AccountTypeStep snapshot: 2 radios with full a11y tree
+- Landlord branch screenshot: badge + headline + form + Google button rendered correctly
+- Renter branch eval: badge="Renter", headline="Create your account" (unchanged)
+- /host/onboarding anon eval: pathname=/login, search=?returnTo=%2Fhost%2Fonboarding
+
+**Next: D3 (onboarding 3-step wizard).** Per §5.1: build `pages/host/Onboarding.tsx` (replace D2 stub), `Step1Basics.tsx` / `Step2Verification.tsx` / `Step3Welcome.tsx`, and `landlord-onboarding-step` + `verification-submit` edge functions. Commit message: `feat(host): onboarding wizard`.
 
 ---
 
