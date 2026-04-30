@@ -38,8 +38,10 @@ const PayloadSchema = z.object({
   move_when: z.enum(["now", "soon", "later"]),
   /** Optional free-text note from the renter. */
   message: z.string().max(1000).optional(),
-  /** Honeypot field. Must be empty/missing. Bots fill it. */
-  website: z.string().max(0).optional(),
+  /** Honeypot field. Real users don't see it; bots fill it. We accept
+   * ANY string here so the schema doesn't reject (and signal) the trap;
+   * the suppress logic below handles non-empty values silently. */
+  website: z.string().optional(),
   /** Anon-session id from the client (header-or-body), used for per-session rate limit. */
   anon_session_id: z.string().max(60).optional(),
 });
