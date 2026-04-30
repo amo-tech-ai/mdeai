@@ -70,6 +70,7 @@ const Notifications = lazy(() => import("./pages/Notifications"));
 const HostOnboarding = lazy(() => import("./pages/host/Onboarding"));
 const HostListingNew = lazy(() => import("./pages/host/ListingNew"));
 const HostDashboard = lazy(() => import("./pages/host/Dashboard"));
+const HostLeads = lazy(() => import("./pages/host/Leads"));
 // Admin pages — default exports per file, lazy-loaded individually so
 // the admin bundle only ships when an admin actually navigates here.
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -138,6 +139,8 @@ const App = () => (
             <Route path="/host/listings/new" element={<HostListingNew />} />
             {/* D7: host dashboard — landlord home, listings list, leads CTA. */}
             <Route path="/host/dashboard" element={<HostDashboard />} />
+            {/* D9: leads inbox. */}
+            <Route path="/host/leads" element={<HostLeads />} />
             {/* D7: /host/ alias → dashboard */}
             <Route path="/host" element={<Navigate to="/host/dashboard" replace />} />
             {/* Marketing Routes */}

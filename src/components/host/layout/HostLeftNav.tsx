@@ -6,18 +6,19 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLeads } from "@/hooks/host/useLeads";
 
 /**
- * HostLeftNav — sidebar nav for /host/* pages (D7).
+ * HostLeftNav — sidebar nav for /host/* pages.
  *
- * V1 has one live link (Dashboard). Inbox lands D9, Profile D15, Settings
- * stays grayed out as a placeholder so landlords see the surface area
- * without us having to build the page on D7.
+ *   D7  Listings live
+ *   D9  Leads live + "new" count badge
+ *   D15 Profile
+ *   D17 Settings
  *
- * The mobile fallback is just hiding the sidebar — for V1 the host UI is
- * desktop-first because most landlords manage listings from a laptop. We
- * revisit responsive nav on D7 buffer or as a follow-up if data shows
- * mobile usage.
+ * The "new leads" badge reuses the same useLeads cache that powers the
+ * /host/leads page, so flipping between dashboard ↔ leads doesn't
+ * trigger an extra fetch.
  */
 
 interface HostLeftNavProps {
@@ -28,31 +29,41 @@ interface NavItem {
   to: string;
   label: string;
   Icon: typeof LayoutDashboard;
+  /** When set, render a small numeric badge to the right of the label. */
+  badge?: number;
   /** When true, item shows but is not clickable; tooltip explains. */
   disabled?: boolean;
   comingDay?: string;
 }
 
-const ITEMS: NavItem[] = [
-  { to: "/host/dashboard", label: "Listings", Icon: LayoutDashboard },
-  { to: "/host/leads", label: "Leads", Icon: Inbox, disabled: true, comingDay: "D9" },
-  {
-    to: "/host/profile",
-    label: "Profile",
-    Icon: UserCircle2,
-    disabled: true,
-    comingDay: "D15",
-  },
-  {
-    to: "/host/settings",
-    label: "Settings",
-    Icon: Settings,
-    disabled: true,
-    comingDay: "D17",
-  },
-];
-
 export function HostLeftNav({ className }: HostLeftNavProps) {
+  const { counts } = useLeads();
+  const newLeadsCount = counts?.new ?? 0;
+
+  const items: NavItem[] = [
+    { to: "/host/dashboard", label: "Listings", Icon: LayoutDashboard },
+    {
+      to: "/host/leads",
+      label: "Leads",
+      Icon: Inbox,
+      badge: newLeadsCount > 0 ? newLeadsCount : undefined,
+    },
+    {
+      to: "/host/profile",
+      label: "Profile",
+      Icon: UserCircle2,
+      disabled: true,
+      comingDay: "D15",
+    },
+    {
+      to: "/host/settings",
+      label: "Settings",
+      Icon: Settings,
+      disabled: true,
+      comingDay: "D17",
+    },
+  ];
+
   return (
     <nav
       aria-label="Host navigation"
@@ -65,7 +76,7 @@ export function HostLeftNav({ className }: HostLeftNavProps) {
         Host
       </p>
       <ul className="space-y-1">
-        {ITEMS.map(({ to, label, Icon, disabled, comingDay }) => (
+        {items.map(({ to, label, Icon, badge, disabled, comingDay }) => (
           <li key={to}>
             {disabled ? (
               <span
@@ -96,7 +107,16 @@ export function HostLeftNav({ className }: HostLeftNavProps) {
                 data-testid={`host-nav-${label.toLowerCase()}`}
               >
                 <Icon className="w-4 h-4" aria-hidden="true" />
-                <span>{label}</span>
+                <span className="flex-1">{label}</span>
+                {typeof badge === "number" ? (
+                  <span
+                    className="rounded-full bg-primary text-primary-foreground text-[11px] font-semibold px-1.5 min-w-[1.25rem] h-5 inline-flex items-center justify-center tabular-nums"
+                    data-testid={`host-nav-${label.toLowerCase()}-badge`}
+                    aria-label={`${badge} new`}
+                  >
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                ) : null}
               </NavLink>
             )}
           </li>

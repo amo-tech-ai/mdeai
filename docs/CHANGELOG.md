@@ -6,6 +6,44 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-30] - Landlord V1 Day 9: leads inbox UI
+
+The closing piece of the renter→landlord loop. Leads written by D7.5 (form channel) and the D1 chat trigger (chat channel) now have a UI: `/host/leads` shows the inbox with status filters, a per-row click that auto-marks-viewed, and a "new" count badge on the host nav.
+
+### Frontend
+- **`pages/host/Leads.tsx` (new)** — `/host/leads` page using the same `RoleProtectedRoute` + `HostShell` pattern as D7. Four states (loading / error / filtered-empty / data); filtered-empty distinguishes "no leads at all" from "no leads in this filter".
+- **`components/host/leads/LeadCard.tsx` (new)** — one row. Renter name, joined apartment title (with `structured_profile` fallback for chat-channel rows where the apartment was deleted), 140-char message snippet, channel pill (Form/Chat/WhatsApp), move-when pill (when `structured_profile.move_when` set), relative timestamp, status pill (New/Viewed/Replied/Archived). Status='new' rows get a primary accent stripe + bold name. Clickable + keyboard-navigable (Enter / Space).
+- **`components/host/leads/LeadStatusFilter.tsx` (new)** — 5 segmented tabs (All / New / Viewed / Replied / Archived) with live counts. ARIA `role="tablist"` + `aria-selected`. Counts come from the parent so list + filter share one round-trip.
+- **`hooks/host/useLeads.ts` (new)** — `useLeads()` fetches `landlord_inbox` with a Supabase nested select pulling apartment context. RLS policy `landlord_inbox_select` already gates by `acting_landlord_ids()`. Returns leads + memo'd counts. `useMarkLeadViewed()` UPDATEs status='new'→'viewed' (idempotent — `eq("status", "new")` so re-clicking already-viewed cards is a no-op).
+- **`components/host/layout/HostLeftNav.tsx` (modified)** — flipped Leads from "Soon" to active. Badge with new-leads count (`useLeads().counts.new`); shows "99+" past 99. Reuses the same query cache as the leads page so flipping pages doesn't re-fetch.
+- **`App.tsx` (modified)** — `/host/leads` route, lazy-imported.
+
+### Tests
+- **`LeadCard.test.tsx` (new, 18 tests)** — 4 status pills, 3 channels, joined apartment vs structured_profile fallback vs unknown-listing fallback, Anonymous fallback, move_when pill (present + missing), 140-char truncation, relative timestamp, click + Enter + Space, non-interactive when no onClick.
+- **`LeadStatusFilter.test.tsx` (new, 4 tests)** — 5 segments + counts render, aria-selected on active, onChange fires with the clicked value, zero-counts don't crash.
+- **vitest count: 113 → 135**.
+
+### Browser proof
+- Created a V1 listing + 3 form-channel leads (Sofia/Now, Camila/Soon, Alejandra/Later) via direct fetch (legacy "Sofia" lead from D7.5 cleanup also remained — 4 total).
+- Navigated to `/host/leads` → all 4 cards rendered, nav badge "4", filter pills All 4 / New 4.
+- Clicked Replied filter → empty state "No replied leads" with helpful copy.
+- Switched back to All, clicked first card (Alejandra) → background mutation flipped status='new'→'viewed' → counts updated to New 3 / Viewed 1, nav badge "3". Card now shows amber "Viewed" pill.
+- Cleaned up demo rows after.
+
+### Gates
+- lint: D9 files clean (`npx eslint <D9 files>` exit 0); baseline 468 unchanged
+- test: 135/135 vitest passing (was 113)
+- build: 4.44s; entry 95.72 KB gzip (within 100 KB budget)
+- check:bundle: 10/10 within budget
+- verify:edge: 37/37 deno tests still green (no edge-fn changes)
+
+### What's next (D10/D11/D8 ordering rationale)
+- **D11** (email notify on new lead) — bumped ahead because email is what drives a landlord to *come back*. Without it the inbox UI is invisible until the next dashboard visit.
+- **D10** (lead detail page + WhatsApp reply button + status transition buttons) — the "click into a card" target. D9 marks-viewed passively; D10 adds Mark replied / Archive.
+- **D8** (lead-classify Gemini Flash for chat-channel rows) — last priority because form-channel rows are already structured by D7.5; classification is a chat-channel polish, not the foundation.
+
+---
+
 ## [2026-04-30] - Landlord V1 Day 7.5: WhatsApp tap-to-chat lead capture
 
 The "Contact Host" flow on `/apartments/:id` now uses a 3-field modal that POSTs to a new `lead-from-form` edge fn, inserts a `landlord_inbox` row, and opens `wa.me/<host-phone>?text=<prefilled>` in a new tab. Verification signal = "user actually opened WhatsApp" — no SMS OTP, no Infobip, no friction.
