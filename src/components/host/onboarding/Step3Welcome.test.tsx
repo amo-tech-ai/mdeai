@@ -8,7 +8,7 @@ import { Step3Welcome } from "./Step3Welcome";
 //   - "Document received" copy when verification was submitted; "Skipped"
 //     copy otherwise.
 //   - Two CTAs: "List your first property" -> /host/listings/new and
-//     "Go to dashboard" -> /dashboard.
+//     "Go to dashboard" -> /host/dashboard.
 
 function renderStep3(displayName: string, verificationSubmitted: boolean) {
   render(
@@ -59,6 +59,6 @@ describe("Step3Welcome", () => {
     expect(listingCTA.tagName).toBe("A");
     expect(dashboardCTA.tagName).toBe("A");
     expect(listingCTA).toHaveAttribute("href", "/host/listings/new");
-    expect(dashboardCTA).toHaveAttribute("href", "/dashboard");
+    expect(dashboardCTA).toHaveAttribute("href", "/host/dashboard");
   });
 });

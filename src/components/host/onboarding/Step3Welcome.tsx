@@ -56,7 +56,7 @@ export function Step3Welcome({
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg" data-testid="step3-cta-dashboard">
-          <Link to="/dashboard">
+          <Link to="/host/dashboard">
             <LayoutDashboard className="w-4 h-4 mr-2" /> Go to dashboard
           </Link>
         </Button>

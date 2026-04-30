@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 // Gadget client + provider are NO longer eager-imported here. They live
 // inside <CoffeeShell> (lazy-loaded below) so the ~24 KB gzip gadget
 // chunk only ships on `/coffee*` routes. See vite.config.ts manualChunks.
@@ -69,6 +69,7 @@ const Notifications = lazy(() => import("./pages/Notifications"));
 // inside the page (anon -> /login, renter -> /dashboard, landlord -> ok).
 const HostOnboarding = lazy(() => import("./pages/host/Onboarding"));
 const HostListingNew = lazy(() => import("./pages/host/ListingNew"));
+const HostDashboard = lazy(() => import("./pages/host/Dashboard"));
 // Admin pages — default exports per file, lazy-loaded individually so
 // the admin bundle only ships when an admin actually navigates here.
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -135,6 +136,10 @@ const App = () => (
             <Route path="/host/onboarding" element={<HostOnboarding />} />
             {/* D4: 4-step listing wizard. Steps 1-3 functional; Step 4 + submit land D5. */}
             <Route path="/host/listings/new" element={<HostListingNew />} />
+            {/* D7: host dashboard — landlord home, listings list, leads CTA. */}
+            <Route path="/host/dashboard" element={<HostDashboard />} />
+            {/* D7: /host/ alias → dashboard */}
+            <Route path="/host" element={<Navigate to="/host/dashboard" replace />} />
             {/* Marketing Routes */}
             <Route path="/how-it-works" element={<HowItWorks />} />
             <Route path="/pricing" element={<Pricing />} />

@@ -6,6 +6,49 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-30] - Landlord V1 Day 7: host dashboard shell + listings list
+
+The end-to-end signup → onboard → list → moderation → dashboard loop now closes. After D2-D6 built the writes, D7 builds the read view: a landlord lands on `/host/dashboard` and sees their own listings with Live / In review / Rejected status pills.
+
+### Frontend
+- **`pages/host/Dashboard.tsx` (new)** — `/host/dashboard` page. Greeting + display name + Create-listing CTA + listings grid. Four states all handled: loading (spinner), error (retry button), empty (prominent "Create your first listing"), data (list of `ListingCard`).
+- **`components/host/layout/RoleProtectedRoute.tsx` (new)** — extracted role gate used by every `/host/*` page going forward. Decision tree: anon → `/login?returnTo=<path>` (deep-link preserved); non-landlord → `/dashboard`; landlord without profile → `/host/onboarding`; landlord with profile → render children.
+- **`components/host/layout/HostShell.tsx` (new)** — page chrome (header + left nav + main). Pages own their own internal headers/widths.
+- **`components/host/layout/HostLeftNav.tsx` (new)** — sidebar nav with Listings active; Leads/Profile/Settings show "Soon" badges (lands D9/D15/D17). Hidden on mobile (`hidden md:flex`).
+- **`components/host/listing/ListingCard.tsx` (new)** — one row in the dashboard grid. Status precedence: rejected > archived > pending > approved+active=Live > approved+booked=Booked > approved+inactive=Hidden > else=Draft. Public-page link only when truly public (`approved` AND `active`). Rejection reason copy under the card. "— leads" placeholder ready for D9. es-CO COP / en-US USD price formatting.
+- **`hooks/host/useListings.ts` (new)** — TanStack Query for `apartments WHERE landlord_id = profile.id`. Defense in depth filter on `landlord_id` because existing RLS (`authenticated_can_view_all_apartments`) is overly permissive (see follow-up R-RLS-1).
+
+### Routing
+- `App.tsx` — added lazy `HostDashboard` import, `/host/dashboard` route, and `/host` → `/host/dashboard` redirect alias. `Navigate` added to react-router-dom imports.
+- `Step3Welcome.tsx` "Go to dashboard" CTA now points at `/host/dashboard` instead of renter `/dashboard`.
+- `Step4Description.tsx` post-create redirect now lands on `/host/dashboard` instead of renter `/dashboard` — the landlord sees their newly-created listing with status pill.
+
+### Tests
+- **`ListingCard.test.tsx` (new, 9 tests)** — Live + public-link, In review (no public link), Rejected + reason copy, Booked, Hidden, COP es-CO format, USD en-US format, broken-image fallback, leads placeholder.
+- Updated `Step3Welcome.test.tsx` to assert the new `/host/dashboard` href.
+- **vitest count: 86 → 95**.
+
+### Browser proof
+- `/host/dashboard` while signed in as `qa-landlord@mdeai.co` → renders empty state ("No listings yet" + "Create your first listing" CTA).
+- Created 2 listings via direct fetch (auto_approved + needs_review). Reload → both render in the grid:
+  - Live listing: green "Live" pill + "View public page" link to `/apartments/<id>`.
+  - In review listing: yellow "In review" pill + tooltip "Founder reviews flagged listings within 24 hours" + no public link.
+- Both cards expose "— leads" (D9 placeholder) and "Edit (soon)" (D17 placeholder).
+- Desktop view shows the left nav with active Listings, "Soon" pills on Leads/Profile/Settings.
+- Cleaned up demo rows after.
+
+### Gates
+- lint: D7 files clean (`npx eslint <D7 files>` exit 0); baseline 468 unchanged
+- test: 95/95 passing (was 86)
+- build: 4.35s; entry chunk 95.64 KB gzip (+0.57 KB from D6, within 100 KB budget)
+- check:bundle: 10/10 within budget
+- verify:edge: 37/37 deno tests still green (no edge-fn changes)
+
+### Follow-up: R-RLS-1 (logged in todo, NOT shipped this PR)
+- Existing `authenticated_can_view_all_apartments` policy lets any signed-in user (renters too) read every apartments row including rejected/archived. The dashboard works around this with a defensive `landlord_id =` filter, but the policy itself should be replaced with `apartments_select_own_landlord` (`landlord_id IN (SELECT id FROM landlord_profiles WHERE user_id = auth.uid())`) so the data is properly compartmentalised. Tracked as a sweep-up migration after D7 ship.
+
+---
+
 ## [2026-04-30] - Landlord V1 Day 6: founder-side moderation via email magic-links
 
 End-to-end moderation flow — listing-create fires a founder email when a listing lands in `needs_review`; the email contains two HMAC-signed magic links that hit `listing-moderate` to flip the row to `approved` or `rejected`. No UI, no admin login — the signed token IS the auth.

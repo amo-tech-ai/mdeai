@@ -93,7 +93,7 @@ export function Step4Description({
               : `Founder reviews flagged listings within 24 hours. Reason: ${outcome.data.reasons.join(", ")}.`,
         });
         onSuccess();
-        navigate("/dashboard", { replace: true });
+        navigate("/host/dashboard", { replace: true });
       },
       onError: (err) => {
         toast({
