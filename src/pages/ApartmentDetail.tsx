@@ -12,6 +12,7 @@ import { useToggleSave, useIsSaved } from "@/hooks/useSavedPlaces";
 import { useAuth } from "@/hooks/useAuth";
 import { BookingDialog } from "@/components/apartments/BookingDialog";
 import { ContactHostDialog } from "@/components/apartments/ContactHostDialog";
+import { WhatsAppContactModal } from "@/components/apartments/WhatsAppContactModal";
 import type { Apartment } from "@/types/listings";
 import { cn } from "@/lib/utils";
 import { savePendingPrompt } from "@/lib/pending-prompt";
@@ -377,11 +378,26 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
         onOpenChange={setBookingOpen}
         apartment={apartment}
       />
-      <ContactHostDialog
-        open={contactOpen}
-        onOpenChange={setContactOpen}
-        apartment={apartment}
-      />
+      {apartment.landlord_id ? (
+        <WhatsAppContactModal
+          open={contactOpen}
+          onOpenChange={setContactOpen}
+          apartment={{
+            id: apartment.id,
+            title: apartment.title,
+            neighborhood: apartment.neighborhood ?? "",
+          }}
+          hostFirstName={
+            apartment.host_name?.split(" ")[0]?.trim() || "the host"
+          }
+        />
+      ) : (
+        <ContactHostDialog
+          open={contactOpen}
+          onOpenChange={setContactOpen}
+          apartment={apartment}
+        />
+      )}
     </div>
   );
 }

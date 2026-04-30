@@ -77,6 +77,11 @@ export interface Apartment {
   freshness_status?: 'active' | 'unconfirmed' | 'stale';
   last_checked_at?: string;
   source_listing_id?: string;
+  // Landlord V1 (D1+ schema). Present on listings created via /host/listings/new;
+  // null/undefined for legacy seeded apartments.
+  landlord_id?: string | null;
+  moderation_status?: 'pending' | 'approved' | 'rejected' | 'archived';
+  source?: 'manual' | 'seed' | 'firecrawl' | 'api';
 }
 
 // Cars

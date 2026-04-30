@@ -43,3 +43,7 @@ verify_jwt = true
 [functions.listing-moderate]
 enabled = true
 verify_jwt = false
+
+[functions.lead-from-form]
+enabled = true
+verify_jwt = false

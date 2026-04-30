@@ -6,6 +6,52 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-30] - Landlord V1 Day 7.5: WhatsApp tap-to-chat lead capture
+
+The "Contact Host" flow on `/apartments/:id` now uses a 3-field modal that POSTs to a new `lead-from-form` edge fn, inserts a `landlord_inbox` row, and opens `wa.me/<host-phone>?text=<prefilled>` in a new tab. Verification signal = "user actually opened WhatsApp" — no SMS OTP, no Infobip, no friction.
+
+### Why D7.5 (not waiting for D10)
+Renters land on apartment detail pages today; the existing `ContactHostDialog` writes to the legacy P1-CRM `leads` table and forces sign-in. For the V1 cohort (landlords with `landlord_id` set), we need: anonymous-friendly, WhatsApp-first, lead captured server-side BEFORE the popup opens (so a popup-blocked user is still a captured lead). 1 day to ship; unblocks D9 inbox UI work.
+
+### Frontend
+- **`lib/whatsapp-deeplink.ts` (new)** — pure utilities: `buildWhatsAppMessage()`, `buildWhatsAppUrl()` (E.164 → digits-only), `buildWhatsAppDeepLink()`. Throws on phones <8 digits so the caller can never open a broken `wa.me` URL.
+- **`hooks/useContactHost.ts` (new)** — TanStack Query mutation hitting `lead-from-form`. Reads structured rejection reasons from `FunctionsHttpError.context.json()` so the modal can surface specific messages (RATE_LIMITED, LANDLORD_NO_WHATSAPP, etc.). Honeypot suppression returns SUPPRESSED-coded error so the UI doesn't reveal the trap to bots.
+- **`components/apartments/WhatsAppContactModal.tsx` (new)** — 3 fields (name, when-moving radio group, optional message) + visually-hidden honeypot `website` field. Three steps: form → redirecting (1.5s spinner so user can switch to WhatsApp) → confirm ("Yes — I sent it" / "Reopen WhatsApp"). Tracks `contact_host_submitted`, `contact_host_whatsapp_confirmed`, `contact_host_whatsapp_retry` PostHog events. Lead is captured BEFORE `window.open` fires — popup-blocked users are still a captured lead.
+- **`pages/ApartmentDetail.tsx` (modified)** — branch at render: if `apartment.landlord_id` exists → `WhatsAppContactModal`; else → legacy `ContactHostDialog` (seeded apartments without a V1 landlord still work).
+- **`types/listings.ts` (modified)** — added `landlord_id`, `moderation_status`, `source` to `Apartment` so TS knows about D1+ schema.
+
+### Edge function
+- **`supabase/functions/lead-from-form/index.ts` (new, verify_jwt:false)** — POST. Zod-validated payload (apartment_id UUID, name 1-60, move_when enum, message ≤1000, optional honeypot, optional anon_session_id). Honeypot match → 200 with `{suppressed:true}` (silent so bots don't probe). IP rate limit 5/15 min via durable Postgres limiter; per-anon-session limit 20/hour. Apartments lookup → landlord lookup → must have `whatsapp_e164` (else 409 LANDLORD_NO_WHATSAPP). Inserts `landlord_inbox(channel='form', structured_profile={source,move_when,renter_name,…})`. Returns `{lead_id, whatsapp_e164, landlord_display_name, apartment{id,title,neighborhood}}` so the client builds the wa.me URL.
+- **`supabase/config.toml` (modified)** — registered with `verify_jwt = false`.
+
+### Tests
+- **`whatsapp-deeplink.test.ts` (new, 13 tests)** — message includes greeting + place + move-when + signature + URL; optional message trimming; neighborhood fallback; move_when label table (3 cases); URL strips parens/dashes/spaces; throws on short phone; encodes newlines as %0A; convenience function.
+- **`WhatsAppContactModal.test.tsx` (new, 5 tests)** — form fields render; send disabled until name typed; success path POSTs payload + opens wa.me; rate-limit error surfaces in the alert; honeypot suppression doesn't open wa.me.
+- **vitest count: 95 → 113**.
+
+### Browser proof
+- Created a V1 listing (auto_approved) → navigated to `/apartments/<id>` → clicked "Contact Host" → modal opens with title "Contact the host" (the demo apartment has no `host_name`, fallback works).
+- Filled name="Sofia", clicked "Now", typed "Is parking included?" → clicked "Send via WhatsApp".
+- POST `/functions/v1/lead-from-form` succeeded → wa.me URL generated: `https://wa.me/14168003103?text=Hi!%20I'm%20interested%20in%20D7.5%20demo…(El%20Poblado).%0A%0AMove-in%3A%20moving-in%20soon…%0A%0AIs%20parking%20included%3F%0A%0A%E2%80%94%20Sofia%20(via%20mdeai)%0Ahttp%3A%2F%2Flocalhost%3A8080%2Fapartments%2F<id>`. Modal advanced to "Did your message send on WhatsApp?" with two buttons.
+- DB verified: `landlord_inbox` row inserted with `channel='form'`, `renter_name='Sofia'`, `raw_message='Is parking included?'`, `structured_profile={source,move_when,renter_name,apartment_title,apartment_neighborhood}`, `status='new'`, `apartment_id` set.
+- Cleaned up demo data after.
+
+### Anti-spam (no OTP needed)
+- IP rate limit: 5 / 15 min (durable Postgres limiter)
+- Per-anon-session limit: 20 / hour
+- Honeypot: hidden `website` field; bots fill it → server returns `{success:true,suppressed:true}` (no DB write, no leaked rejection signal)
+- Phone capture: NOT taken from renter (the landlord's phone is already on `landlord_profiles`; the renter's number reaches the landlord when they actually message via WhatsApp)
+- WhatsApp Business OTP / Infobip: deferred to V2 — only if real-world spam pressure shows up
+
+### Gates
+- lint: D7.5 files clean (`npx eslint <files>` exit 0); baseline 468 unchanged
+- test: 113/113 vitest passing (was 95)
+- build: 4.41s; entry 95.63 KB gzip (within 100 KB budget)
+- check:bundle: 10/10 within budget
+- verify:edge: 37/37 deno tests still green (no new edge tests this PR — the lead-from-form deno test lands as part of D9 inbox work)
+
+---
+
 ## [2026-04-30] - Landlord V1 Day 7: host dashboard shell + listings list
 
 The end-to-end signup → onboard → list → moderation → dashboard loop now closes. After D2-D6 built the writes, D7 builds the read view: a landlord lands on `/host/dashboard` and sees their own listings with Live / In review / Rejected status pills.
