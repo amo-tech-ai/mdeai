@@ -6,6 +6,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-30] - Landlord V1 Day 5: listing creation pipeline live
+
+End-to-end listing creation — wizard 1→4 → `listing-create` edge function → auto-moderation → apartments row → dashboard redirect. Verified in browser against deployed edge fn (id `bda85444-117c-4ffa-bc75-72579ce4e650`, version 1, ACTIVE) and live Supabase project.
+
+### Frontend
+- `src/components/host/listing/ListingForm/Step4Description.tsx` — title (8-100 chars) + description (80-4000 chars) form. Char counters flip to destructive color when invalid. Renders `step4-rejection` alert with `prettyReason()` mapping (photos_lt_5, outside_medellin_metro, contact_info_in_description, price_out_of_range_cop, price_out_of_range_usd, description_too_short) when 422 AUTO_REJECTED returns. On auto_approved/needs_review, fires `listing_create_step` event, shows toast, navigates to /dashboard.
+- `src/hooks/host/useListingCreate.ts` — TanStack Query mutation invoking `listing-create`. Returns discriminated union `{ ok: true, data } | { ok: false, rejection }` so the component branches cleanly without parsing error shapes. Reads 422 body from `FunctionsHttpError.context.json()` to surface the rejection reasons (supabase-js wraps non-2xx responses in `error`).
+- `src/pages/host/ListingNew.tsx` — replaced D5Placeholder with `<Step4Description>`. Wired `clearDraft` to `onSuccess` so the wizard mount can be reused for a follow-up listing.
+- `src/components/host/listing/ListingForm/Step1Address.tsx` — fallback path now allows Continue without lat/lng. When Maps key fails (`gm_authFailure` fires) or load errors, gate becomes `(!fallback && (latitude === null || longitude === null))`. Server-side geocoding (or needs_review verdict) takes over from there. Without this fix, Vercel previews without Maps key whitelisting blocked the wizard at Step 1.
+
+### Edge function
+- `supabase/functions/listing-create/index.ts` — Zod-validated payload (PayloadSchema covers all wizard fields: address, lat/lng, bedrooms, price, photos, title, description). Auth via `verify_jwt: true` + `getUserId()`. Rate limit: 10 listings/hour/user via `check_rate_limit` RPC. Looks up `landlord_profiles` (must exist; 403 PROFILE_REQUIRED otherwise). Runs `autoModerationVerdict` pure fn, then service-role INSERT to `apartments` with verdict-derived `moderation_status` (`auto_approved`→`approved`, `needs_review`→`pending`). Returns 422 AUTO_REJECTED for rejected verdict (NO row inserted), 201 with verdict for the others.
+- `supabase/functions/listing-create/auto-moderation.ts` — pure function `autoModerationVerdict(listing) → { verdict, reasons }` with 5 rules. MEDELLIN_BBOX (lat 6.05–6.45, lng -75.75–-75.4); PRICE_RANGE COP 200k–15M / USD 50–5k; description ≥80 chars; photo count ≥5; phone/email regex on description. Tested by 14 deno tests in `supabase/functions/tests/listing_create_auto_moderation_test.ts`.
+
+### Browser proof
+1. **Happy path** — Signed in as `qa-landlord@mdeai.co`, navigated to `/host/listings/new`, walked Steps 1→4, uploaded 5 synthesized JPEGs to the `listing-photos` bucket, submitted with valid title + 251-char description. POST `/functions/v1/listing-create` returned **201** with `{ verdict: "needs_review", reasons: ["outside_medellin_metro"] }` (lat/lng=0/0 in fallback mode, as expected). Apartments row `c1c5f8a3-…` confirmed live with `moderation_status='pending'`, `status='active'`, `landlord_id` set, `images[]` length 5. Toast shown, redirected to /dashboard.
+2. **Rejected path** — Direct fetch to `listing-create` with 100k COP price + 5-char description + lat/lng=0 → POST returned **422** with `{ error: { code: "AUTO_REJECTED", details: { reasons: ["outside_medellin_metro", "price_out_of_range_cop", "description_too_short"] } } }`. `SELECT count(*) FROM apartments WHERE title='Bad listing test'` returned 0 — server correctly skipped the INSERT for 2+ violations.
+3. Cleanup: deleted test apartments row + 5 storage objects from the test draft folder.
+
+### Gates
+All five green: lint (D5 files clean, baseline 468 unchanged), tests 86/86, build 4.31s, check:bundle 10/10 within budget (index 92.97 KB ≤ 100 KB), verify:edge 25 deno tests passing.
+
+---
+
 ## [2026-04-30] - Landlord V1 D4 audit follow-up: 2 missing FK indexes
 
 Caught by a post-D4 schema audit (`SELECT … FROM information_schema.table_constraints WHERE constraint_type='FOREIGN KEY'…`). Two FK columns from D1 had no covering index, in violation of the existing "schema-foreign-key-indexes" convention used by the P1-CRM tables.

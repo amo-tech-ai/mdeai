@@ -10,7 +10,7 @@ import { useListingDraft } from "@/hooks/host/useListingDraft";
 import { Step1Address } from "@/components/host/listing/ListingForm/Step1Address";
 import { Step2Specs } from "@/components/host/listing/ListingForm/Step2Specs";
 import { Step3Photos } from "@/components/host/listing/ListingForm/Step3Photos";
-import { Button } from "@/components/ui/button";
+import { Step4Description } from "@/components/host/listing/ListingForm/Step4Description";
 
 /**
  * /host/listings/new — 4-step listing wizard.
@@ -46,7 +46,7 @@ export default function HostListingNew() {
     isLoading: profileLoading,
   } = useOwnLandlordProfile();
 
-  const { draftId, draft, updateDraft } = useListingDraft();
+  const { draftId, draft, updateDraft, clearDraft } = useListingDraft();
 
   const [step, setStep] = useState<WizardStep>(1);
   const stepStartRef = useRef<number>(Date.now());
@@ -139,7 +139,7 @@ export default function HostListingNew() {
                 ? "Bedrooms, price, amenities. Renters filter on these."
                 : step === 3
                   ? "5+ photos required. The first one is your cover image."
-                  : "Coming with D5 — finish step 3 to preview the submit screen."}
+                  : "One title + a real description. Auto-moderation runs on submit."}
           </p>
         </header>
 
@@ -187,9 +187,16 @@ export default function HostListingNew() {
         ) : null}
 
         {step === 4 ? (
-          <D5Placeholder
-            wizardStartedAt={wizardStartRef.current}
+          <Step4Description
+            draft={draft}
+            onChange={(next) =>
+              updateDraft({
+                title: next.title,
+                description: next.description,
+              })
+            }
             onBack={() => setStep(3)}
+            onSuccess={clearDraft}
           />
         ) : null}
 
@@ -247,36 +254,3 @@ function Stepper({ currentStep }: { currentStep: WizardStep }) {
   );
 }
 
-function D5Placeholder({
-  wizardStartedAt,
-  onBack,
-}: {
-  wizardStartedAt: number;
-  onBack: () => void;
-}) {
-  const totalSec = Math.round((Date.now() - wizardStartedAt) / 1000);
-  return (
-    <div
-      className="rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center"
-      data-testid="d5-placeholder"
-    >
-      <h2 className="font-display text-xl font-semibold text-foreground">
-        Step 4 lands with D5.
-      </h2>
-      <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-        Title + description + the <code>listing-create</code> edge function
-        (with auto-moderation rules) are the next deliverable. You've spent
-        ~{Math.max(1, totalSec)} s on this draft so far — it's saved locally
-        and will pick up where you left off.
-      </p>
-      <div className="mt-6 flex gap-3 justify-center">
-        <Button type="button" variant="outline" onClick={onBack}>
-          Back to photos
-        </Button>
-        <Button type="button" asChild>
-          <Link to="/dashboard">Save + go to dashboard</Link>
-        </Button>
-      </div>
-    </div>
-  );
-}

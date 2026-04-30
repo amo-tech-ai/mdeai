@@ -1,6 +1,6 @@
 ---
 name: systematic-debugging
-description: "Use BEFORE diagnosing any bug. Forces a hypothesis-then-evidence loop instead of trial-and-error. Trigger: any failing test, error in logs, unexpected behavior, or 'why is X happening' question. Source: skills.sh — adapted for mdeai.co with bug case studies from V1 D1-D5."
+description: "Use when the user is stuck on a bug, failing test, or unexpected behavior and needs to figure out WHY before fixing it. Triggers on any debugging situation: tests failing or crashing (Vitest, Playwright, Deno), edge functions returning unexpected status codes or error payloads, auth/signin failures, RLS or FK or migration weirdness, \"silently returns 0 rows\", state/storage that doesn't match what the code says, console errors, \"I changed X and now Y broke\", \"looks fine but doesn't work\", \"nothing changed but it stopped working\", flaky or order-dependent test failures, or any \"why is this happening / why isn't this working\" question. Forces a hypothesis-first loop (restate symptom → rank causes → inspect schema/state directly → minimal fix → backport) instead of console.log trial-and-error or \"let me try a different approach\". Do NOT use for writing new code/tests from scratch, explaining concepts, drafting docs/runbooks, or pure configuration tasks with no bug to diagnose. Source: skills.sh + run_loop iteration against mdeai eval set."
 metadata:
   source: https://skills.sh/
   installed: 2026-04-29

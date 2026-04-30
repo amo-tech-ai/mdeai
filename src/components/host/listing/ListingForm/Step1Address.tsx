@@ -100,14 +100,19 @@ export function Step1Address({ value, onChange, onSubmit }: Step1AddressProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const fallback = authFailed || error !== null;
+
+  // Continue is gated on text fields always. lat/lng are required only
+  // when Places autocomplete is working — if Maps auth-failed (bad key,
+  // referrer not whitelisted, billing off, etc.) we accept a manual
+  // address and let the listing-create edge function geocode it
+  // server-side. The Medellín-metro auto-moderation check tolerates
+  // missing coords (treats them as "needs_review").
   const submitDisabled =
     !value.address.trim() ||
     !value.city.trim() ||
     !value.neighborhood.trim() ||
-    value.latitude === null ||
-    value.longitude === null;
-
-  const fallback = authFailed || error !== null;
+    (!fallback && (value.latitude === null || value.longitude === null));
 
   return (
     <div className="space-y-6" data-testid="step1-address-form">
