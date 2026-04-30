@@ -6,6 +6,54 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-04-30] - Landlord V1 Day 6: founder-side moderation via email magic-links
+
+End-to-end moderation flow — listing-create fires a founder email when a listing lands in `needs_review`; the email contains two HMAC-signed magic links that hit `listing-moderate` to flip the row to `approved` or `rejected`. No UI, no admin login — the signed token IS the auth.
+
+### Edge functions
+- **`listing-moderate/index.ts` (new)** — `verify_jwt: false` (set in config.toml). GET-only. Verifies token via `verifyModerationToken()`, looks up apartments row via service role, and either UPDATEs `moderation_status` (and `status` + `rejection_reason` for reject) or returns idempotent 200 if already in target state. Returns HTML success page so the click-from-email UX is "open URL → see confirmation."
+- **`listing-create/index.ts` (extended)** — after a `needs_review` insert, fires `sendFounderEmail()` fire-and-forget with rendered email body containing both `approve` + `reject` magic-link URLs. Failure to dispatch email never fails the listing-create request (the row is already in DB; founder can moderate via direct SQL as a fallback).
+
+### Shared modules
+- **`_shared/moderation-token.ts` (new)** — HMAC-SHA256 sign + verify for a compact `<payload-b64u>.<sig-b64u>` format. Payload: `{ lid, act, iat, exp }`. Constant-time signature comparison. Rejects malformed strings, bad signatures, expired tokens, and tokens issued >60s in the future. Default TTL 7 days. `buildModerationUrl()` helper assembles the click URL.
+- **`_shared/founder-email.ts` (new)** — V1 stub that always logs to stdout (`[founder-email] subject=…`) and optionally POSTs to a Slack/Discord webhook if `FOUNDER_NOTIFY_WEBHOOK` is set. Contract stays the same when D11 swaps in real Resend. Errors swallowed so a webhook outage can't fail the listing insert.
+- **`listing-moderate/email-template.ts` (new)** — pure function `renderNeedsReviewEmail(listing, approveUrl, rejectUrl) → { subject, text }`. Uses es-CO locale for COP price formatting, en-US for USD.
+
+### Secrets provisioned
+- `FOUNDER_MODERATION_SECRET` (48 random bytes via `openssl rand -base64 48`) — HMAC key for moderation tokens. Set via `supabase secrets set --project-ref zkwcbyxiwklihegjhuql`.
+- `FOUNDER_EMAIL` — recipient address for stub email log + future Resend dispatch.
+
+### Tests
+- **`moderation_token_test.ts` (new, 9 tests)** — round-trip success, wrong-secret BAD_SIGNATURE, EXPIRED, NOT_YET_VALID (forward clock skew), MALFORMED, tampered-payload-with-original-sig forgery rejection, short-secret throws, `buildModerationUrl` shape, TTL constant.
+- **`listing_moderate_email_test.ts` (new, 3 tests)** — rendered email contains both URLs + listing details, COP price formatted with es-CO dot-thousands, USD formatted with en-US comma-thousands.
+- **deno test count: 25 → 37**.
+
+### Browser proof
+- Created needs_review listing via `listing-create` → 201 with verdict `needs_review`.
+- Synthesized HMAC token in-page (Web Crypto, same secret), GET listing-moderate → 200 HTML success page → DB row flipped to `moderation_status='approved'`.
+- Re-clicked same magic link → 200 idempotent (no-op UPDATE).
+- Bogus token → 401 `TOKEN_MALFORMED`. Missing token → 400 `MISSING_TOKEN`.
+- Reject path: created another needs_review listing, signed reject token → 200 → DB shows `moderation_status='rejected'`, `status='inactive'`, `rejection_reason='Rejected by founder review'`.
+- Cleaned up both test rows after.
+
+### Bug caught + fixed during browser proof
+- First reject attempt returned 500. Diagnosed by reading `pg_constraint` → `apartments.status` CHECK is `IN ('active','inactive','booked','pending')`; my edge fn was setting `status='hidden'` (not allowed). Switched to `'inactive'`. **Lesson:** read the schema before assuming column-value enums.
+- HTML title for reject said "rejectd" — the `${action}d` string trick worked for `approve→approved` but broke for `reject→rejectd`. Replaced with explicit `actionPastTense()` helper.
+
+### Gates
+- lint: D6 files clean (no src/ delta), baseline 468 unchanged
+- test: 86/86 vitest passing
+- build: 4.38s
+- check:bundle: 10/10 within budget
+- verify:edge: 37 deno tests passing (incl. 9 token + 3 email)
+
+### What still ships in later days
+- D11 — swap `founder-email.ts` stub for real Resend.
+- D17 — `listing-update` edge fn re-runs auto-moderation if photos/address change. Same token scheme can be reused.
+- D19 — verified-host badge approve flow uses the same `listing-moderate`-style magic-link approach (token type discriminator added then).
+
+---
+
 ## [2026-04-30] - Landlord V1 Day 5: listing creation pipeline live
 
 End-to-end listing creation — wizard 1→4 → `listing-create` edge function → auto-moderation → apartments row → dashboard redirect. Verified in browser against deployed edge fn (id `bda85444-117c-4ffa-bc75-72579ce4e650`, version 1, ACTIVE) and live Supabase project.

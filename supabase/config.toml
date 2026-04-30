@@ -35,3 +35,11 @@ verify_jwt = false
 [functions.rentals]
 enabled = true
 verify_jwt = false
+
+[functions.listing-create]
+enabled = true
+verify_jwt = true
+
+[functions.listing-moderate]
+enabled = true
+verify_jwt = false

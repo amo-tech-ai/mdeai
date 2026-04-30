@@ -34,6 +34,13 @@ import {
   autoModerationVerdict,
   type ListingForModeration,
 } from "./auto-moderation.ts";
+import {
+  signModerationToken,
+  buildModerationUrl,
+  TOKEN_DEFAULT_TTL_SECONDS,
+} from "../_shared/moderation-token.ts";
+import { sendFounderEmail } from "../_shared/founder-email.ts";
+import { renderNeedsReviewEmail } from "../listing-moderate/email-template.ts";
 
 const PhotoSchema = z.object({
   publicUrl: z.string().url(),
@@ -236,6 +243,25 @@ Deno.serve(async (req) => {
     );
   }
 
+  // 7. needs_review → fire founder magic-link email. Failures here MUST
+  // NOT fail the request — the listing is already in the DB and the
+  // founder can still moderate via direct SQL or the (D7) admin shell.
+  if (verdict === "needs_review") {
+    fireNeedsReviewEmail({
+      listingId: apartmentRow.id,
+      title: payload.title,
+      neighborhood: payload.neighborhood,
+      city: payload.city,
+      price: payload.price_monthly,
+      currency: payload.currency,
+      photoCount: payload.images.length,
+      landlordId: landlordRow.id,
+      reasons,
+    }).catch((err) => {
+      console.warn("[listing-create] founder email dispatch failed:", err);
+    });
+  }
+
   return jsonResponse(
     {
       success: true,
@@ -250,3 +276,69 @@ Deno.serve(async (req) => {
     req,
   );
 });
+
+interface NeedsReviewArgs {
+  listingId: string;
+  title: string;
+  neighborhood: string;
+  city: string;
+  price: number;
+  currency: "COP" | "USD";
+  photoCount: number;
+  landlordId: string;
+  reasons: string[];
+}
+
+async function fireNeedsReviewEmail(args: NeedsReviewArgs): Promise<void> {
+  const secret = Deno.env.get("FOUNDER_MODERATION_SECRET");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!secret || !supabaseUrl) {
+    console.warn(
+      "[listing-create] needs_review email skipped: secret or SUPABASE_URL unset",
+    );
+    return;
+  }
+
+  // Look up the landlord display_name for the email body. Best-effort.
+  const service = getServiceClient();
+  let landlordName: string | null = null;
+  const { data: profile } = await service
+    .from("landlord_profiles")
+    .select("display_name")
+    .eq("id", args.landlordId)
+    .maybeSingle();
+  if (profile) landlordName = profile.display_name ?? null;
+
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + TOKEN_DEFAULT_TTL_SECONDS;
+  const [approveTok, rejectTok] = await Promise.all([
+    signModerationToken(
+      { lid: args.listingId, act: "approve", iat: now, exp },
+      secret,
+    ),
+    signModerationToken(
+      { lid: args.listingId, act: "reject", iat: now, exp },
+      secret,
+    ),
+  ]);
+
+  const approveUrl = buildModerationUrl(supabaseUrl, approveTok);
+  const rejectUrl = buildModerationUrl(supabaseUrl, rejectTok);
+
+  const { subject, text } = renderNeedsReviewEmail(
+    {
+      title: args.title,
+      neighborhood: args.neighborhood,
+      city: args.city,
+      price_monthly: args.price,
+      currency: args.currency,
+      photo_count: args.photoCount,
+      landlord_display_name: landlordName,
+      reasons: args.reasons,
+    },
+    approveUrl,
+    rejectUrl,
+  );
+
+  await sendFounderEmail({ subject, text });
+}
