@@ -6,6 +6,52 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-05-01] - Landlord V1 Day 12: dashboard performance KPIs
+
+`/host/dashboard` now shows a "Tu desempeño" KPI strip above the listings list — turning the timestamps captured by D9/D10 (`viewed_at`, `first_reply_at`, `archived_at`) into landlord-facing performance metrics.
+
+### Frontend
+- **`hooks/host/useLandlordMetrics.ts` (new)** — pure `computeLandlordMetrics(leads, windowDays, nowMs)` function + `useLandlordMetrics()` hook reusing the `useLeads()` cache (no new round-trip). Returns `{ total, active, replied, archived, newCount, replyRatePct, medianTtfrMs, windowDays }`. `formatDuration()` helper formats ms as `<1 min` / `14 min` / `1h 14m` / `1d 3h`. Filters out negative TTFRs (clock skew) and >30d outliers from the median.
+- **`components/host/dashboard/LandlordPerformanceCard.tsx` (new)** — 4-KPI strip in Spanish:
+  1. **Leads · últimos 30d** — total + "X sin ver" / "todos vistos" sub.
+  2. **Activos** — `new` + `viewed`.
+  3. **% respondidos** — green ≥ 40% (stretch), amber ≥ 25% (acceptable), red below.
+  4. **Tiempo mediano** — green ≤ 6h, amber ≤ 12h, red over.
+  Targets sourced from plan §8 cohort goals (acceptable / stretch).
+- **`pages/host/Dashboard.tsx` (modified)** — renders `<LandlordPerformanceCard />` above listings when `metrics.total > 0`. Hides for new landlords with 0 leads (avoids a "0 / —/ —/ —" empty state).
+
+### Tests
+- **`useLandlordMetrics.test.ts` (new, 13 tests)** — empty input, status counts, integer reply rate, odd + even median, windowDays filter (incl. 0 = all-time), negative-TTFR + 30d-outlier filtering, all 5 `formatDuration` paths.
+- **`LandlordPerformanceCard.test.tsx` (new, 10 tests)** — 4 KPI values render, "X sin ver" sub, null-state "—", reply-rate tone matrix (3 cases), TTFR tone matrix (3 cases). Both tests mock `@/integrations/supabase/client` to suppress side-effect import noise.
+- **vitest count: 150 → 173** (+23 D12).
+
+### Browser proof
+- Created 4 form-channel leads with varied statuses + back-dated TTFRs:
+  - Sofia: replied, TTFR 5 min
+  - Camila: replied, TTFR 30 min
+  - Alejandra: viewed (active)
+  - Maria: new (active + new)
+- Reloaded `/host/dashboard` → "Tu desempeño" strip rendered:
+  - Leads · últimos 30d: **5** ("2 sin ver" — incl. 1 leftover from earlier sessions)
+  - Activos: **3** ("esperan respuesta")
+  - % respondidos: **40%** ("excelente" — green tone)
+  - Tiempo mediano: **18 min** ("súper rápido" — green tone, matches median([5min, 30min]) = 17.5 → 18)
+- Cleaned up demo data after.
+
+### Gates
+- lint: D12 files clean; baseline 468 unchanged
+- vitest 173/173
+- deno 47/47 unchanged
+- build 13.93s; entry 95.78 KB gzip (within 100 KB budget)
+- check:bundle 10/10 within budget
+
+### Why client-side aggregation (not a SQL view)
+- V1 cohort: max ~100 leads per landlord, 200-row pagination on `useLeads()`. Math is cheap on the client.
+- No new edge fn / migration / RPC = smaller blast radius for the change.
+- When we hit >200 leads/landlord we revisit with a `landlord_metrics_daily` view + pg_cron aggregator (queued in `analytics_events_daily` per plan §5.2 D14).
+
+---
+
 ## [2026-05-01] - Landlord V1 Day 10: lead detail + status transitions + WhatsApp reply
 
 Closes the read+act loop on the landlord side. `/host/leads/:id` now renders a single lead with renter info, full message, structured profile, and action buttons: WhatsApp reply (phone-aware), Mark replied, Archive, Reopen.
