@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2, AlertCircle, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HostShell } from "@/components/host/layout/HostShell";
@@ -11,16 +12,13 @@ import {
 import { useLeads, useMarkLeadViewed } from "@/hooks/host/useLeads";
 
 /**
- * /host/leads — landlord inbox UI (D9).
+ * /host/leads — landlord inbox UI (D9 + D10 nav).
  *
  * Reads `landlord_inbox` rows + joined apartment context. Default
  * filter is "all" so a landlord opening the page sees everything they
- * have. Clicking a card marks status='new' → 'viewed' (passive,
- * idempotent — UPDATE only fires when row is still 'new').
- *
- * D10 ships /host/leads/:id detail with WhatsApp reply button +
- * manual mark-replied/archive buttons. For D9 the click is just a
- * read-confirm + (later) a navigation target.
+ * have. Clicking a card now navigates to /host/leads/:id (D10) and
+ * passively marks status='new' → 'viewed' on the way (idempotent —
+ * UPDATE only fires when row is still 'new').
  */
 
 export default function HostLeads() {
@@ -34,6 +32,7 @@ export default function HostLeads() {
 }
 
 function LeadsContent() {
+  const navigate = useNavigate();
   const { leads, isLoading, error, refetch, counts } = useLeads();
   const markViewed = useMarkLeadViewed();
   const [filter, setFilter] = useState<LeadFilter>("all");
@@ -45,10 +44,10 @@ function LeadsContent() {
   }, [leads, filter]);
 
   const handleCardClick = (leadId: string) => {
-    // Passive mark-as-viewed. Hook only fires UPDATE when status='new'
-    // so re-clicking already-viewed cards is a no-op. D10 will replace
-    // this with navigation to the detail page.
+    // Passive mark-as-viewed (idempotent). Then navigate to the detail
+    // page so the landlord can read + reply + transition status.
     markViewed.mutate(leadId);
+    navigate(`/host/leads/${leadId}`);
   };
 
   return (
@@ -61,8 +60,8 @@ function LeadsContent() {
           Leads
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Renters who messaged you about a listing. Reply on WhatsApp from
-          the detail page (D10).
+          Renters who messaged you about a listing. Tap a card to read +
+          reply on WhatsApp.
         </p>
       </header>
 

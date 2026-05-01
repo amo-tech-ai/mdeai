@@ -76,7 +76,15 @@ export type AppEvent =
   | { name: 'onboarding_completed'; totalDurationSec: number }
   | { name: 'verification_doc_uploaded'; docKind: 'national_id' | 'passport' | 'rut' | 'property_deed' | 'utility_bill' }
   | { name: 'listing_create_step'; step: 1 | 2 | 3 | 4; durationSec: number }
-  | { name: 'listing_photo_uploaded'; sizeBytes: number; totalCount: number };
+  | { name: 'listing_photo_uploaded'; sizeBytes: number; totalCount: number }
+  // — Renter-side contact-host (D7.5) —
+  | { name: 'contact_host_submitted'; apartmentId: string; moveWhen: 'now' | 'soon' | 'later' }
+  | { name: 'contact_host_whatsapp_confirmed'; apartmentId: string }
+  | { name: 'contact_host_whatsapp_retry'; apartmentId: string }
+  // — Landlord lead-actions (D10) —
+  | { name: 'lead_marked_replied'; leadId: string; fromStatus: 'new' | 'viewed' | 'replied' | 'archived' }
+  | { name: 'lead_archived'; leadId: string; fromStatus: 'new' | 'viewed' | 'replied' | 'archived' }
+  | { name: 'lead_reopened'; leadId: string; fromStatus: 'new' | 'viewed' | 'replied' | 'archived' };
 
 /**
  * Capture a domain event. Silent no-op when PostHog isn't initialized.
