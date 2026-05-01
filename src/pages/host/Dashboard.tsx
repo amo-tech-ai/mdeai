@@ -4,23 +4,21 @@ import { Button } from "@/components/ui/button";
 import { HostShell } from "@/components/host/layout/HostShell";
 import { RoleProtectedRoute } from "@/components/host/layout/RoleProtectedRoute";
 import { ListingCard } from "@/components/host/listing/ListingCard";
+import { LandlordPerformanceCard } from "@/components/host/dashboard/LandlordPerformanceCard";
 import { useOwnListings } from "@/hooks/host/useListings";
 import { useOwnLandlordProfile } from "@/hooks/host/useLandlordOnboarding";
+import { useLandlordMetrics } from "@/hooks/host/useLandlordMetrics";
 
 /**
- * /host/dashboard — landlord home. D7.
+ * /host/dashboard — landlord home. D7 + D12 KPIs.
  *
- * Single screen: greeting + "Create listing" CTA + a list of own
- * listings with status pills. Empty state pushes the user toward Step 0
- * of the listing wizard since landing here with 0 listings is the
- * post-onboarding default.
+ * Sections (top to bottom):
+ *   1. Greeting + Create-listing CTA
+ *   2. Performance KPIs (D12) — only when total leads > 0
+ *   3. Your listings (D7)
  *
- * Role gate is applied via <RoleProtectedRoute>: anon → /login, renter →
+ * Role gate via <RoleProtectedRoute>: anon → /login, renter →
  * /dashboard, landlord-without-profile → /host/onboarding.
- *
- * Future sibling pages (D9 Leads, D15 Profile, D17 Edit) will reuse
- * <HostShell> + <RoleProtectedRoute> the same way, so we keep this
- * page focused on its own data fetch.
  */
 
 export default function HostDashboard() {
@@ -36,6 +34,7 @@ export default function HostDashboard() {
 function DashboardContent() {
   const { data: profile } = useOwnLandlordProfile();
   const { data: listings, isLoading, error, refetch } = useOwnListings();
+  const { metrics, isLoading: metricsLoading } = useLandlordMetrics();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
@@ -49,7 +48,7 @@ function DashboardContent() {
             {profile?.display_name ? `, ${profile.display_name.split(" ")[0]}` : ""}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Manage your listings. Leads inbox lands D9.
+            Tus anuncios y consultas — un vistazo rápido a tu actividad.
           </p>
         </div>
         <Button asChild size="lg" data-testid="host-dashboard-create">
@@ -58,6 +57,12 @@ function DashboardContent() {
           </Link>
         </Button>
       </header>
+
+      {!metricsLoading && metrics.total > 0 ? (
+        <div className="mb-8">
+          <LandlordPerformanceCard metrics={metrics} />
+        </div>
+      ) : null}
 
       <section aria-labelledby="listings-heading">
         <h2
