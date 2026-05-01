@@ -47,3 +47,7 @@ verify_jwt = false
 [functions.lead-from-form]
 enabled = true
 verify_jwt = false
+
+[functions.lead-reminder-tick]
+enabled = true
+verify_jwt = false

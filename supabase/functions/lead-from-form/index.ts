@@ -29,6 +29,8 @@ import {
 } from "../_shared/http.ts";
 import { getServiceClient } from "../_shared/supabase-clients.ts";
 import { allowRateDurable } from "../_shared/rate-limit.ts";
+import { loadTwilioConfig, sendWhatsApp } from "../_shared/twilio-whatsapp.ts";
+import { renderNewLeadMessage } from "../_shared/lead-notify-templates.ts";
 
 const PayloadSchema = z.object({
   apartment_id: z.string().uuid(),
@@ -249,6 +251,23 @@ Deno.serve(async (req) => {
     );
   }
 
+  // 6. Fire WhatsApp notification fire-and-forget. Failures are LOGGED
+  // ONLY — never block the request, never retry. The lead is already in
+  // the inbox; landlord sees it on next dashboard open as a fallback.
+  fireWhatsAppNotification({
+    landlordPhone: landlord.whatsapp_e164,
+    landlordName: landlord.display_name,
+    renterName,
+    apartmentTitle: apt.title,
+    apartmentNeighborhood: apt.neighborhood,
+    moveWhen: payload.move_when,
+    messageSnippet: rawMessage,
+    leadId: inboxRow.id,
+    service,
+  }).catch((err) => {
+    console.warn("[lead-from-form] WhatsApp dispatch failed:", err);
+  });
+
   return jsonResponse(
     {
       success: true,
@@ -267,3 +286,54 @@ Deno.serve(async (req) => {
     req,
   );
 });
+
+interface FireWhatsAppArgs {
+  landlordPhone: string;
+  landlordName: string;
+  renterName: string;
+  apartmentTitle: string;
+  apartmentNeighborhood: string;
+  moveWhen: "now" | "soon" | "later";
+  messageSnippet: string;
+  leadId: string;
+  // deno-lint-ignore no-explicit-any
+  service: any;
+}
+
+async function fireWhatsAppNotification(args: FireWhatsAppArgs): Promise<void> {
+  const config = loadTwilioConfig(/* useSandbox */ true);
+  if (!config) {
+    console.warn("[lead-from-form] Twilio config missing — skipping WhatsApp send");
+    return;
+  }
+  const baseUrl = Deno.env.get("MDEAI_PUBLIC_URL") ?? "https://mdeai.co";
+  const leadUrl = `${baseUrl}/host/leads`;
+  const body = renderNewLeadMessage({
+    landlordFirstName: args.landlordName.split(" ")[0] ?? "Anfitrión",
+    renterName: args.renterName,
+    apartmentTitle: args.apartmentTitle,
+    apartmentNeighborhood: args.apartmentNeighborhood,
+    moveWhen: args.moveWhen,
+    messageSnippet: args.messageSnippet,
+    leadUrl,
+  });
+  const result = await sendWhatsApp(config, {
+    toE164: args.landlordPhone,
+    body,
+  });
+  if (result.ok) {
+    console.log(
+      `[lead-from-form] WhatsApp sent — sid=${result.sid} to=${args.landlordPhone}`,
+    );
+    // Stamp whatsapp_sent_at so the reminder tick won't re-fire as a
+    // first-send. Best-effort; failure here is fine.
+    await args.service
+      .from("landlord_inbox")
+      .update({ whatsapp_sent_at: new Date().toISOString() })
+      .eq("id", args.leadId);
+  } else {
+    console.warn(
+      `[lead-from-form] WhatsApp send failed — code=${result.errorCode} msg=${result.errorMessage}`,
+    );
+  }
+}
