@@ -6,6 +6,126 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-05-01] - Landlord V1 Day 10: lead detail + status transitions + WhatsApp reply
+
+Closes the read+act loop on the landlord side. `/host/leads/:id` now renders a single lead with renter info, full message, structured profile, and action buttons: WhatsApp reply (phone-aware), Mark replied, Archive, Reopen.
+
+### Frontend
+- **`pages/host/LeadDetail.tsx` (new)** — `RoleProtectedRoute + HostShell`. 4 states (loading / error / not-found / data). Spanish UI throughout ("Volver al inbox", "Mensaje", "Responder", "Marcar como respondido", "Archivar", "Reabrir"). Auto-marks-replied on WhatsApp button click (optimistic — landlord can Reopen if they didn't actually reply).
+- **`components/host/leads/WhatsAppReplyButton.tsx` (new)** — phone-aware. With renter phone (chat-channel future): opens `wa.me/<phone>?text=<es-CO greeting>`. Without phone (form-channel from D7.5): opens bare `wa.me/` + shows hint *"Sofia ya te escribió desde su número, revisa tus chats recientes"*.
+- **`components/host/leads/LeadStatusActions.tsx` (new)** — visibility matrix: `new`/`viewed` → [Mark replied, Archive]; `replied` → [Archive only]; `archived` → [Reopen]. Toast on success/error in Spanish.
+- **`hooks/host/useLeadDetail.ts` (new)** — TanStack Query single-row fetch with apartment join. RLS gates by `acting_landlord_ids()`.
+- **`hooks/host/useLeadActions.ts` (new)** — `useMarkReplied`, `useArchive`, `useReopen` mutations. Each invalidates both list (`host_inbox_leads`) + detail caches. Mark-replied uses COALESCE-style logic on `first_reply_at` so toggling replied → archived → reopened → replied preserves the original timestamp (response-time analytics).
+- **`pages/host/Leads.tsx` (modified)** — LeadCard onClick now also navigates to `/host/leads/:id` (was just `markViewed` in D9).
+- **`App.tsx` (modified)** — lazy `/host/leads/:id` route.
+- **`lib/posthog.ts` (modified)** — extended `AppEvent` union with D7.5 `contact_host_*` events (drift fix — they were `trackEvent()` callers without typing) + new D10 `lead_marked_replied` / `lead_archived` / `lead_reopened`.
+
+### Migration regression fix
+- **`20260430224605_landlord_v1_rls_acting_grant_back.sql` (new)** — restores `GRANT EXECUTE ON acting_landlord_ids() TO authenticated`. The D9.6 security sweep migration revoked it on the (incorrect) assumption that SECURITY DEFINER functions can always be called from RLS policies. They CAN'T — SECURITY DEFINER changes the body's privileges but the CALL still requires EXECUTE for the caller's role. Caught during D10 browser proof when `landlord_inbox` SELECT failed with `permission denied for function acting_landlord_ids`. `auto_create_landlord_inbox_from_message` stays revoked (trigger fn, no policy dependency).
+
+### Tests
+- **`WhatsAppReplyButton.test.tsx` (new, 7 tests)** — with-phone vs without-phone rendering, prefilled message format, onSent callback, disabled prop, short-phone fallback.
+- **`LeadStatusActions.test.tsx` (new, 8 tests)** — full visibility matrix, mutation payload shape (first_reply_at COALESCE, archived_at, reopen clears).
+- **vitest count: 135 → 150** (+15 D10).
+
+### Browser proof
+- Created listing + form-channel lead via `lead-from-form`.
+- Clicked card on `/host/leads` → navigated to `/host/leads/:id`.
+- Status auto-flipped `new → viewed` (D9 mark-viewed still works).
+- Page rendered: renter name, apartment context, full message, channel pill, move-when card, "Abrir WhatsApp" button + hint.
+- Clicked "Marcar como respondido" → status → `replied`, actions → [Archivar only], DB shows `first_reply_at` stamped.
+- Clicked "Archivar" → status → `archived`, actions → [Reabrir only], DB shows `archived_at` stamped.
+- Clicked "Reabrir" → status → `viewed`, actions → [Marcar + Archivar], `archived_at` NULL, **`first_reply_at` PRESERVED** through the cycle.
+- WhatsApp button click → opens bare `wa.me/` (form lead has no renter phone, as expected).
+
+### Gates
+- lint: D10 files + posthog.ts clean; baseline 468 unchanged
+- vitest 150/150
+- deno 47/47 unchanged
+- build 5.20s; entry 95.78 KB gzip (within 100 KB budget)
+- check:bundle 10/10 within budget
+
+---
+
+## [2026-05-01] - Landlord V1 Day 11.5: Twilio Sandbox WhatsApp lead pings + 30-min reminder
+
+Replaces the original D11 email plan with WhatsApp via Twilio Sandbox — better channel for Colombian landlords (~95 % WhatsApp penetration), zero Meta approval lag for the dev/cohort phase.
+
+### Database
+- **`20260430220540_landlord_v1_whatsapp_notify.sql` (new)** — installs `pg_cron` + `pg_net`. Adds `landlord_inbox.whatsapp_sent_at` + `landlord_inbox.reminder_sent_at`. Partial index `landlord_inbox_pending_reminder_idx` for the reminder query path. Schedules pg_cron job `mdeai_lead_reminder_tick` every 5 min calling `lead-reminder-tick` via `pg_net.http_post` with `X-Cron-Secret` header.
+
+### Edge functions
+- **`_shared/twilio-whatsapp.ts` (new)** — direct REST POST to Twilio Messages API. Auth precedence: API Key + Secret > Account SID + Auth Token (matches Twilio CLI). Returns `{ ok, sid, errorCode }`. No SDK dependency.
+- **`_shared/lead-notify-templates.ts` (new)** — Spanish (es-CO) message bodies for new-lead + 30-min reminder. Pure functions; deno-tested.
+- **`lead-from-form/index.ts` (extended)** — fires `fireWhatsAppNotification(...)` AFTER landlord_inbox INSERT, fire-and-forget. Failures logged only. Stamps `whatsapp_sent_at` on success.
+- **`lead-reminder-tick/index.ts` (new)** — `verify_jwt:false`, `X-Cron-Secret` header auth. UPDATE-RETURNINGs `reminder_sent_at` FIRST so parallel ticks can't double-fire. Sends to all rows where `status='new' AND reminder_sent_at IS NULL AND created_at < now() - 30 min`, capped at 25/tick.
+
+### Secrets pushed to Supabase
+- `TWILIO_API_KEY` (`SK…`, recommended)
+- `TWILIO_API_SECRET`
+- `TWILIO_SANDBOX_NUMBER` (`+14155238886`)
+- `CRON_SECRET` (32-byte random)
+- Existing `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` retained as fallback.
+
+### Tests
+- **`lead_notify_templates_test.ts` (new, 10 deno tests)** — message rendering for both templates, Spanish locale move_when labels (3 cases), truncation rules, fallback names, length cap < 500 chars.
+- **deno count: 37 → 47** (+10 D11.5).
+
+### Browser smoke proof
+- Initial Twilio call returned `20003 Authenticate` with the legacy SID + auth_token combo (env file had stale token). Switched to API Key + Secret path (matches Twilio CLI behavior).
+- Re-ran end-to-end:
+  - `POST /functions/v1/lead-from-form` → 201; `whatsapp_sent_at` stamped 232 ms after row insert.
+  - Manual cron tick (back-dated lead) → claimed=1, sent=1; `reminder_sent_at` stamped.
+  - Re-tick → claimed=0 (idempotency).
+  - `messages.list` shows both sends queued; both fail with `err=63015` ("Channel not opted in") because the test recipient `+14168003103` hasn't sent `join <code>` to the sandbox yet — **expected sandbox behavior**, not a bug. Real phones that have joined the sandbox receive the message instantly.
+
+### Per-user scope explicitly skipped
+- No status callback webhooks (deferred until volume justifies it).
+- No retry on Twilio failures (one-shot; lead still in inbox as fallback).
+- No detailed delivery tracking (just two timestamps).
+
+### Cost projection (Colombia rates, 2026)
+- Sandbox: $0 forever during dev/cohort.
+- Production utility template (Phase 2): ~$0.006/message. 20 landlords × 10 leads/month = ~$1.20/month.
+
+### Migration to production WhatsApp (Phase 2, after first 10 landlords)
+- Twilio Self-Signup → Meta Business verification (1-3 days).
+- Submit `mdeai_nuevo_lead_v1` UTILITY template (24-48h Meta approval).
+- Swap `TWILIO_SANDBOX_NUMBER` → branded WA number.
+- Switch to `contentSid` + `contentVariables` for outside-24h-window sends.
+
+---
+
+## [2026-04-30] - Landlord V1 Day 9.5/9.6: post-D9 verification sweep + security sweep migration
+
+Two follow-up commits triggered by the post-D9 verification sweep.
+
+### D9.5 — honeypot leak fix (commit `4414cc8`)
+- `lead-from-form` Zod schema for the honeypot `website` field was `z.string().max(0).optional()` — rejects non-empty values with **400 INVALID_PAYLOAD** instead of silent **200 + suppressed:true**. Bots could probe for the rejection signal to discover the trap.
+- Fix: `z.string().optional()` + downstream suppress check. Verified post-deploy: bot-filled honeypot now returns 200 silently.
+
+### D9.6 — security sweep migration (commit `7d98d74`)
+- **`20260430172404_landlord_v1_security_sweep.sql` (new)** — 4 fixes from advisor scan:
+  - **R-RLS-1**: dropped `authenticated_can_view_all_apartments` (any signed-in user could read every apartments row including rejected/archived). Added `apartments_select_own_landlord` (landlord sees own rows regardless of moderation_status) + `apartments_select_admin` (`is_admin()` gate).
+  - **R-RPC-1**: revoked EXECUTE on `acting_landlord_ids()` from anon/authenticated. *Fixed in D10 — this revoke broke RLS policies that depend on the function. Re-granted to authenticated.*
+  - **R-RPC-2**: revoked EXECUTE on `auto_create_landlord_inbox_from_message()` from PUBLIC + anon + authenticated. Trigger fn; no policy dependency. **Stays revoked.**
+  - **R-STORAGE-1**: dropped `listing_photos_select_public` policy on `storage.objects`. Bucket stays public (URLs serve files), but cross-tenant filename enumeration via `.list()` is blocked.
+- Verified via SQL probes + sentinel-row cross-tenant test.
+
+### Verification sweep (commit `4414cc8`)
+- 5 gates green: lint baseline 468 unchanged, vitest 135/135, build 4.4s, 10/10 chunks within budget, deno 37/37.
+- 10 API boundary tests (401/400/404/405/409/422/429) all returned expected codes.
+- Cross-tenant RLS verified with sentinel insert: 0 rows leaked, 0 cross-tenant updates.
+- Browser E2E: anon → /host/dashboard → /login redirect with returnTo; signed-in landlord sees own listings; no React errors after fresh reload.
+
+---
+
+## [2026-04-30] - Landlord V1 Day 7.5: WhatsApp tap-to-chat lead capture (cleanup entry)
+
+Already documented in detail in the D7.5 entry below — this consolidation entry confirms it shipped (commit `3758e60`) before D9 with: `lead-from-form` edge fn (verify_jwt:false, honeypot, IP+session rate limit), `WhatsAppContactModal` (3 fields → modal → wa.me opens → "did you send it?" confirm), `whatsapp-deeplink` util, `useContactHost` hook. 18 vitest tests added (5 modal + 13 util).
+
+---
+
 ## [2026-04-30] - Landlord V1 Day 9: leads inbox UI
 
 The closing piece of the renter→landlord loop. Leads written by D7.5 (form channel) and the D1 chat trigger (chat channel) now have a UI: `/host/leads` shows the inbox with status filters, a per-row click that auto-marks-viewed, and a "new" count badge on the host nav.
