@@ -6,6 +6,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [2026-05-01] - Landlord V1 Day 12 (server-side completion): metrics view + cohort aggregator
+
+Completes D12 by adding the server-side counterparts to the client-side KPI strip already shipped: a per-landlord SQL view + a daily pg_cron snapshot into the existing `analytics_events_daily` table.
+
+### Migrations
+- **`20260501204538_landlord_v1_response_metrics.sql` (new)** — initial server-side D12.
+  - `landlord_response_metrics` view (`security_invoker = true`) — per-landlord 30-day rollup of `landlord_inbox` activity. Columns: `total_leads`, `new_leads`, `active_leads`, `replied_leads`, `archived_leads`, `replied_with_ttfr`, `reply_rate_pct`, `median_ttfr_seconds`. Median via `percentile_cont(0.5) WITHIN GROUP` filtered to positive + < 30-day TTFRs.
+  - `snapshot_analytics_events_daily(target_date date)` SECURITY DEFINER fn — idempotent UPSERT into the existing `analytics_events_daily(landlord_id, date)` table. Skips landlords with zero activity. Columns mapped from `landlord_inbox` + `apartments`. `whatsapp_clicks` / `logins` / `listings_edited` stay 0 (need PostHog ingestion + auth audit-log + D17 listing-update respectively).
+  - pg_cron schedule `mdeai_analytics_daily_snapshot` — fires `'10 3 * * *'` (03:10 UTC daily, ≈ 22:10 Bogotá) snapshotting `current_date - 1`.
+  - `REVOKE EXECUTE FROM PUBLIC + anon + authenticated` on the snapshot fn — service_role only.
+- **`20260501204754_landlord_v1_response_metrics_filter_orphans.sql` (new)** — `CREATE OR REPLACE VIEW` with added `AND landlord_id IS NOT NULL` to skip orphan chat-channel rows. The D1 `auto_create_landlord_inbox_from_message` trigger inserts `landlord_inbox` rows with null `landlord_id` when no apartment resolves; those are useful as a renter-side audit trail but shouldn't roll up into landlord-facing performance metrics. Caught during browser proof when qa-landlord saw `total_leads=1` for a fake `landlord_id=null` row.
+
+### Verification
+- Seeded 4 mixed-status leads (Sofia replied 5min, Camila replied 30min, Alejandra viewed, Maria new).
+- View result for qa-landlord: `total_leads=4, new=1, active=2, replied=2, archived=0, reply_rate_pct=50, median_ttfr_seconds=1050` — matches expected median(300s, 1800s) = 1050s = 17.5 min ✅.
+- Snapshot fn for `current_date` wrote `leads_received=4, leads_viewed=3, replies_marked=2, listings_created=0` to `analytics_events_daily`. Re-run idempotent (UPSERT, no duplicate row).
+- Both cron jobs (`mdeai_lead_reminder_tick` every 5 min + `mdeai_analytics_daily_snapshot` daily 03:10 UTC) confirmed `active=true`.
+
+### Why the dashboard KPI strip still uses client-side compute
+- V1 cohort: max ~100 leads/landlord, 200-row pagination on `useLeads()`. Client-side compute is cheap + reuses existing data.
+- The view is for: cohort-level reporting, future scale (>200 leads/landlord), and an admin "platform health" dashboard down the line.
+
+### Follow-ups
+- `whatsapp_clicks` aggregation needs PostHog → DB ingestion path
+- `logins` aggregation needs `auth.audit_log_entries` rollup
+- `listings_edited` needs the D17 listing-update edge fn
+
+---
+
 ## [2026-05-01] - Landlord V1 Day 12: dashboard performance KPIs
 
 `/host/dashboard` now shows a "Tu desempeño" KPI strip above the listings list — turning the timestamps captured by D9/D10 (`viewed_at`, `first_reply_at`, `archived_at`) into landlord-facing performance metrics.
