@@ -109,6 +109,92 @@ If you can't commit (e.g., user says "just look at it temporarily"), tell the us
 
 ---
 
+## ✅ How to commit safely — canonical recipe (added 2026-05-02)
+
+The full reference lives in the [`git-commit` skill](./.claude/skills/git-commit/SKILL.md).
+This section is the short version every commit MUST follow in this repo.
+
+### 1. PRE-COMMIT — verify nothing is silently disappearing
+
+Before EVERY commit (no exceptions, even one-line edits):
+
+```bash
+git status -uall                              # see staged + unstaged + ALL untracked
+find tasks -type f | wc -l                    # quote back to user (current baseline: 236)
+git ls-tree -r HEAD --name-only | wc -l       # tracked file count at HEAD
+```
+
+If the untracked count or `tasks/` count is **lower** than the previous turn, **STOP** — files have vanished. Do not commit. Restore from `git stash list` / `git fsck --no-reflogs` first, then commit.
+
+### 2. STAGE — by exact path, never `git add .`
+
+```bash
+# Good — explicit paths
+git add src/pages/Login.tsx src/pages/Signup.tsx supabase/migrations/20260502_*.sql
+
+# Bad — sweeps anything that happens to be modified or untracked
+git add -A    # ❌
+git add .     # ❌  same risk
+git add *     # ❌  shell globs depend on cwd
+```
+
+`git add -A` and `git add .` will pull in `.env`, leaked tokens, scratch files, broken symlinks — anything in the working tree. Always name the files.
+
+### 3. WRITE the commit message via heredoc
+
+```bash
+git commit -m "$(cat <<'EOF'
+<type>(<scope>): <subject under 70 chars>
+
+<body — explain why, not what. Reference bug/PR if applicable.>
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+Conventional types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `chore`, `ci`, `revert`.
+
+### 4. POST-COMMIT — verify the commit landed AND nothing else was lost
+
+```bash
+git log --oneline -1            # confirm new commit on top
+git status -sb                   # working tree clean (or expected leftovers)
+find tasks -type f | wc -l       # SAME count as pre-commit
+git ls-tree -r HEAD -- tasks/ | wc -l   # tracked tasks/ count steady
+```
+
+If the file count dropped, **STOP and surface it to the user immediately** — do not push, do not run more commits.
+
+### 5. PUSH — when network behaves
+
+Default `git push` may time out on this machine due to GitHub's HTTP/2 endpoint. The local fix is already applied (`http.version=HTTP/1.1`, `http.postBuffer=524288000`). If push still hangs:
+
+```bash
+# verify config still set
+git config --get http.version            # should print HTTP/1.1
+git config --get http.postBuffer          # should print 524288000
+
+# diagnose without touching repo
+curl -fsSL --max-time 8 https://github.com   # should be 200 in <2s
+ssh -T -o ConnectTimeout=5 git@github.com    # should print "Permission denied (publickey)" or username
+
+# escape hatches (in order)
+GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60 git push -u origin <branch>
+git push origin <small-commit-sha>:refs/heads/<branch>   # push older commits first
+```
+
+**Never** `--force` push to `main`. Force-push to a feature branch is OK only if the user explicitly asks.
+
+### 6. NEVER DO THESE while committing
+
+- `--no-verify` (skips hooks) — only if user explicitly asks
+- `--amend` after a hook failure — the failed commit didn't happen, so amend would rewrite the PREVIOUS commit. Make a NEW commit instead.
+- Commit `.env`, `.env.local`, anything ending in `.pem` / `.key` / `id_rsa*`, large binaries (`.dmg`, `.iso`, model weights). Even one such commit triggers GitHub's secret-scanning push protection block — and rotation is the only fix.
+- `git config --global` anything — settings affect every repo on the machine. Use repo-local `git config` (no `--global`).
+
+---
+
 ## 🚨 RULE: Never sweep untracked files (incident 2026-04-29)
 
 **Do NOT run** `git stash push -u`, `git stash push --include-untracked`, `git clean`, `rm -rf` against directories with untracked content, or any command that bulk-removes/hides untracked files **without explicit user confirmation that LISTS the directories about to be touched.**
