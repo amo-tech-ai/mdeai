@@ -1,5 +1,114 @@
 # CLAUDE.md — mdeai.co
 
+## 📑 File index
+
+A live inventory of every file in this repo (excluding `node_modules/`, `.git/`, `dist/`, etc.) lives at **[`/home/sk/mde/index.md`](./index.md)**. It includes:
+
+- Skills health summary (`.claude/skills/` + `.agents/skills/` working vs broken)
+- 12 top-level directories with file counts + per-dir tree
+- Top-level config files + dotfiles
+
+Re-generate after large changes: see the Python script at the end of any prior CLAUDE conversation that produced it (~70 lines, walks the repo, writes markdown).
+
+---
+
+## 🛡️ Skills protection (added 2026-05-01)
+
+The `.claude/skills/` and `.agents/skills/` directories hold installed Claude Code skills — **do NOT delete, sweep, or move any file inside either path.** Multiple incidents have lost skill content this session:
+
+1. **2026-04-29 sweep**: `git stash push -u` swept `.agents/skills/` (gitignored, untracked) into a stash. Pointers in `.claude/skills/` survived but became "dangling" — pointing to empty addresses. Took weeks to notice, hours to recover.
+
+2. **2026-05-01 branch-switch confusion**: switching to a branch that didn't have the same skill commits made files appear "deleted" from the working tree. They weren't — but the user-visible effect was identical. Trust loss is the same.
+
+### Specific rules for skill directories
+
+- **NEVER** run `rm`, `git clean`, `git stash -u` against `.claude/skills/` or `.agents/skills/`
+- **NEVER** delete a skill folder, symlink, or `SKILL.md` file without explicit user confirmation listing the exact path
+- **NEVER** restore symlinks via `git checkout` without first verifying their targets exist (broken targets = visible damage to the user)
+- **NEVER** assume `.agents/skills/` content is reproducible — `skill-creator` reinstalls take time and may pull a different version than what was working
+
+### Two-part skill install pattern (so the design is documented)
+
+`skill-creator` installs each skill as TWO things:
+
+```
+Part 1 (CONTENT)  →  ~/mde/.agents/skills/<name>/    (gitignored — local only)
+Part 2 (POINTER)  →  ~/mde/.claude/skills/<name>     (committed symlink)
+```
+
+Both must exist for the skill to load. If `.agents/skills/<name>/` is missing, the pointer becomes a broken symlink. Always verify both parts before declaring a restore complete.
+
+### Verification commands (read-only — safe)
+
+```bash
+# count working vs broken skills
+ls -la /home/sk/mde/.claude/skills/ | grep -c '^l'   # symlink count
+find /home/sk/mde/.claude/skills/ -xtype l           # broken symlinks (-xtype l = dangling)
+ls /home/sk/mde/.agents/skills/                       # installed content
+```
+
+### How to recover a damaged skill
+
+1. **First choice — reinstall via `skill-creator`** (downloads fresh, latest version)
+2. **Second choice — `git ls-tree -r <other-branch> -- .claude/skills/`** to find the pointer if it was lost
+3. **Last resort — search git's object store** with `git rev-list --objects --all --reflog | grep .agents/skills/<name>`
+
+NEVER recover by deleting and re-adding — recover by adding only.
+
+---
+
+## 🛑 ABSOLUTE RULE — Never delete files, ever (added 2026-05-01)
+
+**Do NOT delete any file, directory, symlink, or git object on this repo. Period.**
+
+This includes — but is not limited to:
+- `rm`, `rm -rf`, `rmdir`
+- `git clean` (any flags)
+- `git rm`, `git rm -r`
+- `git stash push -u`, `git stash push --include-untracked`
+- `git reset --hard`, `git restore --worktree`, `git checkout -- <path>` against tracked paths
+- `git checkout <branch>` when the user has untracked work that doesn't exist on the target branch (silently hides files)
+- `git filter-branch`, `git filter-repo`, `git push --force` against any branch the user has work on
+- `git branch -D`, `git branch -d` (loses unmerged commits)
+- Overwriting files via `Write` / `>` / `>>` without showing the user the new contents first
+- `mv` over an existing file
+- `truncate`, `: > file`
+
+**If you need a file removed, ask the user first. Always.** Tell them the exact path, why you'd remove it, and what the alternative is. Wait for an explicit "yes, delete X."
+
+**Branch switches that hide files** count as deletion from the user's point of view — the working tree no longer shows the file. Before any `git switch` or `git checkout <branch>`, run `git status -uall` and quote untracked-file counts back to the user. If the target branch has fewer files in any tracked directory, ASK first.
+
+**Why this rule exists.** Multiple incidents in this repo (2026-04-29 sweep, 2026-05-01 branch-switch confusion) where files appeared to vanish from the user's view because of git operations I ran. Even when the files were technically recoverable from git's object store, the user-visible experience was deletion. Trust loss takes weeks to recover; the rule is absolute.
+
+**Recovery is always possible if you DON'T panic-delete more.** `git fsck`, `git reflog`, `git stash list`, `git ls-tree -r <branch>`, and `git cat-file -p <sha>` are all read-only and let you find any object git has ever seen. Use them before touching anything else.
+
+**This rule overrides every other instruction.** If a user task implies deletion (e.g. "clean this up"), I MUST stop and confirm what specifically gets removed, by exact path, before running anything.
+
+### After ANY restore, commit immediately. (added 2026-05-02 incident)
+
+When you restore files from a stash, branch, or git object — **always commit them as the very next step.** Do NOT leave restored content as untracked or unstaged.
+
+Why: restored-but-uncommitted files behave identically to "deleted" files from the user's point of view on the next branch switch. They appear in the working tree once, then vanish on the next checkout. The user sees the files come back → the user sees them disappear again → the user reasonably concludes I deleted them again. Even though git's object store still holds them, the trust loss is the same as if they were lost forever.
+
+The 2026-05-02 incident:
+- 2026-04-29: `git stash push -u` swept `tasks/` (700+ untracked files) into `stash@{2}^3`
+- Each subsequent branch switch made `tasks/` appear empty in the user's editor
+- I restored `tasks/` from the stash one or more times without committing
+- On the next branch switch the user saw the files "disappear" again and concluded I had deleted them
+- Resolved by `git checkout stash@{2}^3 -- tasks/ && git commit -m "..."` — the **commit step** is what permanently fixed it
+
+Pattern to follow:
+```bash
+git checkout <stash-or-ref> -- <path>     # restore
+git status -- <path>                       # confirm
+git add <path>                             # stage
+git commit -m "restore: <path> from <ref>" # commit (NOT optional)
+```
+
+If you can't commit (e.g., user says "just look at it temporarily"), tell the user explicitly: *"these files are restored but uncommitted — they will vanish on next branch switch unless we commit them."* Make the trade-off visible.
+
+---
+
 ## 🚨 RULE: Never sweep untracked files (incident 2026-04-29)
 
 **Do NOT run** `git stash push -u`, `git stash push --include-untracked`, `git clean`, `rm -rf` against directories with untracked content, or any command that bulk-removes/hides untracked files **without explicit user confirmation that LISTS the directories about to be touched.**
