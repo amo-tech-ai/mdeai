@@ -1,0 +1,65 @@
+---
+id: MERM-02
+title: System Architecture — C4 Container
+type: C4Container
+phase: CORE
+prd_section: "5. AI agent architecture, 7. Technical specifications"
+---
+
+C4Container
+    title mdeai.co System Architecture
+
+    Person(renter, "Renter", "Digital nomad / expat searching for furnished apartments")
+    Person(landlord, "Landlord", "Property owner listing furnished units")
+    Person(admin, "Admin / Ops", "mdeai team moderating listings and operations")
+
+    System_Boundary(frontend, "Frontend — Vercel") {
+        Container(webapp, "mdeai.co", "Vite + React 18 + TypeScript", "Three-panel layout, shadcn/ui, Tailwind CSS")
+    }
+
+    System_Boundary(agents, "Agent Layer") {
+        Container(openclaw, "OpenClaw", "Self-hosted gateway", "Channel adapters: Web SSE, WhatsApp, Telegram. Intent routing via Gemini Lite")
+        Container(hermes, "Hermes Agent", "Python CLI + hermes_local adapter", "Composite ranking, taste profiles, lease analysis, market intelligence")
+        Container(paperclip, "Paperclip", "Node.js control plane :3102", "Task orchestration, budget enforcement, approval gates, heartbeats, audit trail")
+    }
+
+    System_Boundary(backend, "Backend — Supabase") {
+        ContainerDb(postgres, "PostgreSQL", "28+ tables, pgvector, PostGIS, RLS", "Apartments, leads, showings, payments, bookings, neighborhoods")
+        Container(edgefn, "Edge Functions", "Deno runtime, 9 existing + 7 new", "ai-chat, ai-search, ai-router, rentals, lead-capture, payment-webhook, etc.")
+        Container(auth, "Supabase Auth", "JWT", "Email/password + Google OAuth")
+        Container(storage, "Supabase Storage", "S3-compatible", "property-images (public), contracts (private), applications (private)")
+        Container(realtime, "Supabase Realtime", "WebSocket", "Live updates for bookings, notifications, chat")
+    }
+
+    System_Ext(stripe, "Stripe", "Payments, commission splits, payouts")
+    System_Ext(google, "Google APIs", "Maps, Directions, Places")
+    System_Ext(infobip, "Infobip", "WhatsApp Business API")
+    System_Ext(gemini, "Google Gemini", "Flash, Pro, Lite models for AI")
+    System_Ext(openrouter, "OpenRouter", "LLM provider for Hermes (Claude)")
+    System_Ext(shopify, "Shopify", "Commerce checkout via Gadget bridge")
+
+    Rel(renter, webapp, "Browses, searches, books", "HTTPS")
+    Rel(renter, openclaw, "WhatsApp messages", "via Infobip")
+    Rel(landlord, webapp, "Lists properties, manages bookings", "HTTPS")
+    Rel(admin, webapp, "Moderates, reviews, configures", "HTTPS")
+
+    Rel(webapp, edgefn, "API calls", "HTTPS + JWT")
+    Rel(webapp, auth, "Login / signup", "HTTPS")
+    Rel(webapp, realtime, "Live updates", "WebSocket")
+
+    Rel(edgefn, postgres, "Queries + mutations", "SQL")
+    Rel(edgefn, gemini, "AI inference", "HTTPS")
+    Rel(edgefn, storage, "File uploads", "S3 API")
+    Rel(edgefn, stripe, "Payment intents + webhooks", "HTTPS")
+    Rel(edgefn, google, "Directions + geocoding", "HTTPS")
+
+    Rel(openclaw, edgefn, "Tool dispatch", "HTTPS")
+    Rel(openclaw, infobip, "Send/receive WhatsApp", "HTTPS")
+
+    Rel(paperclip, edgefn, "Trigger workflows", "HTTPS")
+    Rel(paperclip, hermes, "Delegate reasoning", "hermes_local adapter")
+    Rel(paperclip, openclaw, "Delegate messaging", "openclaw_gateway adapter")
+    Rel(paperclip, postgres, "Audit trail + task state", "HTTPS via edge fn")
+
+    Rel(hermes, openrouter, "LLM calls", "HTTPS")
+    Rel(hermes, postgres, "Read listings + write analysis", "via edge fn")

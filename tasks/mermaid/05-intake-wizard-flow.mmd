@@ -1,0 +1,52 @@
+---
+id: MERM-05
+title: Intake Wizard Flow
+type: flowchart
+phase: CORE
+prd_section: "3. User personas and journeys — Journey 1, Step 1"
+---
+
+flowchart TD
+    Start([User visits /rentals]) --> WizardOpen[RentalsIntakeWizard Opens]
+
+    WizardOpen --> Prompt["AI Prompt:<br/>'Tell us what you're looking for'"]
+    Prompt --> UserInput[User types natural language<br/>"I need a furnished 1BR in Laureles<br/>with fast WiFi for 3 months, ~$1000/mo"]
+
+    UserInput --> GeminiParse[/"Gemini Flash Parses Input<br/>(rentals edge function)"/]
+
+    GeminiParse --> ExtractedFields{Extracted Fields}
+    ExtractedFields --> FieldDisplay["Display Criteria Badges:<br/>Budget: $1000 | Beds: 1<br/>Area: Laureles | Duration: 3mo<br/>WiFi: Required | Furnished: Yes"]
+
+    FieldDisplay --> Completeness{All Required<br/>Fields Present?}
+
+    Completeness -->|No — Missing fields| ClarifyQ["AI asks clarifying question:<br/>'What's your move-in date?'<br/>'Any pet requirements?'"]
+    ClarifyQ --> UserResponse[User responds]
+    UserResponse --> GeminiParse
+
+    Completeness -->|Yes| CreateLead[(Create Lead Row<br/>leads.structured_profile = JSONB)]
+
+    CreateLead --> BuildQuery[Build Search Query<br/>PostGIS + filters + sort]
+    BuildQuery --> RunSearch[Execute Search<br/>apartments table]
+
+    RunSearch --> ResultCount{Results Found?}
+
+    ResultCount -->|0 results| RelaxFilters["AI suggests relaxing filters:<br/>'No exact matches. Expanding to<br/>nearby neighborhoods...'"]
+    RelaxFilters --> BuildQuery
+
+    ResultCount -->|"> 0 results"| RankResults[/"Rank Results<br/>(P1: basic sort by price/match)<br/>(P2: Hermes composite score)"/]
+
+    RankResults --> DisplayResults[RentalsSearchResults.tsx<br/>Cards with scores + explanations]
+
+    DisplayResults --> UserAction{User Action}
+    UserAction -->|Click listing| DetailPanel[Right Panel: Listing Detail<br/>Gallery + Amenities + Scores]
+    UserAction -->|Modify search| RefineInput["Refine criteria:<br/>'Actually, I'd prefer El Poblado'"]
+    UserAction -->|Save favorite| SavePlace[(saved_places table)]
+
+    RefineInput --> GeminiParse
+    DetailPanel --> ScheduleShowing[Schedule Showing CTA]
+    DetailPanel --> ApplyNow[Apply Now CTA]
+
+    style GeminiParse fill:#4ecdc4,color:#fff
+    style RankResults fill:#4ecdc4,color:#fff
+    style CreateLead fill:#45b7d1,color:#fff
+    style SavePlace fill:#45b7d1,color:#fff

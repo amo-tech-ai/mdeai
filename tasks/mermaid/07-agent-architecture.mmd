@@ -1,0 +1,104 @@
+---
+id: MERM-07
+title: Agent Architecture — Paperclip Org Chart + Task Lifecycle
+type: flowchart
+phase: MVP
+prd_section: "5. AI agent architecture"
+---
+
+flowchart TB
+    subgraph PaperclipOrg["Paperclip Control Plane (:3102)"]
+        direction TB
+        CEO["CEO Agent<br/>Budget enforcement<br/>Approval gates<br/>Heartbeat: 15-min cycle"]
+
+        CEO --> CMO["CMO Agent<br/>Lead qualification<br/>Marketing insights<br/>Channel analytics"]
+        CEO --> CTO["CTO Agent<br/>System health<br/>Edge function monitoring<br/>Performance alerts"]
+        CEO --> OPS["OpsManager Agent<br/>Showing coordination<br/>Payout scheduling<br/>Listing freshness"]
+    end
+
+    subgraph Adapters["Adapter Layer"]
+        direction LR
+        HermesAdapter["hermes_local adapter<br/>Spawns: hermes chat -q<br/>instructionsFilePath: .md<br/>Timeout: 30s"]
+        OpenClawAdapter["openclaw_gateway adapter<br/>HTTP calls to OpenClaw<br/>Channel routing"]
+    end
+
+    subgraph HermesAgent["Hermes Agent (Python CLI — Ops Only)"]
+        direction TB
+        HermesCore["Hermes v0.7.0<br/>Model: Claude via OpenRouter<br/>637 skills available<br/>(Ops reasoning + delegation)"]
+    end
+
+    subgraph HermesEdgeFns["Hermes Intelligence (Supabase Edge Functions)"]
+        direction TB
+        Ranking["hermes-ranking<br/>Composite Ranking<br/>7-factor weighted score<br/>(Deterministic, no LLM)"]
+        TasteProfile["taste-profile<br/>Search history → preferences<br/>(Exponential decay)"]
+        MarketSnapshot["market-snapshot<br/>Price trends, snapshots<br/>(pg_cron scheduled)"]
+        LeaseAnalysis["contract-analysis<br/>PDF → terms → risk<br/>(Gemini Pro)"]
+    end
+
+    subgraph OpenClawGW["OpenClaw Gateway"]
+        direction TB
+        OCCore["Intent Router<br/>Gemini Lite classification"]
+        OCCore --> WebChannel["Web SSE Channel<br/>FloatingChatWidget"]
+        OCCore --> WAChannel["WhatsApp Channel<br/>Infobip API"]
+        OCCore --> TGChannel["Telegram Channel<br/>(Future)"]
+    end
+
+    CEO -.->|"Delegate reasoning"| HermesAdapter
+    CEO -.->|"Delegate messaging"| OpenClawAdapter
+    HermesAdapter -->|"Spawn CLI"| HermesCore
+    OpenClawAdapter -->|"HTTP"| OCCore
+
+    subgraph TaskLifecycle["Issue/Task Lifecycle"]
+        direction LR
+        TODO["todo"] -->|"checkout"| INPROG["in_progress"]
+        INPROG -->|"complete"| DONE["done"]
+        INPROG -->|"blocked"| BLOCKED["blocked"]
+        BLOCKED -->|"unblock"| INPROG
+        INPROG -->|"release"| TODO
+    end
+
+    subgraph ApprovalGates["Approval Gates"]
+        direction TB
+        G1["Payment > $500<br/>→ Human review"]
+        G2["Outbound host message<br/>confidence < 0.7<br/>→ Queue for review"]
+        G3["Listing publication<br/>→ Admin approval"]
+        G4["Application forwarding<br/>→ AI summary + spot-check"]
+        G5["Budget at 80%<br/>→ Soft warning"]
+        G6["Budget at 100%<br/>→ Hard stop"]
+        G7["Lead untouched > 24h<br/>→ Escalation alert"]
+    end
+
+    subgraph Heartbeats["Heartbeat Schedule"]
+        direction TB
+        Daily["Daily (15-min cycle)<br/>• Stale leads check<br/>• Showing reminders<br/>• Payment status<br/>• Budget consumption"]
+        Weekly["Weekly Tasks<br/>• Mon: Lead pipeline report<br/>• Wed: Listing freshness<br/>• Fri 8AM: Host payouts<br/>• Sun: Market snapshot"]
+    end
+
+    CEO --> TaskLifecycle
+    CEO --> ApprovalGates
+    CEO --> Heartbeats
+
+    subgraph DataLayer["Supabase (Ground Truth)"]
+        DB[(PostgreSQL<br/>28+ tables<br/>pgvector + PostGIS)]
+        EdgeFns["Edge Functions<br/>9 existing + 7 new"]
+    end
+
+    HermesCore -.->|"Ops queries via edge fn"| EdgeFns
+    Ranking --> DB
+    TasteProfile --> DB
+    MarketSnapshot --> DB
+    LeaseAnalysis --> DB
+    OCCore -->|"Tool dispatch"| EdgeFns
+    EdgeFns --> DB
+
+    style CEO fill:#ff6b6b,color:#fff
+    style CMO fill:#ffa07a,color:#fff
+    style CTO fill:#ffa07a,color:#fff
+    style OPS fill:#ffa07a,color:#fff
+    style HermesCore fill:#4ecdc4,color:#fff
+    style Ranking fill:#1abc9c,color:#fff
+    style TasteProfile fill:#1abc9c,color:#fff
+    style MarketSnapshot fill:#1abc9c,color:#fff
+    style LeaseAnalysis fill:#1abc9c,color:#fff
+    style OCCore fill:#45b7d1,color:#fff
+    style DB fill:#95a5a6,color:#fff

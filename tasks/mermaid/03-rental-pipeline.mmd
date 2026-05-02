@@ -1,0 +1,98 @@
+---
+id: MERM-03
+title: Rental Pipeline — Lead to Lease
+type: flowchart
+phase: CORE
+prd_section: "6. Automations and workflows"
+---
+
+flowchart TD
+    %% Color coding: blue=frontend, green=AI, orange=backend, red=approval gate, purple=agent
+
+    Start([New Inquiry]) --> Channel{Channel?}
+
+    Channel -->|Web Chat| WebChat[ai-chat Edge Function]
+    Channel -->|WhatsApp| WhatsApp[OpenClaw Gateway]
+    Channel -->|Intake Wizard| Wizard[RentalsIntakeWizard.tsx]
+
+    WebChat --> Extract
+    WhatsApp --> Extract
+    Wizard --> Extract
+
+    Extract[/"STEP 1: Extract Profile<br/>(Gemini Flash)"/] --> CreateLead
+    CreateLead[(STEP 2: Create Lead Row<br/>leads table)] --> Score
+
+    Score{STEP 3: Quality Score}
+    Score -->|"> 0.7 High"| FastTrack[Auto-search + Top 3 Results]
+    Score -->|"0.4-0.7 Standard"| StdQueue[Standard Queue]
+    Score -->|"< 0.4 Low"| Clarify[Request Clarification<br/>via OpenClaw]
+
+    FastTrack --> SearchResults[Ranked Results<br/>with Hermes Scores]
+    StdQueue --> SearchResults
+    Clarify -->|User responds| Extract
+
+    SearchResults --> SelectListing[Renter Selects Listing]
+    SelectListing --> RequestShowing[Request Showing]
+
+    RequestShowing --> CheckAvail[Check Host Availability]
+    CheckAvail --> ProposeSlots[Propose 3 Time Slots]
+    ProposeSlots --> RenterPicks[Renter Selects Slot]
+    RenterPicks --> CreateShowing[(Create showings Row<br/>status=proposed)]
+
+    CreateShowing --> NotifyHost[Notify Host via OpenClaw]
+    NotifyHost --> ConfidenceCheck{AI Confidence >= 0.7?}
+    ConfidenceCheck -->|Yes| AutoSend[Send Notification]
+    ConfidenceCheck -->|No| ApprovalGate1{{"APPROVAL GATE<br/>Paperclip Review"}}
+    ApprovalGate1 --> AutoSend
+
+    AutoSend --> HostConfirms[Host Confirms<br/>status=confirmed]
+    HostConfirms --> Reminders[T-24h + T-1h Reminders]
+    Reminders --> ShowingHappens[Showing Occurs]
+    ShowingHappens --> Feedback[Renter Rates 1-5]
+
+    Feedback --> FeedbackCheck{Rating?}
+    FeedbackCheck -->|"4-5 stars"| PromptApply["Prompt: Apply Now?"]
+    FeedbackCheck -->|"2-3 stars"| SuggestAlternatives[Suggest Similar Listings]
+    FeedbackCheck -->|"1 star"| RefineSearch[Refine Search Criteria]
+
+    SuggestAlternatives --> SelectListing
+    RefineSearch --> Extract
+    PromptApply --> SubmitApp[Submit Application<br/>4-step wizard]
+
+    SubmitApp --> AISummary[/"AI Generates<br/>Applicant Summary"/]
+    AISummary --> ApprovalGate2{{"APPROVAL GATE<br/>Paperclip Spot-Check"}}
+    ApprovalGate2 --> ForwardToHost[Forward to Landlord]
+    ForwardToHost --> HostDecision{Landlord Decision}
+
+    HostDecision -->|Accepted| LeaseGen[/"Hermes: Generate<br/>Lease Summary"/]
+    HostDecision -->|Rejected| NotifyReject[Notify Renter + Suggest Others]
+
+    LeaseGen --> BilingualSummary[Bilingual Summary<br/>EN/ES + Risk Flags]
+    BilingualSummary --> RenterReviews[Renter Reviews Terms]
+    RenterReviews --> AcceptTerms[Accept Terms]
+
+    AcceptTerms --> PaymentIntent[Create Stripe Payment Intent<br/>first_month + deposit]
+    PaymentIntent --> AmountCheck{Amount > $500<br/>or New Host?}
+    AmountCheck -->|Yes| ApprovalGate3{{"APPROVAL GATE<br/>Paperclip Review"}}
+    AmountCheck -->|No| ProcessPayment
+    ApprovalGate3 --> ProcessPayment[Process Payment]
+
+    ProcessPayment --> Webhook[Stripe Webhook<br/>payment-webhook Edge Fn]
+    Webhook --> BookingCreated[(Booking Created<br/>status=confirmed)]
+
+    BookingCreated --> CommissionSplit[Commission Split<br/>12% mdeai / 88% host]
+    CommissionSplit --> Confirmations[Confirmations<br/>Email + WhatsApp to Both]
+    Confirmations --> MoveInPrep[T-2 Days: Move-in Prep<br/>Keys + WiFi + Contacts]
+    MoveInPrep --> Done([Tenant Moves In])
+
+    NotifyReject --> SelectListing
+
+    style ApprovalGate1 fill:#ff6b6b,color:#fff
+    style ApprovalGate2 fill:#ff6b6b,color:#fff
+    style ApprovalGate3 fill:#ff6b6b,color:#fff
+    style Extract fill:#4ecdc4,color:#fff
+    style AISummary fill:#4ecdc4,color:#fff
+    style LeaseGen fill:#4ecdc4,color:#fff
+    style BookingCreated fill:#45b7d1,color:#fff
+    style CreateLead fill:#45b7d1,color:#fff
+    style CreateShowing fill:#45b7d1,color:#fff

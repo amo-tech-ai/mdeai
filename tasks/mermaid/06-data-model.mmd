@@ -1,0 +1,380 @@
+---
+id: MERM-06
+title: Data Model — All Tables (Existing + Phase 1-3)
+type: erDiagram
+phase: CORE
+prd_section: "7. Technical specifications — New database tables"
+---
+
+erDiagram
+    %% ==========================================
+    %% EXISTING TABLES (28 tables)
+    %% ==========================================
+
+    profiles {
+        uuid id PK
+        text email UK
+        text full_name
+        text avatar_url
+        text role
+        jsonb preferences
+        timestamp created_at
+    }
+
+    apartments {
+        uuid id PK
+        uuid host_id FK
+        text title
+        text description
+        text neighborhood
+        geometry location "PostGIS point"
+        int bedrooms
+        int bathrooms
+        decimal price_monthly
+        text currency
+        boolean furnished
+        boolean pet_friendly
+        int wifi_mbps
+        text[] amenities
+        text[] images
+        int min_stay_months
+        int max_stay_months
+        decimal safety_score
+        decimal walkability_score
+        decimal nomad_score
+        text status
+        timestamp last_verified_at
+        vector embedding "pgvector 1536-dim"
+        timestamp created_at
+    }
+
+    cars {
+        uuid id PK
+        text make
+        text model
+        int year
+        decimal daily_rate
+        text status
+        timestamp created_at
+    }
+
+    restaurants {
+        uuid id PK
+        text name
+        text cuisine
+        text neighborhood
+        geometry location
+        decimal rating
+        timestamp created_at
+    }
+
+    events {
+        uuid id PK
+        text title
+        text description
+        timestamp event_date
+        text venue
+        decimal price
+        timestamp created_at
+    }
+
+    bookings {
+        uuid id PK
+        uuid user_id FK
+        uuid listing_id FK
+        text listing_type
+        timestamp check_in
+        timestamp check_out
+        decimal total_amount
+        text status
+        text payment_status
+        timestamp created_at
+    }
+
+    collections {
+        uuid id PK
+        uuid user_id FK
+        text title
+        text description
+        text[] listing_ids
+        timestamp created_at
+    }
+
+    saved_places {
+        uuid id PK
+        uuid user_id FK
+        uuid listing_id FK
+        text listing_type
+        text notes
+        timestamp created_at
+    }
+
+    trips {
+        uuid id PK
+        uuid user_id FK
+        text title
+        timestamp start_date
+        timestamp end_date
+        text status
+        timestamp created_at
+    }
+
+    trip_items {
+        uuid id PK
+        uuid trip_id FK
+        uuid listing_id FK
+        text listing_type
+        int day_number
+        int order_index
+        text notes
+        timestamp created_at
+    }
+
+    conversations {
+        uuid id PK
+        uuid user_id FK
+        text agent_name
+        text status
+        jsonb context
+        timestamp created_at
+    }
+
+    messages {
+        uuid id PK
+        uuid conversation_id FK
+        text role
+        text content
+        jsonb tool_calls
+        jsonb metadata
+        timestamp created_at
+    }
+
+    agent_jobs {
+        uuid id PK
+        text agent_name
+        text status
+        jsonb input
+        jsonb output
+        timestamp started_at
+        timestamp completed_at
+    }
+
+    ai_context {
+        uuid id PK
+        uuid user_id FK
+        text context_type
+        jsonb data
+        timestamp created_at
+    }
+
+    ai_runs {
+        uuid id PK
+        text agent_name
+        text model
+        int input_tokens
+        int output_tokens
+        int duration_ms
+        text status
+        text error_message
+        timestamp created_at
+    }
+
+    notifications {
+        uuid id PK
+        uuid user_id FK
+        text type
+        text title
+        text message
+        boolean read
+        jsonb metadata
+        timestamp created_at
+    }
+
+    %% ==========================================
+    %% NEW TABLES — PHASE 1
+    %% ==========================================
+
+    leads {
+        uuid id PK
+        uuid user_id FK "nullable for anon"
+        text channel "web, whatsapp, form"
+        text raw_message
+        jsonb structured_profile
+        decimal quality_score "nullable P1, Hermes P2"
+        text status "new, contacted, qualified, converted, lost"
+        text phone_number
+        text assigned_to
+        timestamp last_contact_at
+        timestamp created_at
+    }
+
+    showings {
+        uuid id PK
+        uuid lead_id FK
+        uuid apartment_id FK
+        uuid host_id FK
+        timestamp scheduled_at
+        text status "proposed, confirmed, completed, cancelled, no_show"
+        jsonb renter_feedback "rating, notes"
+        jsonb host_notes
+        timestamp created_at
+    }
+
+    payments {
+        uuid id PK
+        uuid booking_id FK
+        uuid user_id FK
+        text stripe_payment_intent_id UK
+        int amount_cents
+        text currency
+        int commission_cents "12%"
+        int host_payout_cents "88%"
+        text host_payout_status "pending, scheduled, paid"
+        text status "pending, succeeded, failed, refunded"
+        jsonb metadata
+        timestamp created_at
+    }
+
+    rental_applications {
+        uuid id PK
+        uuid lead_id FK
+        uuid apartment_id FK
+        uuid user_id FK
+        jsonb personal_info
+        text[] document_urls
+        jsonb references
+        text ai_summary
+        text status "submitted, reviewing, approved, rejected"
+        timestamp created_at
+    }
+
+    property_verifications {
+        uuid id PK
+        uuid apartment_id FK
+        text verification_type "photo, price, availability, identity"
+        text status "pending, verified, needs_update, rejected"
+        text verified_by
+        text notes
+        timestamp expires_at
+        timestamp created_at
+    }
+
+    neighborhoods {
+        uuid id PK
+        text name UK
+        text slug UK
+        geometry boundary "PostGIS Polygon"
+        decimal safety_score
+        decimal walkability_score
+        decimal nomad_score
+        decimal avg_price_monthly
+        text description_en
+        text description_es
+        text[] nearby_landmarks
+        jsonb scores "detailed breakdown"
+        timestamp created_at
+    }
+
+    %% ==========================================
+    %% NEW TABLES — PHASE 2
+    %% ==========================================
+
+    lease_reviews {
+        uuid id PK
+        uuid rental_application_id FK
+        text pdf_url
+        jsonb extracted_terms "rent, deposit, notice, duration"
+        jsonb flagged_risks
+        text risk_score "low, medium, high"
+        text summary_en
+        text summary_es
+        text disclaimer "AI summary, not legal advice"
+        timestamp created_at
+    }
+
+    market_snapshots {
+        uuid id PK
+        uuid neighborhood_id FK
+        decimal avg_price
+        decimal median_price
+        int listing_count
+        decimal vacancy_rate
+        decimal wow_price_change "week-over-week"
+        text insights "Hermes-generated"
+        timestamp snapshot_date
+        timestamp created_at
+    }
+
+    taste_profiles {
+        uuid id PK
+        uuid user_id FK UK
+        jsonb preferred_neighborhoods
+        jsonb preferred_amenities
+        decimal budget_range_min
+        decimal budget_range_max
+        vector search_embedding "pgvector"
+        int total_searches
+        timestamp last_updated
+    }
+
+    %% ==========================================
+    %% NEW TABLES — PHASE 3 (Agent)
+    %% ==========================================
+
+    agent_audit_log {
+        uuid id PK
+        text agent_name "openclaw, hermes, paperclip"
+        text action_type
+        text entity_type
+        uuid entity_id
+        jsonb payload
+        text outcome "approved, rejected, escalated"
+        int tokens_used
+        timestamp created_at
+    }
+
+    landlord_profiles {
+        uuid id PK
+        uuid user_id FK UK
+        text cedula_number
+        text verification_status "pending, verified, rejected"
+        int property_count
+        decimal avg_rating
+        int response_time_hours
+        text payout_method
+        jsonb payout_details
+        timestamp created_at
+    }
+
+    %% ==========================================
+    %% RELATIONSHIPS
+    %% ==========================================
+
+    profiles ||--o{ apartments : "hosts"
+    profiles ||--o{ bookings : "books"
+    profiles ||--o{ collections : "curates"
+    profiles ||--o{ saved_places : "saves"
+    profiles ||--o{ trips : "plans"
+    profiles ||--o{ conversations : "chats"
+    profiles ||--o{ notifications : "receives"
+    profiles ||--o{ leads : "generates"
+    profiles ||--o{ rental_applications : "submits"
+    profiles ||--o{ taste_profiles : "has"
+    profiles ||--o{ landlord_profiles : "has"
+
+    apartments ||--o{ bookings : "booked_in"
+    apartments ||--o{ showings : "shown_in"
+    apartments ||--o{ rental_applications : "applied_for"
+    apartments ||--o{ property_verifications : "verified_by"
+
+    trips ||--|{ trip_items : "contains"
+    conversations ||--|{ messages : "contains"
+
+    leads ||--o{ showings : "schedules"
+    leads ||--o{ rental_applications : "applies"
+
+    bookings ||--o{ payments : "paid_by"
+    rental_applications ||--o| lease_reviews : "reviewed"
+
+    neighborhoods ||--o{ market_snapshots : "tracked"
+    neighborhoods ||--o{ apartments : "located_in"

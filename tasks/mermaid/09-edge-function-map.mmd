@@ -1,0 +1,126 @@
+---
+id: MERM-09
+title: Edge Function Map — All Functions with I/O
+type: flowchart
+phase: CORE
+prd_section: "7. Technical specifications — New edge functions"
+---
+
+flowchart LR
+    subgraph Clients["Client Channels"]
+        Web["mdeai.co<br/>(React)"]
+        WA["WhatsApp<br/>(via Infobip)"]
+        Stripe["Stripe<br/>(Webhooks)"]
+    end
+
+    subgraph Existing["Existing Edge Functions (9)"]
+        direction TB
+
+        AiChat["ai-chat<br/>──────────<br/>IN: message, intent, context<br/>OUT: SSE stream + tool results<br/>AUTH: JWT<br/>MODEL: Gemini Flash x3"]
+
+        AiSearch["ai-search<br/>──────────<br/>IN: query, filters, limit<br/>OUT: ranked results[]<br/>AUTH: JWT<br/>MODEL: Gemini Flash x2<br/>STATUS: deployed, untested"]
+
+        AiRouter["ai-router<br/>──────────<br/>IN: message<br/>OUT: {intent, confidence, language}<br/>AUTH: JWT<br/>MODEL: Gemini Lite"]
+
+        AiTrip["ai-trip-planner<br/>──────────<br/>IN: preferences, dates, budget<br/>OUT: itinerary with items<br/>AUTH: JWT<br/>MODEL: Gemini Pro"]
+
+        AiOptimize["ai-optimize-route<br/>──────────<br/>IN: trip_items[], start_point<br/>OUT: optimized_order, directions<br/>AUTH: JWT<br/>MODEL: Gemini Flash"]
+
+        AiCollections["ai-suggest-collections<br/>──────────<br/>IN: user_id, context<br/>OUT: collection suggestions[]<br/>AUTH: JWT<br/>MODEL: Gemini Flash"]
+
+        GoogleDir["google-directions<br/>──────────<br/>IN: origin, destination, mode<br/>OUT: route, duration, distance<br/>AUTH: JWT<br/>EXTERNAL: Google Directions API"]
+
+        RentalsFn["rentals<br/>──────────<br/>IN: action, filters, message<br/>OUT: listings[], wizard_result<br/>AUTH: Optional<br/>MODEL: Gemini Pro (708 lines)"]
+
+        RulesEngine["rules-engine<br/>──────────<br/>IN: entity_type, entity_id, action<br/>OUT: allowed, violations[]<br/>AUTH: Service role<br/>STATUS: deployed, untested"]
+    end
+
+    subgraph New["New Edge Functions — Phase 1 (5)"]
+        direction TB
+
+        LeadCapture["lead-capture<br/>──────────<br/>IN: message, channel, phone<br/>OUT: {lead_id, quality_score}<br/>AUTH: Optional (anon WA)<br/>WRITES: leads table"]
+
+        ShowingCreate["showing-create<br/>──────────<br/>IN: lead_id, apartment_id, slot<br/>OUT: {showing_id, status}<br/>AUTH: Required<br/>WRITES: showings table<br/>NOTIFY: host via OpenClaw"]
+
+        AppCreate["application-create<br/>──────────<br/>IN: lead_id, apartment_id,<br/>       personal, documents<br/>OUT: {application_id, ai_summary}<br/>AUTH: Required<br/>WRITES: rental_applications<br/>MODEL: Gemini Flash (summary)"]
+
+        BookingCreate["booking-create<br/>──────────<br/>IN: application_id, payment_intent<br/>OUT: {booking_id, confirmation}<br/>AUTH: Required<br/>WRITES: bookings, payments<br/>NOTIFY: both parties"]
+
+        PaymentWebhook["payment-webhook<br/>──────────<br/>IN: Stripe event payload<br/>OUT: 200 OK<br/>AUTH: Stripe signature verify<br/>WRITES: payments table<br/>IDEMPOTENT: stripe_pi_id UNIQUE"]
+    end
+
+    subgraph NewP2["New Edge Functions — Phase 2 (2)"]
+        direction TB
+
+        HermesRanking["hermes-ranking<br/>──────────<br/>IN: apartment_ids[], user_preferences<br/>OUT: scored_results[] with breakdown<br/>AUTH: Required<br/>MODEL: Deterministic composite formula"]
+
+        TasteProfile["taste-profile<br/>──────────<br/>IN: GET user_id / POST event<br/>OUT: preference_profile<br/>AUTH: Required<br/>WRITES: taste_profiles<br/>MODEL: None (exponential decay)"]
+
+        MarketSnapshot["market-snapshot<br/>──────────<br/>IN: GET neighborhood / POST generate<br/>OUT: snapshot with trends<br/>AUTH: Required (POST: pg_cron/service)<br/>WRITES: market_snapshots<br/>MODEL: Optional Gemini Flash (summary)"]
+
+        ContractAnalysis["contract-analysis<br/>──────────<br/>IN: pdf_url, language<br/>OUT: {terms, risks, summary_en/es}<br/>AUTH: Required<br/>WRITES: lease_reviews<br/>MODEL: Gemini Pro"]
+    end
+
+    subgraph Data["Supabase"]
+        DB[(PostgreSQL<br/>28+ tables)]
+        Storage[(Storage<br/>3 buckets)]
+    end
+
+    subgraph External["External APIs"]
+        Gemini["Google Gemini<br/>Flash / Pro / Lite"]
+        Google["Google Maps<br/>Directions + Places"]
+        InfobipAPI["Infobip<br/>WhatsApp API"]
+    end
+
+    Web --> AiRouter
+    Web --> AiChat
+    Web --> RentalsFn
+    Web --> AiSearch
+    Web --> AiTrip
+    Web --> AiOptimize
+    Web --> AiCollections
+    Web --> LeadCapture
+    Web --> ShowingCreate
+    Web --> AppCreate
+    Web --> BookingCreate
+
+    WA --> LeadCapture
+    Stripe --> PaymentWebhook
+
+    AiChat --> Gemini
+    AiSearch --> Gemini
+    AiRouter --> Gemini
+    AiTrip --> Gemini
+    AiOptimize --> Gemini
+    RentalsFn --> Gemini
+    AppCreate --> Gemini
+    ContractAnalysis --> Gemini
+
+    GoogleDir --> Google
+    ShowingCreate --> InfobipAPI
+
+    AiChat --> DB
+    AiSearch --> DB
+    RentalsFn --> DB
+    LeadCapture --> DB
+    ShowingCreate --> DB
+    AppCreate --> DB
+    BookingCreate --> DB
+    PaymentWebhook --> DB
+    HermesRanking --> DB
+    TasteProfile --> DB
+    MarketSnapshot --> DB
+    ContractAnalysis --> DB
+
+    AppCreate --> Storage
+    ContractAnalysis --> Storage
+
+    style LeadCapture fill:#2ecc71,color:#fff
+    style ShowingCreate fill:#2ecc71,color:#fff
+    style AppCreate fill:#2ecc71,color:#fff
+    style BookingCreate fill:#2ecc71,color:#fff
+    style PaymentWebhook fill:#2ecc71,color:#fff
+    style HermesRanking fill:#3498db,color:#fff
+    style TasteProfile fill:#3498db,color:#fff
+    style MarketSnapshot fill:#3498db,color:#fff
+    style ContractAnalysis fill:#3498db,color:#fff

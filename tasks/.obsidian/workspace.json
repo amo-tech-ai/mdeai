@@ -1,0 +1,225 @@
+{
+  "main": {
+    "id": "53ab796e488cdef6",
+    "type": "split",
+    "children": [
+      {
+        "id": "58757635fcfa1649",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4b0ccc33d65088c1",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "trio/02-trio-hosted.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "02-trio-hosted"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "57624814cfc1150f",
+    "type": "split",
+    "children": [
+      {
+        "id": "b1fbe17986aab550",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e27adcda6b083546",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "de5bba4b8d628345",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "f011f0bd7db87311",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "c374dd5b92cfc48a",
+    "type": "split",
+    "children": [
+      {
+        "id": "a4dacd0ddcfa2d26",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1751544e8b258835",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "skills/06-neighborhood-guide-creator.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 06-neighborhood-guide-creator"
+            }
+          },
+          {
+            "id": "3f1ca328c2b1000e",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "skills/06-neighborhood-guide-creator.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 06-neighborhood-guide-creator"
+            }
+          },
+          {
+            "id": "dc51e06ced4e371e",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "ebecb4e06316d951",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "0f2c4a4319c7fff8",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "skills/06-neighborhood-guide-creator.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 06-neighborhood-guide-creator"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "e27adcda6b083546",
+  "lastOpenFiles": [
+    "wireframes/10-ai-strategy-dashboard.md",
+    "wireframes/09-admin-listings.md",
+    "wireframes/08-whatsapp-conversation.md",
+    "wireframes/07-mobile-rental-search.md",
+    "wireframes/06-application-flow.md",
+    "wireframes/05-showing-scheduler.md",
+    "wireframes/04-landlord-dashboard.md",
+    "wireframes/03-listing-detail-desktop.md",
+    "wireframes/02-intake-wizard-desktop.md",
+    "wireframes/01-rental-search-desktop.md",
+    "wireframes",
+    "tasks-template.md",
+    "roadmap.md",
+    "real-estate/README.md",
+    "real-estate/2-supabase-strategy.md",
+    "real-estate/12-Top AI Real Estate Rental Startups.md",
+    "real-estate/11.md",
+    "real-estate/10-real-estate-tasks.md",
+    "real-estate/1-trio-real-estate-plan.md",
+    "real-estate/07-Top 10 AI Real Estate Repositories Ranked for mdeai.md",
+    "real-estate/06-real-estate.md",
+    "real-estate/05-github-repos.md",
+    "real-estate/04-architecture map.md",
+    "real-estate/03-lobster.md",
+    "real-estate/02-openclaw.md",
+    "real-estate/01-open-claw.md",
+    "real-estate",
+    "prompts/advanced/13D-landlord-journey-doc.md",
+    "prompts/reference",
+    "prompts/production",
+    "prompts/core",
+    "prompts/advanced",
+    "prompts",
+    "paperclip",
+    "originals",
+    "openclaw"
+  ]
+}

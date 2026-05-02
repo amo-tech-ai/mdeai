@@ -1,0 +1,107 @@
+---
+id: MERM-10
+title: Deployment Architecture — Production Topology
+type: flowchart
+phase: PRODUCTION
+prd_section: "7. Technical specifications — Deploy"
+---
+
+flowchart TB
+    subgraph Users["Users"]
+        Renter["Renter<br/>(Web / Mobile)"]
+        Landlord["Landlord<br/>(Web / WhatsApp)"]
+        Admin["Admin / Ops<br/>(Web)"]
+    end
+
+    subgraph CDN["Vercel Edge Network"]
+        VercelCDN["Global CDN<br/>~300ms propagation<br/>Static assets cached"]
+    end
+
+    subgraph Vercel["Vercel — Frontend"]
+        WebApp["mdeai.co<br/>────────<br/>Vite 5 + React 18<br/>TypeScript + SWC<br/>shadcn/ui + Tailwind<br/>────────<br/>Auto-deploy on push to main<br/>Preview URLs per PR"]
+    end
+
+    subgraph Supabase["Supabase — Backend"]
+        direction TB
+
+        SupaAuth["Supabase Auth<br/>────────<br/>JWT tokens<br/>Email + Google OAuth<br/>RLS enforcement"]
+
+        SupaDB["PostgreSQL<br/>────────<br/>28+ tables (Phase 1: 34)<br/>pgvector (embeddings)<br/>PostGIS (geospatial)<br/>RLS on all tables"]
+
+        SupaEdge["Edge Functions (Deno)<br/>────────<br/>9 existing + 7 new<br/>ai-chat, ai-router,<br/>rentals, lead-capture,<br/>payment-webhook, etc."]
+
+        SupaStorage["Storage<br/>────────<br/>property-images (public)<br/>contracts (private/RLS)<br/>applications (private/RLS)"]
+
+        SupaRealtime["Realtime<br/>────────<br/>WebSocket subscriptions<br/>Bookings, notifications,<br/>chat messages"]
+    end
+
+    subgraph AgentInfra["Agent Infrastructure (VPS / Local)"]
+        direction TB
+
+        PaperclipServer["Paperclip Server<br/>────────<br/>Node.js :3102<br/>Company: mde<br/>4 agents: CEO, CMO, CTO, Ops<br/>hermes_local adapter<br/>openclaw_gateway adapter<br/>────────<br/>pnpm dev / pnpm start"]
+
+        HermesRuntime["Hermes Agent<br/>────────<br/>Python 3.11.15<br/>CLI: hermes chat -q<br/>Config: ~/.hermes/<br/>637 skills installed<br/>────────<br/>Spawned per heartbeat<br/>via hermes_local adapter"]
+
+        OpenClawServer["OpenClaw Gateway<br/>────────<br/>Self-hosted (Phase 3)<br/>Channel adapters<br/>State machine<br/>────────<br/>Docker / VPS"]
+    end
+
+    subgraph ExternalServices["External Services"]
+        direction TB
+        StripeAPI["Stripe<br/>────────<br/>Payment intents<br/>Commission splits<br/>Webhook signatures<br/>Host payouts"]
+
+        GoogleAPIs["Google APIs<br/>────────<br/>Maps JavaScript API<br/>Directions API<br/>Places API<br/>Geocoding API"]
+
+        GeminiAPI["Google Gemini<br/>────────<br/>Flash (chat, search, route)<br/>Pro (trips, leases, rentals)<br/>Lite (intent routing)<br/>────────<br/>via GEMINI_API_KEY"]
+
+        OpenRouterAPI["OpenRouter<br/>────────<br/>Claude Sonnet 4.6<br/>For Hermes reasoning<br/>────────<br/>via OPENROUTER_API_KEY"]
+
+        InfobipAPI["Infobip<br/>────────<br/>WhatsApp Business API<br/>Webhooks + delivery<br/>────────<br/>Phase 2-3"]
+
+        ShopifyAPI["Shopify<br/>────────<br/>Storefront API (cart)<br/>Admin API (products)<br/>via Gadget bridge<br/>────────<br/>mdeaidev.myshopify.com"]
+    end
+
+    subgraph Monitoring["Monitoring & Observability"]
+        VercelAnalytics["Vercel Analytics<br/>Web Vitals + traffic"]
+        SupaLogs["Supabase Logs<br/>Edge fn execution"]
+        AIRuns["ai_runs table<br/>Token usage + latency"]
+        AgentAudit["agent_audit_log<br/>All agent actions"]
+    end
+
+    Renter --> VercelCDN
+    Landlord --> VercelCDN
+    Admin --> VercelCDN
+    VercelCDN --> WebApp
+
+    WebApp -->|"API calls + JWT"| SupaEdge
+    WebApp -->|"Auth"| SupaAuth
+    WebApp -->|"Live updates"| SupaRealtime
+    WebApp -->|"Maps UI"| GoogleAPIs
+
+    SupaEdge --> SupaDB
+    SupaEdge --> SupaStorage
+    SupaEdge --> GeminiAPI
+    SupaEdge --> GoogleAPIs
+    SupaEdge --> StripeAPI
+
+    StripeAPI -->|"Webhooks"| SupaEdge
+
+    PaperclipServer -->|"hermes_local"| HermesRuntime
+    PaperclipServer -->|"openclaw_gateway"| OpenClawServer
+    PaperclipServer -->|"Trigger workflows"| SupaEdge
+
+    HermesRuntime --> OpenRouterAPI
+    OpenClawServer --> InfobipAPI
+    OpenClawServer --> SupaEdge
+
+    WebApp --> ShopifyAPI
+
+    SupaEdge --> AIRuns
+    PaperclipServer --> AgentAudit
+    WebApp --> VercelAnalytics
+
+    style WebApp fill:#000,color:#fff
+    style SupaDB fill:#3ecf8e,color:#fff
+    style SupaEdge fill:#3ecf8e,color:#fff
+    style PaperclipServer fill:#ff6b6b,color:#fff
+    style HermesRuntime fill:#4ecdc4,color:#fff
+    style OpenClawServer fill:#45b7d1,color:#fff
