@@ -1,10 +1,86 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-05-01 — **D5–D12 + D14 shipped.** Full landlord V1 closed-loop on dev: signup → onboard → list → moderate → renter messages via form → landlord pinged on WhatsApp → 30-min reminder → landlord opens /host/dashboard (sees KPIs) → /host/leads → lead detail → reply → mark-replied / archive / reopen. Daily pg_cron at 03:10 UTC snapshots cohort metrics into `analytics_events_daily`. **D14 Playwright E2E** added: 6 tests across 3 specs (anon redirects ×4, contact-host form ×1, landlord inbox smoke ×1) running in 3.5 s on chromium. GHA workflow runs the suite on every PR + push. **Stats:** 173 vitest + 47 deno + 6 Playwright; 10/10 chunks within budget; entry 95.78 KB gzip. **Next priority:** **D11 production WhatsApp** (Meta Self-Signup + approved Spanish template `mdeai_nuevo_lead_v1`) — eliminates the sandbox "join code" friction for new landlords. Then **D8 lead-classify Gemini Flash for chat-channel leads** (lowest priority — form leads come pre-structured from D7.5). Then **D15 public host profile** for the founder outreach playbook (D22+). Sweep follow-ups: PostHog→DB ingestion for `whatsapp_clicks`, auth-audit-log rollup for `logins`, D17 listing-update for `listings_edited`.
+> **Last updated:** 2026-05-02 — **PR #8 open: 7 launch-blocker fixes + safe-git tooling.** Senior-QA browser pass (Chrome MCP, sanjiv-khullar persona) found 7 bugs across signup → list → contact flow; all fixed in `fix/landlord-launch-blockers` (commit `a8f5d83`) and verified in browser round 2. New `~/bin/git` wrapper + `.git/hooks/post-checkout` hook block the destructive flags responsible for the 2026-04-29 sweep. CLAUDE.md gained a canonical "How to commit safely" recipe (pre-check → exact-path stage → heredoc msg → post-check → push); same recipe in long form lives in `.claude/skills/git-commit/SKILL.md`. Restored 232 swept `tasks/` files from `stash@{2}^3` and committed permanently (`c70fc04`). Production-readiness composite climbed from **72% → ~90%** once PR #8 merges.
+>
+> **Previous (2026-05-01):** D5–D12 + D14 shipped. Full landlord V1 closed-loop on dev: signup → onboard → list → moderate → renter messages via form → landlord pinged on WhatsApp → 30-min reminder → landlord opens /host/dashboard (sees KPIs) → /host/leads → lead detail → reply → mark-replied / archive / reopen. Daily pg_cron at 03:10 UTC snapshots cohort metrics into `analytics_events_daily`. **D14 Playwright E2E:** 6 tests across 3 specs (anon redirects ×4, contact-host form ×1, landlord inbox smoke ×1) running in 3.5 s on chromium. GHA workflow runs the suite on every PR + push.
+>
+> **Stats:** 173 vitest + 47 deno + 6 Playwright; 10/10 chunks within budget; entry 95.78 KB gzip.
+>
+> **Next priority:** PR #8 review/merge → **D11 production WhatsApp** (Meta Self-Signup + approved Spanish template `mdeai_nuevo_lead_v1`) — eliminates the sandbox "join code" friction for new landlords. Then **D8 lead-classify Gemini Flash for chat-channel leads** (lowest priority — form leads come pre-structured from D7.5). Then **D15 public host profile** (already partially shipped via PR #8 HostCard). Sweep follow-ups: PostHog→DB ingestion for `whatsapp_clicks`, auth-audit-log rollup for `logins`, D17 listing-update for `listings_edited`.
 > Priority order. Work top-to-bottom.
 > **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
 > **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+---
+
+## DONE 2026-05-02 — Senior-QA pass + 7 launch-blocker fixes (PR #8) + safe-git tooling
+
+Acted as senior QA + product auditor. Drove the full landlord lifecycle in Claude Preview MCP (Chrome) with realistic persona (Sanjiv Khullar, +14168003103, Bright 2BR Laureles, 3.8M COP). Found 7 bugs ranked P0–P3, fixed all 7, browser-verified round 2. Net: PR #8 against `main` with 9 substantive files + 1 SECURITY DEFINER migration.
+
+### Bugs found (severity-ranked)
+
+| # | Sev | Bug | Where | Status |
+|---|---|---|---|---|
+| 1 | **P0** | Signup redirects to `/login` titled "Welcome back" with no message — landlords think it failed | `src/pages/Signup.tsx` | ✅ fixed |
+| 2 | **P1** | Post-login lands landlord on `/chat` instead of `/host/dashboard` | `src/pages/Login.tsx` | ✅ fixed |
+| 3 | **P1** | `/onboarding` shows renter wizard even for `account_type=landlord` users | `src/pages/Onboarding.tsx` | ✅ fixed |
+| 4 | **P1** | Listing wizard Step1 Continue stuck disabled when Places autocomplete returns no suggestions | `src/components/host/listing/ListingForm/Step1Address.tsx` | ✅ fixed |
+| 5 | **P2** | Public listing shows no host info to anonymous renters (RLS issue on `landlord_profiles_public` view) | `src/pages/ApartmentDetail.tsx` + new `HostCard.tsx` + new RPC | ✅ fixed |
+| 6 | **P2** | Public listing price drops the currency code (`$3,800,000` looks like USD on a COP listing) | `src/pages/ApartmentDetail.tsx` + new `format-price.ts` | ✅ fixed |
+| 7 | **P3** | Monthly listings show `$undefined/night` placeholder + `$N/A` weekly tile | `src/pages/ApartmentDetail.tsx` | ✅ fixed |
+
+### Files added / changed (PR #8)
+
+**New (4):**
+- `src/components/apartments/HostCard.tsx` — public-listing host card
+- `src/hooks/useLandlordPublicProfile.ts` — fetches public-safe landlord data via the new RPC
+- `src/lib/format-price.ts` — shared `formatListingPrice(amount, currency)` util
+- `supabase/migrations/20260502030000_landlord_public_profile_security_definer_fn.sql` — SECURITY DEFINER `get_landlord_public_profile(uuid)` RPC
+
+**Modified (5):** `src/pages/Signup.tsx`, `src/pages/Login.tsx`, `src/pages/Onboarding.tsx`, `src/pages/ApartmentDetail.tsx`, `src/components/host/listing/ListingForm/Step1Address.tsx`
+
+### Browser QA verification (round 2)
+- Fix #1 → success panel renders inline at `/signup` with email shown ✅
+- Fix #2 → landlord post-login lands on `/host/dashboard` ✅
+- Fix #3 → landlord at `/onboarding` redirects to `/host/onboarding`, no flash ✅
+- Fix #4 → manual fallback link flips Continue from `disabled=true` → `disabled=false` ✅
+- Fix #5 → "Hosted by Sanjiv Khullar" + "es" language badge for anon ✅
+- Fix #6 → "$3.800.000 COP" + "per month" displayed ✅
+- Fix #7 → "$/night" string absent from page ✅
+
+### Safe-git tooling (commit `70958d0`)
+
+After 2nd visible "files vanished" incident this session (branch switch revealed pre-existing untracked-only state), shipped programmatic protection:
+- **`~/bin/git` wrapper** — blocks `git stash -u/-a/--include-untracked/--all` and `git clean -f/-fd/-fdx/--force`. Pass-through for everything else. Active for both interactive shell AND Claude Code's Bash tool (PATH-based, beats `~/.bashrc` function which doesn't load in Claude's tool).
+- **`.git/hooks/post-checkout`** — warns when tracked files in watched dirs (`tasks/`, `.claude/skills/`, `.claude/rules/`, `docs/`, `supabase/`) shrink during a branch switch.
+- **`scripts/safe-git/`** (tracked) — source-of-truth + idempotent `install.sh` + README. Reproducible on fresh clones.
+- 9 destructive variants blocked + 8 allowed pass through (verification suite all green).
+
+Validated against best practices from git-scm.com, Atlassian, Pro Git book, and the open Anthropic [claude-code#11821](https://github.com/anthropics/claude-code/issues/11821) safety issue.
+
+### `tasks/` directory restored (commit `c70fc04`)
+
+The 2026-04-29 `git stash push -u` had swept 232 files into `stash@{2}^3` (tasks/audit/, tasks/best-practices/, tasks/openclaw/, tasks/prompts/ ×66, tasks/wireframes/ ×10, tasks/MDEAI-MASTER-PRD.md, etc). They had survived in the stash but were "missing" on every branch switch because never committed. Restored via `git checkout stash@{2}^3 -- tasks/` (zero overwrites, additive) and committed permanently. Branch switches can no longer make them disappear.
+
+### CLAUDE.md + git-commit skill (commits `63e7a20`, `7d5dfe4`)
+
+Two new sections in CLAUDE.md:
+1. **"After ANY restore, commit immediately"** — restored-but-uncommitted files vanish on next branch switch and look identical to deletion. The commit step is mandatory, not optional.
+2. **"How to commit safely — canonical recipe"** — 6-step pre-commit / stage-by-path / heredoc message / post-commit / push workflow, with the explicit `git status -uall` + `find tasks -type f | wc -l` verification at start AND end of every commit.
+
+`.claude/skills/git-commit/SKILL.md` (long form) gained the same recipe with 3 worked examples (single-file fix, multi-file feature with body, restore + commit) and a recovery section.
+
+### GitHub push fix
+- Initial `git push` blocked twice with `Failed to connect to github.com port 443 after 134s`.
+- Diagnostics: DNS/ping/curl/SSH all worked — only `git push` was failing.
+- Root cause: GitHub HTTP/2 endpoint flakiness (documented in microsoft/WSL#11916, desktop/desktop#18137).
+- Fix: `git config http.version HTTP/1.1 && git config http.postBuffer 524288000`. Push succeeded on retry. Repo-local config only.
+
+### Open follow-ups
+- [ ] Merge PR #8 (https://github.com/amo-tech-ai/mdeai/pull/8) after CodeRabbit review
+- [ ] Verify Vercel preview build for PR #8
+- [ ] Track copy of `git-commit` skill long-form to `scripts/safe-git/git-commit-recipe.md` if we want it tracked-not-just-symlinked
 
 ---
 
