@@ -1,21 +1,25 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth, type AccountType } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Lock, ArrowLeft } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { AccountTypeStep } from "@/components/auth/AccountTypeStep";
 import { trackEvent } from "@/lib/posthog";
 
 export default function Signup() {
-  // Two-step signup flow:
+  // Three-step signup flow:
   //   1. AccountTypeStep — pick "renter" or "landlord". Persists to
   //      auth.users metadata so the post-confirmation redirect knows where
   //      to land the user (renter -> /, landlord -> /host/onboarding).
   //   2. Email/password or Google OAuth.
+  //   3. SignupSuccess — inline "check your inbox" panel. Replaces the
+  //      old toast+navigate-to-/login pattern that landed the user on a
+  //      "Welcome back" screen with no explanation. (Bug found 2026-05-02
+  //      QA: ~50% of new landlords would think signup failed.)
   // The chosen type is also surfaced in the form header so the user knows
   // what they're signing up for.
   const [accountType, setAccountType] = useState<AccountType | null>(null);
@@ -24,9 +28,11 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // Set to true after a successful signUp() call. Triggers the inline
+  // success surface instead of navigating away to /login.
+  const [signupComplete, setSignupComplete] = useState(false);
 
   const { signUp, signInWithGoogle } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
 
@@ -87,19 +93,12 @@ export default function Signup() {
       if (accountType === "landlord") {
         trackEvent({ name: "landlord_signup_completed", method: "email" });
       }
-      toast({
-        title: "Check your email",
-        description: "We sent you a confirmation link. Please check your inbox.",
-      });
-      // Carry returnTo over to /login so the user resumes their flow after
-      // confirming. Same-origin paths only (validated above). Landlords
-      // bypass returnTo because emailRedirectTo already lands them on
-      // /host/onboarding after confirmation.
-      const target =
-        returnTo && returnTo !== "/"
-          ? `/login?returnTo=${encodeURIComponent(returnTo)}`
-          : "/login";
-      navigate(target);
+      // Show inline "check your inbox" surface instead of navigating to
+      // /login. The old behavior dropped users on a "Welcome back" page
+      // with no explanation — most thought signup failed (P0 bug found
+      // in QA 2026-05-02).
+      setSignupComplete(true);
+      setLoading(false);
     }
   };
 
@@ -132,6 +131,99 @@ export default function Signup() {
   }
 
   const isLandlord = accountType === "landlord";
+
+  // Step 3 — success surface. Renders in place after signUp() succeeds.
+  // Tells the user EXACTLY what happened, what to do next, and gives them
+  // a path to /login that doesn't look like an error. Replaces the old
+  // toast+navigate pattern that confused everyone (P0 fix 2026-05-02).
+  if (signupComplete) {
+    const loginTarget =
+      returnTo && returnTo !== "/"
+        ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+        : "/login";
+    return (
+      <div className="min-h-screen bg-background flex">
+        <div className="hidden lg:flex flex-1 bg-primary items-center justify-center p-16">
+          <div className="max-w-md text-center flex flex-col items-center">
+            <BrandLogo variant="panel" />
+            <h2 className="font-display text-3xl font-bold text-primary-foreground mt-8">
+              {isLandlord ? "Welcome to mdeai." : "You're almost in."}
+            </h2>
+            <p className="mt-4 text-primary-foreground/80">
+              {isLandlord
+                ? "One click in your email and you're ready to list your first property."
+                : "Confirm your email and start exploring Medellín."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col justify-center px-8 md:px-16 lg:px-24">
+          <div
+            className="max-w-md w-full mx-auto text-center"
+            data-testid="signup-success-panel"
+          >
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <CheckCircle2
+                className="h-10 w-10 text-primary"
+                aria-hidden="true"
+              />
+            </div>
+            <h1 className="font-display text-3xl font-bold text-foreground">
+              Check your inbox
+            </h1>
+            <p className="mt-3 text-muted-foreground">
+              We sent a confirmation link to
+            </p>
+            <p
+              className="mt-1 font-medium text-foreground break-all"
+              data-testid="signup-success-email"
+            >
+              {email}
+            </p>
+            <div className="mt-6 rounded-lg border bg-muted/40 p-4 text-left text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-2">
+                What happens next:
+              </p>
+              <ol className="space-y-1 list-decimal pl-4">
+                <li>Open the email from mdeai</li>
+                <li>Click the confirmation link</li>
+                <li>
+                  {isLandlord
+                    ? "You'll land on host onboarding to list your first property"
+                    : "You'll land back here to start exploring"}
+                </li>
+              </ol>
+            </div>
+            <p className="mt-6 text-xs text-muted-foreground">
+              Didn't get it? Check your spam folder, or{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupComplete(false);
+                  setLoading(false);
+                }}
+                className="text-primary hover:underline"
+                data-testid="signup-success-edit-email"
+              >
+                use a different email
+              </button>
+              .
+            </p>
+            <div className="mt-8 flex flex-col gap-2">
+              <Button asChild variant="outline" className="w-full h-12">
+                <Link to={loginTarget} data-testid="signup-success-signin">
+                  I've confirmed — sign in
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" className="w-full">
+                <Link to="/">Back to home</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const headlineCopy = isLandlord
     ? "List your first property"
     : "Create your account";

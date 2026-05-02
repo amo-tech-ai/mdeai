@@ -13,8 +13,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { BookingDialog } from "@/components/apartments/BookingDialog";
 import { ContactHostDialog } from "@/components/apartments/ContactHostDialog";
 import { WhatsAppContactModal } from "@/components/apartments/WhatsAppContactModal";
+import { HostCard } from "@/components/apartments/HostCard";
 import type { Apartment } from "@/types/listings";
 import { cn } from "@/lib/utils";
+import { formatListingPrice } from "@/lib/format-price";
 import { savePendingPrompt } from "@/lib/pending-prompt";
 import { trackEvent } from "@/lib/posthog";
 
@@ -38,22 +40,41 @@ function ApartmentDetailRightPanel({
           <CardTitle className="text-lg">Book This Place</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-center">
+          <div className="text-center" data-testid="apt-price-block">
             <div className="text-3xl font-bold text-primary">
-              ${apartment.price_monthly?.toLocaleString() || "N/A"}
+              {formatListingPrice(apartment.price_monthly, apartment.currency)}
             </div>
             <p className="text-sm text-muted-foreground">per month</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="text-center p-2 rounded-lg bg-muted">
-              <div className="font-medium">${apartment.price_weekly || "N/A"}</div>
-              <div className="text-xs text-muted-foreground">weekly</div>
+          {/* Only render weekly/daily tiles when the landlord actually
+              priced those terms — most monthly listings don't, and the
+              old "$N/A" placeholder confused renters. */}
+          {(apartment.price_weekly || apartment.price_daily) && (
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {apartment.price_weekly && (
+                <div className="text-center p-2 rounded-lg bg-muted">
+                  <div className="font-medium">
+                    {formatListingPrice(
+                      apartment.price_weekly,
+                      apartment.currency,
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">weekly</div>
+                </div>
+              )}
+              {apartment.price_daily && (
+                <div className="text-center p-2 rounded-lg bg-muted">
+                  <div className="font-medium">
+                    {formatListingPrice(
+                      apartment.price_daily,
+                      apartment.currency,
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">daily</div>
+                </div>
+              )}
             </div>
-            <div className="text-center p-2 rounded-lg bg-muted">
-              <div className="font-medium">${apartment.price_daily || "N/A"}</div>
-              <div className="text-xs text-muted-foreground">daily</div>
-            </div>
-          </div>
+          )}
           <Button className="w-full" size="lg" onClick={onCheckAvailability}>
             <Calendar className="w-4 h-4 mr-2" />
             Check Availability
@@ -100,11 +121,15 @@ function ApartmentDetailRightPanel({
         </CardContent>
       </Card>
 
-      {/* Host Info */}
-      {apartment.host_name && (
+      {/* Host Info — pulls from landlord_profiles_public when the listing
+          has a landlord_id. Falls back to the legacy host_name display
+          for legacy / scraped listings that pre-date Landlord V1. */}
+      {apartment.landlord_id ? (
+        <HostCard landlordId={apartment.landlord_id} />
+      ) : apartment.host_name ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Host</CardTitle>
+            <CardTitle className="text-lg">Hosted by</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
@@ -120,7 +145,7 @@ function ApartmentDetailRightPanel({
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -357,12 +382,24 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
         </div>
       </div>
 
-      {/* Mobile CTA */}
+      {/* Mobile CTA — only show /night line when there's actually a daily
+          price; monthly-only listings looked broken with "$undefined/night". */}
       <div className="md:hidden fixed bottom-20 left-0 right-0 p-4 bg-background border-t z-30">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="font-bold text-lg">${apartment.price_monthly?.toLocaleString()}/mo</div>
-            <p className="text-xs text-muted-foreground">${apartment.price_daily}/night</p>
+            <div className="font-bold text-lg">
+              {formatListingPrice(apartment.price_monthly, apartment.currency)}
+              <span className="text-sm font-normal text-muted-foreground">
+                {" "}
+                /mo
+              </span>
+            </div>
+            {apartment.price_daily ? (
+              <p className="text-xs text-muted-foreground">
+                {formatListingPrice(apartment.price_daily, apartment.currency)}{" "}
+                /night
+              </p>
+            ) : null}
           </div>
           <Button size="lg" onClick={() => setBookingOpen(true)}>
             Check Availability

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,14 +23,17 @@ export default function Login() {
   // `returnTo` precedence:
   //   1. ?returnTo=… query string (set by HeroChatPrompt after savePendingPrompt)
   //   2. ProtectedRoute's location.state.from.pathname (existing path)
-  //   3. "/" (default)
+  //   3. account-type default: landlord -> /host/dashboard, renter -> "/"
   // Same-origin paths only — never honor an absolute external URL (open-redirect).
+  // The account-type default replaces the old "everyone goes to /" rule that
+  // dropped freshly-signed-in landlords on the chat home with no signal that
+  // their host dashboard existed (P1 bug found in QA 2026-05-02).
   const params = new URLSearchParams(location.search);
   const rawReturn = params.get("returnTo");
-  const returnTo =
+  const explicitReturn =
     rawReturn && rawReturn.startsWith("/") && !rawReturn.startsWith("//")
       ? rawReturn
-      : (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
+      : (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,16 +53,32 @@ export default function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
-      navigate(returnTo, { replace: true });
+      // Resolve destination AFTER signIn succeeds so we can read the
+      // freshly-set account_type metadata. Explicit ?returnTo always wins
+      // (deep-link / pending-prompt flows must land where they were going).
+      // Otherwise route by account type so landlords land on their host
+      // dashboard, not the renter chat home.
+      let destination = explicitReturn ?? "/";
+      if (!explicitReturn) {
+        const { data } = await supabase.auth.getUser();
+        const accountType = data.user?.user_metadata?.account_type;
+        if (accountType === "landlord") {
+          destination = "/host/dashboard";
+        }
+      }
+      navigate(destination, { replace: true });
     }
   };
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     // Google OAuth round-trips through Google then hits Supabase, then
-    // returns the user to `redirectTo`. Pass our same-origin returnTo so
-    // they land directly on /chat?send=pending after auth.
-    const { error } = await signInWithGoogle(returnTo);
+    // returns the user to `redirectTo`. Pass our explicit returnTo so they
+    // land directly on /chat?send=pending after auth. For Google login we
+    // can't read account_type pre-redirect (no session yet), so we fall
+    // back to "/" — the auth listener post-OAuth handles landlord routing
+    // server-side via emailRedirectTo on signup.
+    const { error } = await signInWithGoogle(explicitReturn ?? "/");
     if (error) {
       toast({
         title: "Google login failed",

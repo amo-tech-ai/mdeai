@@ -42,12 +42,14 @@ export function Step1Address({ value, onChange, onSubmit }: Step1AddressProps) {
   const [loading, setLoading] = useState(true);
   const [authFailed, setAuthFailed] = useState(isMapsAuthFailed());
   const [error, setError] = useState<string | null>(null);
-
-  // Subscribe to maps auth-failure events so we can flip to fallback.
-  useEffect(() => {
-    const unsub = onMapsAuthFailed(() => setAuthFailed(true));
-    return unsub;
-  }, []);
+  // User-initiated fallback. Maps may be authed but Places suggestions can
+  // fail silently (region mismatch, rate limit, address not in their
+  // database, etc). The "Can't find your address?" link flips this and
+  // unblocks the wizard. Server-side geocoding handles the missing
+  // lat/lng — same path used by the auth-failure fallback. (P1 bug found
+  // in QA 2026-05-02: Continue button stayed disabled forever in headless
+  // preview because no Places suggestion ever fired.)
+  const [manualFallback, setManualFallback] = useState(false);
 
   // Load + attach Places Autocomplete once.
   useEffect(() => {
@@ -100,7 +102,7 @@ export function Step1Address({ value, onChange, onSubmit }: Step1AddressProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fallback = authFailed || error !== null;
+  const fallback = authFailed || error !== null || manualFallback;
 
   // Continue is gated on text fields always. lat/lng are required only
   // when Places autocomplete is working — if Maps auth-failed (bad key,
@@ -195,11 +197,21 @@ export function Step1Address({ value, onChange, onSubmit }: Step1AddressProps) {
         <p className="text-xs text-muted-foreground">
           📍 {value.latitude.toFixed(5)}, {value.longitude.toFixed(5)}
         </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Pick a suggestion above to lock in the location on the map.
-        </p>
-      )}
+      ) : !fallback ? (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            Pick a suggestion above to lock in the location on the map.
+          </p>
+          <button
+            type="button"
+            onClick={() => setManualFallback(true)}
+            className="text-xs text-primary hover:underline"
+            data-testid="step1-manual-fallback"
+          >
+            Can't find your address? Type it manually →
+          </button>
+        </div>
+      ) : null}
 
       <Button
         type="button"
