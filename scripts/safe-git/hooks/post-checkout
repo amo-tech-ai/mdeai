@@ -1,0 +1,51 @@
+#!/bin/sh
+# .git/hooks/post-checkout — narrow warning for branch switches.
+#
+# Fires after `git checkout <branch>` (third arg = "1" for branch
+# switch, "0" for file checkout). Only warns when *tracked* files in
+# watched directories actually shrink between the previous and new
+# HEAD. This avoids alert fatigue from the 337+ untracked files that
+# normally exist in this repo (.agents/skills/, dev artifacts, etc).
+#
+# Created: 2026-05-02 (alongside ~/bin/git wrapper).
+# To uninstall: rm .git/hooks/post-checkout
+# Tracked copy lives at scripts/git-hooks/post-checkout (re-install
+# after `git init` or fresh clone with: cp scripts/git-hooks/* .git/hooks/).
+
+PREV_HEAD="$1"
+NEW_HEAD="$2"
+IS_BRANCH_SWITCH="$3"
+
+# Only run on branch switches, not file checkouts.
+[ "$IS_BRANCH_SWITCH" = "1" ] || exit 0
+# Skip if HEAD didn't actually move.
+[ "$PREV_HEAD" = "$NEW_HEAD" ] && exit 0
+
+WATCHED_DIRS="tasks .claude/skills .claude/rules docs supabase/functions supabase/migrations"
+WARNED=0
+
+for dir in $WATCHED_DIRS; do
+  was=$(git ls-tree -r "$PREV_HEAD" -- "$dir" 2>/dev/null | wc -l)
+  now=$(git ls-tree -r "$NEW_HEAD"  -- "$dir" 2>/dev/null | wc -l)
+  if [ "$was" -gt "$now" ] && [ "$was" -gt 0 ]; then
+    if [ "$WARNED" -eq 0 ]; then
+      echo ""
+      echo "⚠️  WATCHED DIRS LOST FILES IN THIS BRANCH SWITCH"
+      echo "   (other branch may have content this one lacks — files NOT deleted)"
+      echo ""
+      WARNED=1
+    fi
+    diff=$((was - now))
+    echo "   $dir: $was → $now (-$diff files)"
+  fi
+done
+
+if [ "$WARNED" -eq 1 ]; then
+  echo ""
+  echo "   To find the missing files:"
+  echo "     git log --all --diff-filter=D --name-only -- <path>"
+  echo "     git show <branch>:<path>"
+  echo ""
+fi
+
+exit 0
