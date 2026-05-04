@@ -51,3 +51,35 @@ verify_jwt = false
 [functions.lead-reminder-tick]
 enabled = true
 verify_jwt = false
+
+[functions.event-staff-link-generator]
+enabled = true
+verify_jwt = true
+
+[functions.ticket-checkout]
+enabled = true
+verify_jwt = false
+
+[functions.ticket-payment-webhook]
+enabled = true
+verify_jwt = false
+
+[functions.ticket-validate]
+enabled = true
+verify_jwt = false
+
+[functions.notify-entity-approved]
+enabled = true
+verify_jwt = true
+
+[functions.moderate-asset]
+enabled = true
+verify_jwt = true
+
+[functions.fraud-scan]
+enabled = true
+verify_jwt = false
+
+[functions.contestant-social-enrich]
+enabled = true
+verify_jwt = true

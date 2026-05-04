@@ -175,10 +175,17 @@ export function useApproveEntity() {
 
   return useMutation({
     mutationFn: async (entityId: string): Promise<void> => {
+      const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase
         .schema("vote" as never)
         .from("entities")
-        .update({ approved: true, rejection_reason: null })
+        .update({
+          approved: true,
+          rejection_reason: null,
+          identity_verified_at: new Date().toISOString(),
+          reviewed_by: user?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+        })
         .eq("id", entityId);
       if (error) throw error;
     },
@@ -199,10 +206,16 @@ export function useRejectEntity() {
       entityId: string;
       reason: string;
     }): Promise<void> => {
+      const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase
         .schema("vote" as never)
         .from("entities")
-        .update({ approved: false, rejection_reason: reason })
+        .update({
+          approved: false,
+          rejection_reason: reason,
+          reviewed_by: user?.id ?? null,
+          reviewed_at: new Date().toISOString(),
+        })
         .eq("id", entityId);
       if (error) throw error;
     },

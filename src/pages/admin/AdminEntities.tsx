@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ExternalLink, ChevronDown, ChevronUp, Check, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import {
   useAdminEntities,
@@ -247,10 +248,22 @@ function EntityRow({ entity }: EntityRowProps) {
   const approveMutation = useApproveEntity();
   const rejectMutation = useRejectEntity();
 
+  const sendNotification = async (action: "approved" | "rejected", rejection_reason?: string) => {
+    try {
+      await supabase.functions.invoke("notify-entity-approved", {
+        body: { entity_id: entity.id, action, ...(rejection_reason ? { rejection_reason } : {}) },
+      });
+    } catch {
+      // Non-fatal — admin action already succeeded; log silently
+      console.warn("[AdminEntities] notify-entity-approved failed — continuing");
+    }
+  };
+
   const handleApprove = async () => {
     try {
       await approveMutation.mutateAsync(entity.id);
       toast.success(`${entity.display_name} approved.`);
+      void sendNotification("approved");
     } catch {
       toast.error("Failed to approve entity.");
     }
@@ -261,11 +274,13 @@ function EntityRow({ entity }: EntityRowProps) {
       toast.error("Please provide a rejection reason.");
       return;
     }
+    const reason = rejectReason.trim();
     try {
-      await rejectMutation.mutateAsync({ entityId: entity.id, reason: rejectReason.trim() });
+      await rejectMutation.mutateAsync({ entityId: entity.id, reason });
       toast.success(`${entity.display_name} rejected.`);
       setRejectOpen(false);
       setRejectReason("");
+      void sendNotification("rejected", reason);
     } catch {
       toast.error("Failed to reject entity.");
     }
