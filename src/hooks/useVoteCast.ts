@@ -5,6 +5,7 @@ import type { EntityTally } from "./useContest";
 interface VoteCastInput {
   contest_id: string;
   entity_id: string;
+  turnstile_token?: string;
   fingerprint?: string;
   voter_anon_id?: string;
 }

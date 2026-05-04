@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useContest, useContestEntities, useContestTally } from "@/hooks/useContest";
 import { useVoteCast } from "@/hooks/useVoteCast";
+import { useRealtimeTally } from "@/hooks/useRealtimeTally";
 import { useAuth } from "@/hooks/useAuth";
 import { ContestHero } from "@/components/contest/ContestHero";
 import { LeaderboardTopThree } from "@/components/contest/LeaderboardTopThree";
 import { EntityCard } from "@/components/contest/EntityCard";
 import { ShareModal } from "@/components/contest/ShareModal";
+import { TurnstileWidget } from "@/components/contest/TurnstileWidget";
 import { PhoneOtpModal } from "@/components/auth/PhoneOtpModal";
 import type { ContestEntity } from "@/hooks/useContest";
 
@@ -20,6 +22,7 @@ export default function Vote() {
   const { data: contest, isLoading: contestLoading, error: contestError } = useContest(slug);
   const { data: entities = [], isLoading: entitiesLoading } = useContestEntities(contest?.id);
   const { data: tallies = [], isLoading: talliesLoading } = useContestTally(contest?.id);
+  const realtimeStatus = useRealtimeTally(contest?.id);
 
   const voteCast = useVoteCast();
 
@@ -29,6 +32,7 @@ export default function Vote() {
   const [shareEntity, setShareEntity] = useState<ContestEntity | null>(null);
   const [votedEntityIds, setVotedEntityIds] = useState<Set<string>>(new Set());
   const [disabledUntil, setDisabledUntil] = useState<number | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
 
   const tallyMap = new Map(tallies.map((t) => [t.entity_id, t]));
   const contestClosed = contest?.status === "closed";
@@ -46,7 +50,9 @@ export default function Vote() {
       await voteCast.mutateAsync({
         contest_id: contest.id,
         entity_id: entity.id,
+        turnstile_token: turnstileToken,
       });
+      setTurnstileToken(undefined); // consumed — widget will issue a new one
       setVotedEntityIds((prev) => new Set([...prev, entity.id]));
       setShareEntity(entity);
       setShareOpen(true);
@@ -65,7 +71,7 @@ export default function Vote() {
         toast.error(e instanceof Error ? e.message : "No se pudo registrar el voto");
       }
     }
-  }, [contest, voteCast, votedEntityIds]);
+  }, [contest, voteCast, votedEntityIds, turnstileToken]);
 
   const handleVoteTap = useCallback((entity: ContestEntity) => {
     if (isRateLimited) return;
@@ -127,6 +133,14 @@ export default function Vote() {
       {/* Hero */}
       <ContestHero contest={contest} />
 
+      {/* Realtime reconnect indicator */}
+      {realtimeStatus === "disconnected" && (
+        <div className="mx-4 mt-3 rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-2 text-xs text-yellow-800 flex items-center gap-2">
+          <span className="animate-pulse w-2 h-2 rounded-full bg-yellow-500" />
+          Reconectando al marcador en vivo…
+        </div>
+      )}
+
       {/* Top 3 leaderboard */}
       {!talliesLoading && tallies.length > 0 && (
         <div className="border-b border-border">
@@ -178,6 +192,12 @@ export default function Vote() {
           </Link>
         </p>
       </div>
+
+      {/* Invisible Turnstile widget — issues token before vote tap */}
+      <TurnstileWidget
+        onToken={setTurnstileToken}
+        onExpire={() => setTurnstileToken(undefined)}
+      />
 
       {/* Phone OTP modal */}
       <PhoneOtpModal
