@@ -14,6 +14,17 @@ import { initPostHog } from "@/lib/posthog";
 initPostHog();
 initSentry();
 
+// Register PWA service worker for the staff check-in scanner.
+// Skip in dev — Vite HMR needs uncached module fetches; the SW's
+// cache-first strategy would serve stale chunks and break hot reload.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // SW registration failure is non-fatal; app works without it.
+    });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <SentryErrorBoundary
     fallback={({ error, resetError }) => (

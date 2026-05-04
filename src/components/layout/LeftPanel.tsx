@@ -1,5 +1,25 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Compass, Heart, Sparkles, User, LogOut, ChevronLeft, ChevronRight, Building2, Car, UtensilsCrossed, CalendarDays, Plane, CalendarCheck, LayoutDashboard, Search } from "lucide-react";
+import {
+  Home,
+  Compass,
+  Heart,
+  Sparkles,
+  User,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  Building2,
+  Car,
+  UtensilsCrossed,
+  CalendarDays,
+  Plane,
+  CalendarCheck,
+  LayoutDashboard,
+  Search,
+  Inbox,
+  PlusCircle,
+  Ticket,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -30,9 +50,19 @@ const listingsNavItems: NavItem[] = [
   { icon: CalendarDays, label: "Events", path: "/events" },
 ];
 
+// Host-side entry points. All require auth. The routes themselves are
+// further role-gated by <RoleProtectedRoute> — non-landlords/non-organizers
+// who click these get bounced to /host/onboarding.
+const hostingNavItems: NavItem[] = [
+  { icon: LayoutDashboard, label: "Host dashboard", path: "/host/dashboard", protected: true },
+  { icon: PlusCircle, label: "Create event", path: "/host/event/new", protected: true },
+  { icon: Inbox, label: "Lead inbox", path: "/host/leads", protected: true },
+];
+
 const userNavItems: NavItem[] = [
   { icon: Plane, label: "My Trips", path: "/trips", protected: true },
   { icon: CalendarCheck, label: "Bookings", path: "/bookings", protected: true },
+  { icon: Ticket, label: "My Tickets", path: "/me/tickets", protected: true },
   { icon: Heart, label: "Saved", path: "/saved", protected: true },
   { icon: Sparkles, label: "Concierge", path: "/concierge" },
 ];
@@ -125,11 +155,13 @@ export function LeftPanel({ collapsed = false, onToggle }: LeftPanelProps) {
 
       {/* Navigation */}
       <nav className={cn("flex-1 p-4 space-y-1 overflow-y-auto", collapsed && "p-2")}>
-        {/* Main Navigation */}
-        {mainNavItems.map((item) => (
-          <NavItemComponent key={item.path} item={item} />
-        ))}
-        
+        {/* Main Navigation — `Dashboard` is auth-gated, hide it when signed out */}
+        {mainNavItems
+          .filter((item) => !item.protected || !!user)
+          .map((item) => (
+            <NavItemComponent key={item.path} item={item} />
+          ))}
+
         {!collapsed && (
           <div className="pt-4 pb-2">
             <p className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -138,11 +170,30 @@ export function LeftPanel({ collapsed = false, onToggle }: LeftPanelProps) {
           </div>
         )}
         {collapsed && <Separator className="my-2" />}
-        
+
         {listingsNavItems.map((item) => (
           <NavItemComponent key={item.path} item={item} />
         ))}
-        
+
+        {/* Hosting — only render the section when the user is signed in.
+            Each route is further role-gated by <RoleProtectedRoute>. */}
+        {user ? (
+          <>
+            {!collapsed && (
+              <div className="pt-4 pb-2">
+                <p className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Hosting
+                </p>
+              </div>
+            )}
+            {collapsed && <Separator className="my-2" />}
+
+            {hostingNavItems.map((item) => (
+              <NavItemComponent key={item.path} item={item} />
+            ))}
+          </>
+        ) : null}
+
         {!collapsed && (
           <div className="pt-4 pb-2">
             <p className="px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -151,10 +202,12 @@ export function LeftPanel({ collapsed = false, onToggle }: LeftPanelProps) {
           </div>
         )}
         {collapsed && <Separator className="my-2" />}
-        
-        {userNavItems.map((item) => (
-          <NavItemComponent key={item.path} item={item} />
-        ))}
+
+        {userNavItems
+          .filter((item) => !item.protected || !!user)
+          .map((item) => (
+            <NavItemComponent key={item.path} item={item} />
+          ))}
       </nav>
 
       {/* User Profile */}
