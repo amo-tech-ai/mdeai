@@ -56,7 +56,34 @@ export interface OpenRentalsResultsAction {
   };
 }
 
-export type ChatAction = OpenRentalsResultsAction;
+// ─── Event draft action ──────────────────────────────────────────────────
+
+export interface EventDraftTier {
+  id: string;
+  name: string;
+  price_cents: number;
+  currency: string;
+  qty_total: number;
+}
+
+export interface EventDraftPayload {
+  event_id: string;
+  name: string;
+  start_at: string | null;
+  end_at: string | null;
+  address: string | null;
+  description: string | null;
+  currency: string;
+  tiers: EventDraftTier[];
+  deep_link: string;
+}
+
+export interface ShowEventDraftAction {
+  type: 'SHOW_EVENT_DRAFT';
+  payload: EventDraftPayload;
+}
+
+export type ChatAction = OpenRentalsResultsAction | ShowEventDraftAction;
 
 export interface ChatMessage {
   id: string;

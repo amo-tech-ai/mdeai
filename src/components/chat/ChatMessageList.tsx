@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ChatActionBar } from './ChatActionBar';
 import { EmbeddedListings } from './embedded/EmbeddedListings';
+import { EmbeddedEventDraft } from './embedded/EmbeddedEventDraft';
 import { ChatReasoningTrace, type ReasoningPhase } from './ChatReasoningTrace';
 import { NotAFitTable } from './NotAFitTable';
 
@@ -107,6 +108,7 @@ export function ChatMessageList({
                 pendingActions && pendingActions.length > 0 && (
                   <>
                     <EmbeddedListings actions={pendingActions} />
+                    <EmbeddedEventDraft actions={pendingActions} />
                     {/* Rejection-transparency: render a "Not a Good Fit"
                         table whenever any action carried rejected rows. */}
                     {pendingActions

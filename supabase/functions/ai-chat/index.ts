@@ -24,6 +24,9 @@ const AGENT_LABELS: Record<string, string> = {
   get_user_trips: "Trip Planner",
   get_user_bookings: "Booking Assistant",
   create_booking_preview: "Booking Assistant",
+  create_event_draft: "Event Creator",
+  add_ticket_tier: "Event Creator",
+  finalize_event_draft: "Event Creator",
 };
 
 /**
@@ -247,6 +250,68 @@ const TOOLS: Record<string, ToolExecutor> = {
     // Sync function — still return the expected Promise-compatible shape.
     execute: (ctx) => Promise.resolve(executeCreateBookingPreview(ctx.params, ctx.userId)),
   },
+
+  // ── Event creation tools (Task 009) ──────────────────────────────────────
+  // Three-step flow: create_event_draft → add_ticket_tier (×N) →
+  // finalize_event_draft. The draft sits at status='draft' in the events
+  // table until the organizer opens the wizard and publishes.
+  create_event_draft: {
+    definition: {
+      name: "create_event_draft",
+      description: "Create a draft event from the organizer's description. Call this FIRST when a user wants to host an event. Returns an event_id for use with add_ticket_tier.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Event name (e.g. 'Reina de Antioquia 2026 Finals')" },
+          description: { type: "string", description: "Short event description (1–3 sentences)" },
+          start_at: { type: "string", description: "Start datetime in ISO 8601 (e.g. '2026-10-18T20:00:00-05:00'). Ask the user if missing — do NOT guess." },
+          end_at: { type: "string", description: "End datetime in ISO 8601 (optional)" },
+          address: { type: "string", description: "Full venue address including city (e.g. 'Hotel Intercontinental, Medellín')" },
+          event_type: {
+            type: "string",
+            enum: ["culture", "music", "sports", "food", "nightlife", "art", "business", "other"],
+            description: "Event category",
+          },
+        },
+        required: ["name", "start_at"],
+      },
+    },
+    execute: (ctx) => executeCreateEventDraft(ctx.params, ctx.supabase, ctx.userId),
+  },
+
+  add_ticket_tier: {
+    definition: {
+      name: "add_ticket_tier",
+      description: "Add a ticket tier to a draft event. Call ONCE PER TIER after create_event_draft. Maximum 5 tiers per event.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_id: { type: "string", description: "UUID returned by create_event_draft" },
+          name: { type: "string", description: "Tier name (e.g. 'GA', 'VIP', 'Backstage', 'Frontrow')" },
+          price_cents: { type: "integer", description: "Price in cents of COP (e.g. 4000000 = $40,000 COP). Use 0 for free/RSVP tickets." },
+          qty_total: { type: "integer", description: "Total tickets available for this tier (max 100,000)" },
+          sort_order: { type: "integer", description: "Display order starting at 1 (cheapest first by convention)" },
+        },
+        required: ["event_id", "name", "price_cents", "qty_total"],
+      },
+    },
+    execute: (ctx) => executeAddTicketTier(ctx.params, ctx.supabase, ctx.userId),
+  },
+
+  finalize_event_draft: {
+    definition: {
+      name: "finalize_event_draft",
+      description: "Finalize a draft event after all ticket tiers have been added. Returns a preview card with a deep-link for the organizer to open in the wizard.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_id: { type: "string", description: "UUID of the draft event to finalize" },
+        },
+        required: ["event_id"],
+      },
+    },
+    execute: (ctx) => executeFinalizeEventDraft(ctx.params, ctx.supabase, ctx.userId),
+  },
 };
 
 // Gemini request format derived from the registry — single source of truth.
@@ -270,13 +335,24 @@ When adding items to trips, use this trip ID: ${tripContext.id}`
     : '';
 
   const basePrompts: Record<string, string> = {
-    concierge: `You are the mdeai.co AI Concierge — a friendly, knowledgeable local guide for Medellín rentals.
+    concierge: `You are the mdeai.co AI Concierge — a friendly, knowledgeable local guide for Medellín rentals and events.
 
 Primary job: help people find an apartment to rent in Medellín. Use tools:
 - rentals_search / rentals_intake — find verified apartment rentals with filters, freshness, map pins
 - search_apartments — quick direct lookup by neighborhood, price, bedrooms, amenities
 - get_user_trips / get_user_bookings — recall the user's existing trips/bookings when they ask
 - create_booking_preview — propose a booking for user approval (never auto-confirm)
+
+You can also help organizers create events. Use the three-step event creation flow:
+1. create_event_draft — call FIRST to start a draft (requires name + start date)
+2. add_ticket_tier — call ONCE PER TIER (e.g. GA, VIP). Collect name, price in COP, and qty from the user.
+3. finalize_event_draft — call LAST to generate a preview card and deep-link to the editor.
+
+IMPORTANT for event creation:
+- Always ask the user for the start date/time BEFORE calling create_event_draft — never guess it.
+- Collect all ticket tiers before calling finalize_event_draft.
+- Prices are in Colombian Pesos (COP), entered as whole numbers (e.g. 40000 COP = 40000, not 400).
+- After finalize_event_draft returns, tell the user their draft is ready and they can open the editor to review and publish.
 
 When users ask for recommendations, USE THE TOOLS to search the database and give real results.
 
@@ -647,6 +723,162 @@ async function executeRentalsIntake(
     console.error("Rentals intake error:", error);
     return { error: "Failed to process rental inquiry", details: String(error) };
   }
+}
+
+// ── Event creation executor functions (Task 009) ─────────────────────────────
+
+async function executeCreateEventDraft(
+  params: Record<string, unknown>,
+  supabase: SupabaseClientType,
+  userId: string | null,
+): Promise<unknown> {
+  if (!userId) {
+    return { error: "AUTH_REQUIRED", message: "Sign in to create events." };
+  }
+  const name = String(params.name ?? "").trim().slice(0, 200);
+  if (!name) return { error: "INVALID", message: "Event name is required." };
+
+  const startAt = params.start_at ? String(params.start_at) : null;
+  if (!startAt) return { error: "INVALID", message: "Event start date/time is required." };
+
+  const { data, error } = await supabase
+    .from("events")
+    .insert({
+      organizer_id: userId,
+      name,
+      description: params.description ? String(params.description).slice(0, 2000) : null,
+      event_start_time: startAt,
+      event_end_time: params.end_at ? String(params.end_at) : null,
+      address: params.address ? String(params.address).slice(0, 300) : null,
+      event_type: params.event_type ? String(params.event_type) : "other",
+      status: "draft",
+      currency: "COP",
+      source: "manual",
+    })
+    .select("id, name")
+    .single();
+
+  if (error) {
+    console.error("create_event_draft DB error:", error);
+    return { error: "DB_ERROR", message: error.message };
+  }
+  return { event_id: data.id, name: data.name, status: "draft" };
+}
+
+async function executeAddTicketTier(
+  params: Record<string, unknown>,
+  supabase: SupabaseClientType,
+  userId: string | null,
+): Promise<unknown> {
+  if (!userId) {
+    return { error: "AUTH_REQUIRED", message: "Sign in to add ticket tiers." };
+  }
+  const eventId = String(params.event_id ?? "").trim();
+  if (!eventId) return { error: "INVALID", message: "event_id is required." };
+
+  // Auth guard: verify this event belongs to the caller.
+  const { data: ev, error: evErr } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("organizer_id", userId)
+    .single();
+  if (evErr || !ev) {
+    return { error: "FORBIDDEN", message: "Event not found or you are not the organizer." };
+  }
+
+  // Count existing tiers to enforce the 5-tier cap.
+  const { count } = await supabase
+    .from("event_tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+  if ((count ?? 0) >= 5) {
+    return { error: "LIMIT_EXCEEDED", message: "Maximum 5 ticket tiers per event." };
+  }
+
+  const priceCents = Math.round(Number(params.price_cents ?? 0));
+  if (priceCents < 0 || priceCents > 100_000_000) {
+    return { error: "INVALID", message: "price_cents must be between 0 and 100,000,000." };
+  }
+  const qtyTotal = Math.round(Number(params.qty_total ?? 0));
+  if (qtyTotal < 1 || qtyTotal > 100_000) {
+    return { error: "INVALID", message: "qty_total must be between 1 and 100,000." };
+  }
+
+  const { data, error } = await supabase
+    .from("event_tickets")
+    .insert({
+      event_id: eventId,
+      name: String(params.name ?? "").trim().slice(0, 100),
+      price_cents: priceCents,
+      currency: "COP",
+      qty_total: qtyTotal,
+      position: typeof params.sort_order === "number" ? params.sort_order : (count ?? 0) + 1,
+    })
+    .select("id, name, price_cents, qty_total, currency")
+    .single();
+
+  if (error) {
+    console.error("add_ticket_tier DB error:", error);
+    return { error: "DB_ERROR", message: error.message };
+  }
+  return { tier_id: data.id, name: data.name, price_cents: data.price_cents, qty_total: data.qty_total, currency: data.currency };
+}
+
+async function executeFinalizeEventDraft(
+  params: Record<string, unknown>,
+  supabase: SupabaseClientType,
+  userId: string | null,
+): Promise<unknown> {
+  if (!userId) {
+    return { error: "AUTH_REQUIRED", message: "Sign in to finalize events." };
+  }
+  const eventId = String(params.event_id ?? "").trim();
+  if (!eventId) return { error: "INVALID", message: "event_id is required." };
+
+  const { data: ev, error: evErr } = await supabase
+    .from("events")
+    .select("id, name, event_start_time, event_end_time, address, description, currency")
+    .eq("id", eventId)
+    .eq("organizer_id", userId)
+    .single();
+
+  if (evErr || !ev) {
+    return { error: "FORBIDDEN", message: "Event not found or you are not the organizer." };
+  }
+
+  const { data: tiers, error: tiersErr } = await supabase
+    .from("event_tickets")
+    .select("id, name, price_cents, currency, qty_total")
+    .eq("event_id", eventId)
+    .order("position", { ascending: true });
+
+  if (tiersErr) {
+    return { error: "DB_ERROR", message: tiersErr.message };
+  }
+
+  const payload = {
+    event_id: ev.id,
+    name: ev.name,
+    start_at: ev.event_start_time,
+    end_at: ev.event_end_time ?? null,
+    address: ev.address ?? null,
+    description: ev.description ?? null,
+    currency: ev.currency ?? "COP",
+    tiers: (tiers ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      price_cents: t.price_cents,
+      currency: t.currency,
+      qty_total: t.qty_total,
+    })),
+    deep_link: `/host/event/new?draft=${ev.id}`,
+  };
+
+  return {
+    message: `Draft ready — "${ev.name}" has ${(tiers ?? []).length} ticket tier(s). Open the editor to review and publish.`,
+    actions: [{ type: "SHOW_EVENT_DRAFT", payload }],
+  };
 }
 
 // Execute a tool call via the registry. Adding a new tool = add an entry to
