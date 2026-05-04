@@ -72,6 +72,15 @@ const HostListingNew = lazy(() => import("./pages/host/ListingNew"));
 const HostDashboard = lazy(() => import("./pages/host/Dashboard"));
 const HostLeads = lazy(() => import("./pages/host/Leads"));
 const HostLeadDetail = lazy(() => import("./pages/host/LeadDetail"));
+const HostEventNew = lazy(() => import("./pages/host/HostEventNew"));
+const HostEventDashboard = lazy(() => import("./pages/host/HostEventDashboard"));
+// Buyer ticket pages (task 008) — lazy so the qrcode chunk only ships when needed.
+const MyTickets = lazy(() => import("./pages/me/MyTickets"));
+const TicketDetail = lazy(() => import("./pages/me/TicketDetail"));
+// Staff check-in PWA (task 007) — public route; staff JWT is the auth.
+const StaffCheckIn = lazy(() => import("./pages/staff/StaffCheckIn"));
+// Contest voting pages (task 012) — mobile-first, lazy so the chunk is zero cost elsewhere.
+const ContestVote = lazy(() => import("./pages/contest/Vote"));
 // Admin pages — default exports per file, lazy-loaded individually so
 // the admin bundle only ships when an admin actually navigates here.
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -143,6 +152,9 @@ const App = () => (
             {/* D9: leads inbox. D10 detail page. */}
             <Route path="/host/leads" element={<HostLeads />} />
             <Route path="/host/leads/:id" element={<HostLeadDetail />} />
+            {/* Phase 1 events MVP — task 002 organizer wizard */}
+            <Route path="/host/event/new" element={<HostEventNew />} />
+            <Route path="/host/event/:id" element={<HostEventDashboard />} />
             {/* D7: /host/ alias → dashboard */}
             <Route path="/host" element={<Navigate to="/host/dashboard" replace />} />
             {/* Marketing Routes */}
@@ -168,6 +180,8 @@ const App = () => (
             <Route path="/restaurants/:id" element={<RestaurantDetail />} />
             <Route path="/events" element={<Events />} />
             <Route path="/events/:id" element={<EventDetail />} />
+            {/* Contest voting (task 012) — public, mobile-first */}
+            <Route path="/vote/:slug" element={<ContestVote />} />
             <Route path="/:type/:id" element={<PlaceDetail />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
@@ -231,6 +245,20 @@ const App = () => (
             />
             <Route path="/concierge" element={<Concierge />} />
             <Route path="/sitemap" element={<Sitemap />} />
+            {/* Buyer ticket routes (task 008).
+                /me/tickets — authenticated list (ProtectedRoute).
+                /me/tickets/:id — fullscreen QR, public (handles both auth + anon ?token= path). */}
+            <Route
+              path="/me/tickets"
+              element={
+                <ProtectedRoute>
+                  <MyTickets />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/me/tickets/:id" element={<TicketDetail />} />
+            {/* Staff check-in PWA — public (task 007). Auth via ?token= staff JWT. */}
+            <Route path="/staff/check-in/:event_id" element={<StaffCheckIn />} />
             {/* Admin Routes */}
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/apartments" element={<AdminApartments />} />
