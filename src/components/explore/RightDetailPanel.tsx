@@ -166,7 +166,7 @@ export function RightDetailPanel({ className }: RightDetailPanelProps) {
         <aside
           className={cn(
             "fixed top-0 right-0 h-screen w-full sm:w-[500px] bg-background z-40",
-            "transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+            "transform transition-transform duration-300 ease-in-out",
             "shadow-[-4px_0_24px_rgba(0,0,0,0.1)] overflow-y-auto",
             rightPanelOpen ? "translate-x-0" : "translate-x-full",
             className
@@ -216,7 +216,7 @@ export function RightDetailPanel({ className }: RightDetailPanelProps) {
       <aside
         className={cn(
           "fixed top-0 right-0 h-screen w-full sm:w-[500px] bg-background z-40",
-          "transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          "transform transition-transform duration-300 ease-in-out",
           "shadow-[-4px_0_24px_rgba(0,0,0,0.1)] overflow-y-auto",
           rightPanelOpen ? "translate-x-0" : "translate-x-full",
           className

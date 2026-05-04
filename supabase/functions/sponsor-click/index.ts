@@ -12,7 +12,7 @@
  */
 
 import { getCorsHeaders, jsonResponse, errorBody } from "../_shared/http.ts";
-import { getServiceClient } from "../_shared/supabase-clients.ts";
+import { getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,6 +121,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 
+  // ── Resolve auth user id (optional — enables user-to-user attribution) ──────
+  const authHeader = req.headers.get("Authorization");
+  const viewerUserId = authHeader ? await getUserId(authHeader) : null;
+
   // ── Record click — swallow errors ──────────────────────────────────────────
   try {
     const ip =
@@ -129,6 +133,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     await sponsorDb.from("clicks").insert({
       placement_id,
+      viewer_user_id: viewerUserId ?? null,
       viewer_anon_id: viewer_anon_id ?? null,
       utm_full: utm_full ?? null,
       ip_hash,

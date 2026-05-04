@@ -40,6 +40,8 @@ END;
 $$;
 
 -- Schedule: every 5 minutes (requires pg_cron extension — already enabled in supabase/config.toml)
+-- Idempotent: unschedule first so re-running migration doesn't create duplicates.
+DO $$ BEGIN PERFORM cron.unschedule('sponsor-roi-rollup'); EXCEPTION WHEN OTHERS THEN NULL; END $$;
 SELECT cron.schedule(
   'sponsor-roi-rollup',
   '*/5 * * * *',
