@@ -18,8 +18,8 @@ interface DocSlotConfig {
 }
 
 const DOC_SLOTS: DocSlotConfig[] = [
-  { key: "id_front", label: "Frente del documento",  hint: "Foto clara del lado con tu fotografía" },
-  { key: "id_back",  label: "Reverso del documento", hint: "Foto del lado con la firma o código de barras" },
+  { key: "id_front", label: "ID front",  hint: "Clear photo of the side with your photo" },
+  { key: "id_back",  label: "ID back",   hint: "Photo of the side with your signature or barcode" },
 ];
 
 interface SlotState {
@@ -58,11 +58,11 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
 
   const handleFile = async (key: "id_front" | "id_back", file: File) => {
     if (file.size > MAX_DOC_BYTES) {
-      patchSlot(key, { error: "El archivo no puede superar 15 MB" });
+      patchSlot(key, { error: "File must be under 15 MB" });
       return;
     }
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      patchSlot(key, { error: "Solo se aceptan imágenes (JPG, PNG) o PDF" });
+      patchSlot(key, { error: "Only images (JPG, PNG) or PDF accepted" });
       return;
     }
 
@@ -74,7 +74,7 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
       patchSlot(key, {
         uploading: false,
         done:      false,
-        error:     err instanceof Error ? err.message : "Error al subir el documento",
+        error:     err instanceof Error ? err.message : "Failed to upload document",
       });
     }
   };
@@ -86,9 +86,9 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 p-4 text-sm text-amber-800">
-        <p className="font-medium">Privacidad de tus documentos</p>
+        <p className="font-medium">Your documents are private</p>
         <p className="mt-1 text-xs">
-          Tus documentos se almacenan de forma segura y solo los administradores del concurso tienen acceso. No se compartirán con terceros.
+          Documents are stored securely and only accessible to contest administrators. They will not be shared with third parties.
         </p>
       </div>
 
@@ -107,7 +107,7 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
             {isDone && !slot.error ? (
               <div className="flex items-center gap-2 text-sm text-emerald-600" data-testid={`${key}-done`}>
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                {slot.fileName ?? "Documento cargado"}
+                {slot.fileName ?? "Document uploaded"}
               </div>
             ) : (
               <button
@@ -126,7 +126,7 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
                   <ScanLine className="w-6 h-6" />
                 )}
                 <span className="text-xs">
-                  {slot.uploading ? "Subiendo…" : "Toca para seleccionar o tomar foto"}
+                  {slot.uploading ? "Uploading…" : "Tap to select or take a photo"}
                 </span>
               </button>
             )}
@@ -161,7 +161,7 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
                   refs[key].current?.click();
                 }}
               >
-                Reemplazar documento
+                Replace document
               </Button>
             )}
           </div>
@@ -170,10 +170,10 @@ export function StepIdDocs({ draft, contestSlug, onUploadDoc, onNext, onBack }: 
 
       <div className="flex justify-between pt-2">
         <Button type="button" variant="outline" onClick={onBack}>
-          Anterior
+          Back
         </Button>
         <Button type="button" disabled={!canContinue} onClick={onNext} className="min-w-32">
-          Continuar
+          Continue
         </Button>
       </div>
     </div>

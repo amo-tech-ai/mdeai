@@ -1,7 +1,5 @@
 /**
- * /host/contest/:slug/apply/thanks — Pantalla de confirmación post-inscripción.
- *
- * Muestra mensaje de éxito y enlace de regreso al concurso.
+ * /host/contest/:slug/apply/thanks — Post-application confirmation screen.
  */
 import { Link, useParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
@@ -21,22 +19,22 @@ export default function ApplyThanks() {
         {/* Heading */}
         <div className="space-y-2">
           <h1 className="font-display text-2xl font-semibold">
-            ¡Solicitud enviada!
+            Application submitted!
           </h1>
           <p className="text-muted-foreground text-sm">
-            Estamos revisando tu información. En{" "}
-            <strong className="text-foreground">24–48 horas</strong> te
-            notificaremos por WhatsApp o correo electrónico con el resultado.
+            We're reviewing your information. Within{" "}
+            <strong className="text-foreground">24–48 hours</strong> we'll notify
+            you by WhatsApp or email with the result.
           </p>
         </div>
 
         {/* What happens next */}
         <div className="rounded-xl border bg-card p-4 text-left space-y-3 text-sm">
-          <p className="font-medium text-foreground">¿Qué sigue?</p>
+          <p className="font-medium text-foreground">What happens next?</p>
           <ol className="space-y-2 text-muted-foreground list-decimal list-inside">
-            <li>El equipo verifica tus documentos e imágenes.</li>
-            <li>Recibes una notificación con la decisión.</li>
-            <li>Si es aprobada, tu perfil aparece en el concurso en vivo.</li>
+            <li>Our team verifies your documents and photos.</li>
+            <li>You receive a notification with the decision.</li>
+            <li>If approved, your profile goes live in the contest.</li>
           </ol>
         </div>
 
@@ -44,21 +42,21 @@ export default function ApplyThanks() {
         <div className="space-y-3 pt-2">
           {slug && (
             <Button asChild className="w-full">
-              <Link to={`/vote/${slug}`}>Ver el concurso</Link>
+              <Link to={`/vote/${slug}`}>View the contest</Link>
             </Button>
           )}
           <Button asChild variant="outline" className="w-full">
-            <Link to="/dashboard">Ir a mi cuenta</Link>
+            <Link to="/dashboard">Go to my account</Link>
           </Button>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          ¿Tienes preguntas?{" "}
+          Questions?{" "}
           <a
             href="mailto:hola@mdeai.co"
             className="underline underline-offset-4 text-primary"
           >
-            Escríbenos
+            Contact us
           </a>
         </p>
       </div>

@@ -43,7 +43,7 @@ export function StepConsent({ submitting, onSubmit, onBack }: StepConsentProps) 
           <div className="flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 shrink-0 text-primary mt-0.5" />
             <p className="text-sm text-muted-foreground">
-              Antes de enviar tu solicitud, necesitamos tu consentimiento expreso para los siguientes puntos.
+              Before submitting your application, we need your explicit consent on the following points.
             </p>
           </div>
 
@@ -65,12 +65,12 @@ export function StepConsent({ submitting, onSubmit, onBack }: StepConsentProps) 
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel htmlFor="habeas_data" className="text-sm font-medium cursor-pointer">
-                    Acepto el tratamiento de datos personales
+                    I accept personal data processing
                   </FormLabel>
                   <p className="text-xs text-muted-foreground">
-                    Ley 1581 de 2012 (Habeas Data — Colombia). Tus datos serán usados exclusivamente para la administración del concurso y no serán cedidos a terceros sin tu autorización.{" "}
+                    Ley 1581 de 2012 (Habeas Data — Colombia). Your data will be used exclusively for contest administration and will not be shared with third parties without your authorization.{" "}
                     <a href="/privacy" target="_blank" rel="noreferrer" className="underline text-primary">
-                      Ver política de privacidad
+                      View privacy policy
                     </a>
                   </p>
                   <FormMessage />
@@ -97,10 +97,10 @@ export function StepConsent({ submitting, onSubmit, onBack }: StepConsentProps) 
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel htmlFor="image_rights" className="text-sm font-medium cursor-pointer">
-                    Autorizo el uso de mi imagen
+                    I authorize use of my image
                   </FormLabel>
                   <p className="text-xs text-muted-foreground">
-                    Autorizo al organizador del concurso a utilizar mis fotografías y videos en material promocional del evento, redes sociales y plataformas digitales relacionadas con el concurso.
+                    I authorize the contest organizer to use my photos and videos in event promotional materials, social media, and digital platforms related to the contest.
                   </p>
                   <FormMessage />
                 </div>
@@ -111,7 +111,7 @@ export function StepConsent({ submitting, onSubmit, onBack }: StepConsentProps) 
 
         <div className="flex justify-between pt-2">
           <Button type="button" variant="outline" onClick={onBack}>
-            Anterior
+            Back
           </Button>
           <Button
             type="submit"
@@ -120,7 +120,7 @@ export function StepConsent({ submitting, onSubmit, onBack }: StepConsentProps) 
             data-testid="submit-button"
           >
             {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Enviar solicitud
+            Submit application
           </Button>
         </div>
       </form>

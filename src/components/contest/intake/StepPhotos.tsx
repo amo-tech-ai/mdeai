@@ -19,9 +19,9 @@ interface PhotoSlotConfig {
 }
 
 const SLOTS: PhotoSlotConfig[] = [
-  { key: "hero",   label: "Foto principal",   required: true  },
-  { key: "photo2", label: "Foto 2 (opcional)", required: false },
-  { key: "photo3", label: "Foto 3 (opcional)", required: false },
+  { key: "hero",   label: "Main photo",        required: true  },
+  { key: "photo2", label: "Photo 2 (optional)", required: false },
+  { key: "photo3", label: "Photo 3 (optional)", required: false },
 ];
 
 interface StepPhotosProps {
@@ -67,11 +67,11 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
 
   const handleFile = async (key: "hero" | "photo2" | "photo3", file: File) => {
     if (file.size > MAX_PHOTO_BYTES) {
-      patchSlot(key, { error: "La foto no puede superar 10 MB" });
+      patchSlot(key, { error: "Photo must be under 10 MB" });
       return;
     }
     if (!file.type.startsWith("image/")) {
-      patchSlot(key, { error: "Solo se aceptan archivos de imagen" });
+      patchSlot(key, { error: "Only image files are accepted" });
       return;
     }
 
@@ -93,7 +93,7 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
       patchSlot(key, {
         uploading: false,
         progress:  0,
-        error:     err instanceof Error ? err.message : "Error al subir la foto",
+        error:     err instanceof Error ? err.message : "Failed to upload photo",
       });
     }
   };
@@ -119,7 +119,7 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
               {hasPicture && !slot.uploading && (
                 <button
                   type="button"
-                  aria-label="Quitar foto"
+                  aria-label="Remove photo"
                   onClick={() => patchSlot(key, initialSlot())}
                   className="text-muted-foreground hover:text-destructive transition-colors"
                 >
@@ -148,7 +148,7 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
                 )}
               >
                 <Camera className="w-8 h-8" />
-                <span className="text-xs">Toca para seleccionar o tomar foto</span>
+                <span className="text-xs">Tap to select or take a photo</span>
               </button>
             )}
 
@@ -171,7 +171,7 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
                 <Progress value={slot.progress} className="h-1.5" />
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Loader2 className="w-3 h-3 animate-spin" />
-                  Subiendo y moderando foto…
+                  Uploading and moderating photo…
                 </p>
               </div>
             )}
@@ -197,7 +197,7 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
                 className="w-full"
                 onClick={() => refs[key].current?.click()}
               >
-                Cambiar foto
+                Change photo
               </Button>
             )}
           </div>
@@ -206,10 +206,10 @@ export function StepPhotos({ draft, contest, onUpload, onNext, onBack }: StepPho
 
       <div className="flex justify-between pt-2">
         <Button type="button" variant="outline" onClick={onBack}>
-          Anterior
+          Back
         </Button>
         <Button type="button" disabled={!canContinue} onClick={onNext} className="min-w-32">
-          Continuar
+          Continue
         </Button>
       </div>
     </div>
@@ -228,7 +228,7 @@ function ModerationBadge({ verdict, reasons }: ModerationBadgeProps) {
     return (
       <p className="text-sm text-emerald-600 flex items-center gap-1.5" data-testid="moderation-approved">
         <CheckCircle2 className="w-4 h-4 shrink-0" />
-        Foto aprobada
+        Photo approved
       </p>
     );
   }
@@ -245,7 +245,7 @@ function ModerationBadge({ verdict, reasons }: ModerationBadgeProps) {
     >
       <p className="text-sm font-medium flex items-center gap-1.5">
         <AlertTriangle className="w-4 h-4 shrink-0" />
-        {verdict === "rejected" ? "Foto rechazada" : "Foto en revisión"}
+        {verdict === "rejected" ? "Photo rejected" : "Photo under review"}
       </p>
       {reasons.length > 0 && (
         <ul className="text-xs list-disc list-inside space-y-0.5">
@@ -256,8 +256,8 @@ function ModerationBadge({ verdict, reasons }: ModerationBadgeProps) {
       )}
       <p className="text-xs">
         {verdict === "rejected"
-          ? "Por favor sube una foto diferente para continuar."
-          : "Un administrador revisará esta foto antes de publicarla."}
+          ? "Please upload a different photo to continue."
+          : "An admin will review this photo before it goes live."}
       </p>
     </div>
   );

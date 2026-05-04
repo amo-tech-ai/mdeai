@@ -1,5 +1,5 @@
 /**
- * StepWaiver — Paso 4: descarga el waiver template y sube la versión firmada.
+ * StepWaiver — Step 4: download waiver template and upload signed version.
  */
 import { useRef, useState } from "react";
 import { FileText, Download, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -38,11 +38,11 @@ export function StepWaiver({ draft, contestSlug, onUploadWaiver, onNext, onBack 
 
   const handleFile = async (file: File) => {
     if (file.size > MAX_DOC_BYTES) {
-      setState((s) => ({ ...s, error: "El archivo no puede superar 15 MB" }));
+      setState((s) => ({ ...s, error: "File must be under 15 MB" }));
       return;
     }
     if (file.type !== "application/pdf" && !file.type.startsWith("image/")) {
-      setState((s) => ({ ...s, error: "Solo se aceptan PDF o imagen del waiver firmado" }));
+      setState((s) => ({ ...s, error: "Only PDF or image of signed waiver accepted" }));
       return;
     }
 
@@ -55,7 +55,7 @@ export function StepWaiver({ draft, contestSlug, onUploadWaiver, onNext, onBack 
         fileName:  null,
         uploading: false,
         done:      false,
-        error:     err instanceof Error ? err.message : "Error al subir el waiver",
+        error:     err instanceof Error ? err.message : "Failed to upload waiver",
       });
     }
   };
@@ -67,9 +67,9 @@ export function StepWaiver({ draft, contestSlug, onUploadWaiver, onNext, onBack 
         <div className="flex items-start gap-3">
           <FileText className="w-5 h-5 shrink-0 text-primary mt-0.5" />
           <div>
-            <p className="text-sm font-medium">Autorización de participación</p>
+            <p className="text-sm font-medium">Participation authorization</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Descarga el documento de autorización, imprímelo o fírmalo digitalmente y luego súbelo aquí.
+              Download the authorization document, print or sign it digitally, then upload it here.
             </p>
           </div>
         </div>
@@ -83,20 +83,20 @@ export function StepWaiver({ draft, contestSlug, onUploadWaiver, onNext, onBack 
           )}
         >
           <Download className="w-4 h-4" />
-          Descargar waiver (PDF)
+          Download waiver (PDF)
         </a>
       </div>
 
       {/* Upload area */}
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <p className="text-sm font-medium">
-          Waiver firmado <span className="text-destructive">*</span>
+          Signed waiver <span className="text-destructive">*</span>
         </p>
 
         {isDone ? (
           <div className="flex items-center gap-2 text-sm text-emerald-600" data-testid="waiver-done">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            {state.fileName ?? "Waiver cargado"}
+            {state.fileName ?? "Waiver uploaded"}
           </div>
         ) : (
           <button
@@ -115,7 +115,7 @@ export function StepWaiver({ draft, contestSlug, onUploadWaiver, onNext, onBack 
               <FileText className="w-6 h-6" />
             )}
             <span className="text-xs">
-              {state.uploading ? "Subiendo…" : "Toca para seleccionar el waiver firmado"}
+              {state.uploading ? "Uploading…" : "Tap to select the signed waiver"}
             </span>
           </button>
         )}
@@ -149,17 +149,17 @@ export function StepWaiver({ draft, contestSlug, onUploadWaiver, onNext, onBack 
               fileRef.current?.click();
             }}
           >
-            Reemplazar waiver
+            Replace waiver
           </Button>
         )}
       </div>
 
       <div className="flex justify-between pt-2">
         <Button type="button" variant="outline" onClick={onBack}>
-          Anterior
+          Back
         </Button>
         <Button type="button" disabled={!isDone || state.uploading} onClick={onNext} className="min-w-32">
-          Continuar
+          Continue
         </Button>
       </div>
     </div>

@@ -48,10 +48,10 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
           name="display_name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Nombre artístico o completo</FormLabel>
+              <FormLabel>Stage name or full name</FormLabel>
               <FormControl>
                 <Input
-                  placeholder="Ej. Valentina Restrepo"
+                  placeholder="e.g. Valentina Restrepo"
                   autoFocus
                   {...field}
                 />
@@ -68,14 +68,14 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Presentación{" "}
+                Bio{" "}
                 <span className="text-xs text-muted-foreground font-normal">
-                  (mín. 50 · máx. 800 caracteres)
+                  (min. 50 · max. 800 characters)
                 </span>
               </FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Cuéntale a los jueces y al público quién eres, qué te motiva y por qué participas en este concurso…"
+                  placeholder="Tell the judges and public who you are, what motivates you, and why you're entering this contest…"
                   rows={6}
                   {...field}
                 />
@@ -91,9 +91,9 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
         {/* Redes sociales */}
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium leading-none">
-            Redes sociales{" "}
+            Social media{" "}
             <span className="text-xs text-muted-foreground font-normal">
-              (al menos una)
+              (at least one required)
             </span>
           </legend>
 
@@ -108,7 +108,7 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
                 <FormControl>
                   <Input
                     type="url"
-                    placeholder="https://instagram.com/tu_usuario"
+                    placeholder="https://instagram.com/your_handle"
                     {...field}
                   />
                 </FormControl>
@@ -128,7 +128,7 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
                 <FormControl>
                   <Input
                     type="url"
-                    placeholder="https://tiktok.com/@tu_usuario"
+                    placeholder="https://tiktok.com/@your_handle"
                     {...field}
                   />
                 </FormControl>
@@ -148,7 +148,7 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
                 <FormControl>
                   <Input
                     type="url"
-                    placeholder="https://facebook.com/tu_pagina"
+                    placeholder="https://facebook.com/your_page"
                     {...field}
                   />
                 </FormControl>
@@ -168,7 +168,7 @@ export function StepBio({ draft, saving, onSubmit }: StepBioProps) {
         <div className="flex justify-end pt-2">
           <Button type="submit" disabled={saving} className="min-w-32">
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Guardar y continuar
+            Save & continue
           </Button>
         </div>
       </form>

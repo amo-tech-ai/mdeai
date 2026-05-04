@@ -15,14 +15,14 @@ interface CheckResult {
 }
 
 function computeCompleteness(draft: ContestApplyDraft | null): CheckResult {
-  if (!draft) return { pct: 0, missing: ["perfil", "fotos", "documentos", "waiver", "consentimiento"] };
+  if (!draft) return { pct: 0, missing: ["profile", "photos", "ID docs", "waiver", "consent"] };
 
   const checks: Array<{ label: string; done: boolean }> = [
-    { label: "perfil",          done: !!draft.display_name && !!draft.bio },
-    { label: "foto principal",  done: !!draft.hero_url },
-    { label: "documentos",      done: !!draft.id_front_url && !!draft.id_back_url },
-    { label: "waiver",          done: !!draft.waiver_url },
-    { label: "consentimiento",  done: draft.habeas_data && draft.image_rights },
+    { label: "profile",   done: !!draft.display_name && !!draft.bio },
+    { label: "photos",    done: !!draft.hero_url },
+    { label: "ID docs",   done: !!draft.id_front_url && !!draft.id_back_url },
+    { label: "waiver",    done: !!draft.waiver_url },
+    { label: "consent",   done: draft.habeas_data && draft.image_rights },
   ];
 
   const done    = checks.filter((c) => c.done).length;
@@ -39,17 +39,17 @@ export function CompletenessMeter({ draft }: CompletenessMeterProps) {
   return (
     <div className="space-y-1.5" data-testid="completeness-meter">
       <div className="flex items-center justify-between text-xs">
-        <span className="font-medium text-foreground">{pct}% completado</span>
+        <span className="font-medium text-foreground">{pct}% complete</span>
         {missing.length > 0 && (
           <span className="text-muted-foreground">
-            Falta: {missing.join(" · ")}
+            Missing: {missing.join(" · ")}
           </span>
         )}
       </div>
       <Progress
         value={pct}
         className="h-2"
-        aria-label={`Progreso de la solicitud: ${pct}%`}
+        aria-label={`Application progress: ${pct}%`}
       />
     </div>
   );

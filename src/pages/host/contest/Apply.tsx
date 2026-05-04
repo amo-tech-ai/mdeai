@@ -14,6 +14,7 @@
 import { Navigate, useParams } from "react-router-dom";
 import { Loader2, ChevronLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth }           from "@/hooks/useAuth";
 import { useContest }        from "@/hooks/useContest";
 import { useContestApply }   from "@/hooks/useContestApply";
@@ -27,11 +28,11 @@ import { cn }                from "@/lib/utils";
 import type { StepBioData, StepConsentData } from "@/types/contestApply";
 
 const STEP_LABELS: Record<number, string> = {
-  1: "Perfil",
-  2: "Fotos",
-  3: "Documentos",
-  4: "Autorización",
-  5: "Consentimiento",
+  1: "Profile",
+  2: "Photos",
+  3: "ID Docs",
+  4: "Waiver",
+  5: "Consent",
 };
 
 const TOTAL_STEPS = 5;
@@ -103,8 +104,7 @@ export default function Apply() {
       await saveBio(data);
       setStep(2);
     } catch (err) {
-      // StepBio will remain on same step; toast shown by hook
-      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
     }
   };
 
@@ -127,7 +127,7 @@ export default function Apply() {
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
-            Volver al concurso
+            Back to contest
           </Link>
         </div>
 
@@ -137,10 +137,10 @@ export default function Apply() {
             {contest.title}
           </p>
           <h1 className="font-display text-2xl font-semibold">
-            Inscripción de concursante
+            Contestant Application
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Completa los 5 pasos para enviar tu solicitud. Puedes retomar donde lo dejaste.
+            Complete all 5 steps to submit your application. You can resume where you left off.
           </p>
         </header>
 
@@ -258,13 +258,13 @@ function ContestUnavailable({ reason }: ContestUnavailableProps) {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="max-w-sm w-full text-center space-y-4">
         <div className="text-4xl">🚫</div>
-        <h1 className="font-display text-xl font-semibold">Concurso no disponible</h1>
+        <h1 className="font-display text-xl font-semibold">Contest unavailable</h1>
         <p className="text-sm text-muted-foreground">{reason}</p>
         <Link
           to="/events"
           className="inline-block text-sm text-primary underline underline-offset-4"
         >
-          Ver otros eventos
+          Browse events
         </Link>
       </div>
     </div>
