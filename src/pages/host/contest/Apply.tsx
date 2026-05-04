@@ -82,19 +82,19 @@ export default function Apply() {
   if (contestLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" aria-label="Cargando concurso" />
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" aria-label="Loading contest" />
       </div>
     );
   }
 
   // ── Contest not found / error ──────────────────────────────────────────────
   if (contestError || !contest) {
-    return <ContestUnavailable reason="Concurso no encontrado" />;
+    return <ContestUnavailable reason="Contest not found." />;
   }
 
   // ── Contest guard: must be pageant + live ──────────────────────────────────
   if (contest.kind !== "pageant" || contest.status !== "live") {
-    return <ContestUnavailable reason="Este concurso no está disponible para inscripciones en este momento." />;
+    return <ContestUnavailable reason="This contest is not currently open for applications." />;
   }
 
   // ── Step submit handlers ───────────────────────────────────────────────────
