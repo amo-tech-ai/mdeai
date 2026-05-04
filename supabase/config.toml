@@ -83,3 +83,15 @@ verify_jwt = false
 [functions.contestant-social-enrich]
 enabled = true
 verify_jwt = true
+
+[functions.sponsor-application-create]
+enabled = true
+verify_jwt = false
+
+[functions.sponsor-checkout]
+enabled = true
+verify_jwt = true
+
+[functions.sponsor-payment-webhook]
+enabled = true
+verify_jwt = false
