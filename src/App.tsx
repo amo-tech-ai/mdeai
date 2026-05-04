@@ -81,6 +81,9 @@ const TicketDetail = lazy(() => import("./pages/me/TicketDetail"));
 const StaffCheckIn = lazy(() => import("./pages/staff/StaffCheckIn"));
 // Contest voting pages (task 012) — mobile-first, lazy so the chunk is zero cost elsewhere.
 const ContestVote = lazy(() => import("./pages/contest/Vote"));
+// Contestant intake wizard (task 018) — authenticated, lazy so the chunk only loads on this path.
+const ContestApply = lazy(() => import("./pages/host/contest/Apply"));
+const ContestApplyThanks = lazy(() => import("./pages/host/contest/ApplyThanks"));
 // Admin pages — default exports per file, lazy-loaded individually so
 // the admin bundle only ships when an admin actually navigates here.
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -182,6 +185,9 @@ const App = () => (
             <Route path="/events/:id" element={<EventDetail />} />
             {/* Contest voting (task 012) — public, mobile-first */}
             <Route path="/vote/:slug" element={<ContestVote />} />
+            {/* Contestant intake wizard (task 018) — auth-gated inside the page */}
+            <Route path="/host/contest/:slug/apply" element={<ContestApply />} />
+            <Route path="/host/contest/:slug/apply/thanks" element={<ContestApplyThanks />} />
             <Route path="/:type/:id" element={<PlaceDetail />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
