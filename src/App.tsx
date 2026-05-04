@@ -81,6 +81,8 @@ const TicketDetail = lazy(() => import("./pages/me/TicketDetail"));
 const StaffCheckIn = lazy(() => import("./pages/staff/StaffCheckIn"));
 // Contest voting pages (task 012) — mobile-first, lazy so the chunk is zero cost elsewhere.
 const ContestVote = lazy(() => import("./pages/contest/Vote"));
+// Contest trust / transparency page — public, per-contest.
+const ContestHowItWorks = lazy(() => import("./pages/contest/HowItWorks"));
 // Contestant intake wizard (task 018) — authenticated, lazy so the chunk only loads on this path.
 const ContestApply = lazy(() => import("./pages/host/contest/Apply"));
 const ContestApplyThanks = lazy(() => import("./pages/host/contest/ApplyThanks"));
@@ -92,6 +94,8 @@ const AdminRestaurants = lazy(() => import("./pages/admin/AdminRestaurants"));
 const AdminEvents = lazy(() => import("./pages/admin/AdminEvents"));
 const AdminCars = lazy(() => import("./pages/admin/AdminCars"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+// Entity moderation queue (task: admin entities) — lazy; admin-only.
+const AdminEntities = lazy(() => import("./pages/admin/AdminEntities"));
 
 const queryClient = new QueryClient();
 
@@ -185,6 +189,8 @@ const App = () => (
             <Route path="/events/:id" element={<EventDetail />} />
             {/* Contest voting (task 012) — public, mobile-first */}
             <Route path="/vote/:slug" element={<ContestVote />} />
+            {/* Contest trust page — public; reads scoring_formula from contest row */}
+            <Route path="/vote/:slug/how-it-works" element={<ContestHowItWorks />} />
             {/* Contestant intake wizard (task 018) — auth-gated inside the page */}
             <Route path="/host/contest/:slug/apply" element={<ContestApply />} />
             <Route path="/host/contest/:slug/apply/thanks" element={<ContestApplyThanks />} />
@@ -272,6 +278,8 @@ const App = () => (
             <Route path="/admin/events" element={<AdminEvents />} />
             <Route path="/admin/cars" element={<AdminCars />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            {/* Entity moderation queue — admin only (enforced via AdminLayout) */}
+            <Route path="/admin/entities" element={<AdminEntities />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

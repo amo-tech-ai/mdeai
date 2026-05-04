@@ -124,7 +124,7 @@ describe("Apply page — contest guard", () => {
     useAuthMock.mockReturnValue({ user: { id: "user-1" }, loading: false });
   });
 
-  it("2. shows 'Concurso no disponible' when contest status is not live", () => {
+  it("2. shows 'Contest unavailable' when contest status is not live", () => {
     useContestMock.mockReturnValue({
       data:      { ...LIVE_PAGEANT, status: "draft" },
       isLoading: false,
@@ -133,7 +133,7 @@ describe("Apply page — contest guard", () => {
 
     renderApply();
 
-    expect(screen.getByText("Concurso no disponible")).toBeInTheDocument();
+    expect(screen.getByText("Contest unavailable")).toBeInTheDocument();
   });
 });
 
@@ -153,7 +153,7 @@ describe("StepBio — validation", () => {
     });
 
     // Fill a bio that is too short (< 50 chars)
-    fireEvent.change(screen.getByPlaceholderText(/Cuéntale/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Tell the judges/i), {
       target: { value: "Corta" },
     });
 
@@ -162,7 +162,7 @@ describe("StepBio — validation", () => {
       target: { value: "https://instagram.com/maria" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Guardar y continuar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Save & continue/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/al menos 50 caracteres/i)).toBeInTheDocument();
@@ -196,7 +196,7 @@ describe("CompletenessMeter", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("0% completado")).toBeInTheDocument();
+    expect(screen.getByText("0% complete")).toBeInTheDocument();
   });
 });
 
@@ -249,6 +249,6 @@ describe("StepPhotos — moderation warning", () => {
       expect(screen.getByTestId("moderation-warning")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Foto rechazada")).toBeInTheDocument();
+    expect(screen.getByText("Photo rejected")).toBeInTheDocument();
   });
 });
