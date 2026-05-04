@@ -69,3 +69,29 @@ export interface SponsorApplicationCreateResponse {
     organization_id: string;
   };
 }
+
+export interface SponsorPlacement {
+  id: string;
+  application_id: string;
+  surface: string;
+  surface_ref: string | null;
+  asset_id: string | null;
+  utm_destination: string;
+  start_at: string;
+  end_at: string;
+  active: boolean;
+  weight: number;
+  // joined
+  asset_storage_path?: string | null;
+  asset_alt_text?: string | null;
+}
+
+export type SponsorSurface =
+  | 'contest_header'
+  | 'category_header'
+  | 'leaderboard_footer'
+  | 'contestant_profile'
+  | 'digital_banner'
+  | 'push_notif'
+  | 'social_post'
+  | 'qr_station';

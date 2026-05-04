@@ -95,3 +95,11 @@ verify_jwt = true
 [functions.sponsor-payment-webhook]
 enabled = true
 verify_jwt = false
+
+[functions.sponsor-impression]
+enabled = true
+verify_jwt = false
+
+[functions.sponsor-click]
+enabled = true
+verify_jwt = false
