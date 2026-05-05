@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, type Context } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { identifyUser, resetPostHog } from "@/lib/posthog";
@@ -28,7 +28,12 @@ interface AuthContextType {
   updatePassword: (password: string) => Promise<{ error: Error | null }>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Singleton guard: if HMR loads this module twice (two ?t= timestamps in the
+// browser cache), both instances share the same context object via window.
+// In production createContext runs once; the ?? assignment is a no-op.
+const AuthContext: Context<AuthContextType | undefined> =
+  (window as any).__mdeAuthContext ??
+  ((window as any).__mdeAuthContext = createContext<AuthContextType | undefined>(undefined));
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

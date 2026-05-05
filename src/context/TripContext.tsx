@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode, type Context } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrips, useTrip } from "@/hooks/useTrips";
 import type { Trip, TripWithItems } from "@/types/trip";
@@ -27,7 +27,9 @@ interface TripContextType {
   activeTripId: string | null;
 }
 
-const TripContext = createContext<TripContextType | null>(null);
+const TripContext: Context<TripContextType | null> =
+  (window as any).__mdeTripContext ??
+  ((window as any).__mdeTripContext = createContext<TripContextType | null>(null));
 
 const ACTIVE_TRIP_STORAGE_KEY = "ilovemedellin_active_trip_id";
 

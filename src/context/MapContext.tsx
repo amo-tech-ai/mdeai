@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode, type Context } from 'react';
 import type { MapPin } from '@/types/map-pin';
 
 // Re-export the types so existing consumers that import { MapPin, ... }
@@ -15,7 +15,9 @@ interface MapContextValue {
   setHighlightedPinId: (id: string | null) => void;
 }
 
-const MapContext = createContext<MapContextValue | undefined>(undefined);
+const MapContext: Context<MapContextValue | undefined> =
+  (window as any).__mdeMapContext ??
+  ((window as any).__mdeMapContext = createContext<MapContextValue | undefined>(undefined));
 
 /**
  * Shares map-pin state between the chat conversation (produces pins on tool

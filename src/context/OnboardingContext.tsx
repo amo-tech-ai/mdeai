@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode, type Context } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,7 +56,9 @@ const defaultData: OnboardingData = {
   interests: [],
 };
 
-const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+const OnboardingContext: Context<OnboardingContextType | undefined> =
+  (window as any).__mdeOnboardingContext ??
+  ((window as any).__mdeOnboardingContext = createContext<OnboardingContextType | undefined>(undefined));
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();

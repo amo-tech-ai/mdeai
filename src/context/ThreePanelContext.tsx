@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode, type Context } from "react";
 import { useSearchParams } from "react-router-dom";
 
 // Generic item type for any entity (restaurant, event, apartment, car, etc.)
@@ -30,7 +30,9 @@ export interface ThreePanelContextType {
   setRightPanelContent: (content: ReactNode | null) => void;
 }
 
-const ThreePanelContext = createContext<ThreePanelContextType | null>(null);
+const ThreePanelContext: Context<ThreePanelContextType | null> =
+  (window as any).__mdeThreePanelContext ??
+  ((window as any).__mdeThreePanelContext = createContext<ThreePanelContextType | null>(null));
 
 export function useThreePanelContext() {
   const context = useContext(ThreePanelContext);

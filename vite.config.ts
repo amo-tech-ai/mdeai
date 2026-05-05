@@ -71,6 +71,15 @@ export default defineConfig(({ mode }) => {
       hmr: {
         overlay: false,
       },
+      // Prevent the browser from caching HMR-timestamped (?t=) module URLs
+      // across dev server restarts. Without this, the browser serves stale
+      // ?t=<old> modules alongside fresh ones → two AuthContext instances.
+      headers: {
+        // no-cache: browser always revalidates before using cached response.
+        // This ensures stale ?t=<timestamp> HMR modules get refreshed on
+        // each page load rather than serving expired code from HTTP cache.
+        "Cache-Control": "no-cache",
+      },
     },
     plugins: [
       react(),

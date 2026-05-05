@@ -88,4 +88,19 @@ describe("Step1Address", () => {
     fireEvent.click(screen.getByTestId("step1-submit"));
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
+
+  it("enables Continue without lat/lng after clicking manual fallback link", async () => {
+    const { findByTestId } = render(
+      <Step1Address
+        value={{ address: "Calle 10 #42-50", city: "Medellín", neighborhood: "El Poblado", latitude: null, longitude: null }}
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+    // Wait for the async loader to reject and surface the fallback
+    const fallbackBtn = await findByTestId("step1-manual-fallback");
+    fireEvent.click(fallbackBtn);
+    const submit = await findByTestId("step1-submit");
+    expect(submit).toBeEnabled();
+  });
 });

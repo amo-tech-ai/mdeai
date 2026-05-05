@@ -1,5 +1,113 @@
 # Changelog — mdeai.co
 
+## 2026-05-05 — Phase 1 edge functions deployed to prod
+
+**Branch:** `fix/landlord-launch-blockers`
+
+Deployed 4 edge functions to Supabase project `zkwcbyxiwklihegjhuql` that were code-complete but never pushed to prod:
+
+| Function | Purpose | Secret dependency |
+|---|---|---|
+| `ticket-checkout` | Stripe Checkout Session + atomic qty_pending increment | `STRIPE_SECRET_KEY` ✅ |
+| `ticket-payment-webhook` | Stripe sig verify → finalize order + flip attendees → active | `STRIPE_WEBHOOK_SECRET` ✅ |
+| `event-staff-link-generator` | JWT mint/revoke for staff check-in | `STAFF_LINK_SECRET` ✅ |
+| `ticket-validate` | Staff QR scan → consume attendee JWT (one-shot) | `QR_SIGNING_SECRET` ✅ |
+
+Phase 1 acceptance gate item **"Camila buys via Stripe → email → QR"** is now unblocked end-to-end.
+
+---
+
+## 2026-05-05 — HMR singleton guards + missing deps + test coverage (243/243)
+
+**Branch:** `fix/landlord-launch-blockers`
+
+### What shipped
+
+#### Context singleton guards (all 5 context files)
+- Added `window.__mde*Context` singleton pattern to `useAuth.tsx`, `TripContext.tsx`, `ThreePanelContext.tsx`, `OnboardingContext.tsx`, `MapContext.tsx`
+- Prevents blank-page crash when Vite HMR caches a module at two different `?t=<timestamp>` URLs — both instances share the same context object via `window`, eliminating the "used outside Provider" throw
+- `vite.config.ts` server headers changed from `no-store` → `no-cache` so the browser can be primed with fresh module bytes while still using the cache normally in production
+
+#### Missing npm deps installed
+- `qrcode` + `@types/qrcode` — used by `src/pages/me/TicketDetail.tsx` (QR code display)
+- `posthog-js` — used by `src/lib/posthog.ts` (analytics)
+- `@googlemaps/markerclusterer` — used by `src/components/chat/ChatMap.tsx`
+- `jsqr` — used by `src/hooks/useScanner.ts` (QR scanner)
+- `fake-indexeddb` — required by `src/lib/scanQueue.test.ts` (offline scan queue tests)
+- `@testing-library/dom` — peer dep for `@testing-library/react`
+
+#### L8 confirmed + test added
+- `Step1Address.tsx` already implements the manual fallback: "Can't find your address?" link sets `manualFallback=true` → Continue button enabled without lat/lng (server-side geocode handles missing coords)
+- Added `Step1Address.test.tsx` scenario: clicks manual fallback, verifies Continue is enabled without coordinates
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| Build | ✅ Clean (5.88s, 4093 modules) |
+| Tests | ✅ 243/243 (was 242 — new test added) |
+| All 5 contexts singleton-guarded | ✅ |
+
+---
+
+## 2026-05-05 — Landlord V1 launch blockers cleared (7 fixes)
+
+**Commit:** `f932692` | **Branch:** `fix/landlord-launch-blockers`
+
+### What shipped
+
+#### `ThreePanelLayout.tsx` — CJS shim removed (L1)
+- Replaced `export const usePanelContext = () => { require(...) }` (broke in Vite ESM, caused blank-page crash on all routes) with clean ES re-export: `export { useThreePanelContext as usePanelContext }`
+
+#### `useAuth.tsx` — Landlord account type + PostHog (L2)
+- Added `AccountType = "renter" | "landlord"` + `SignUpOptions` interface
+- `signUp` passes `emailRedirectTo` → `/host/onboarding` for landlords, stores `account_type` in `user_metadata`
+- `signInWithGoogle` accepts `redirectTo` + `options`, routes landlords to `/host/onboarding`
+- PostHog `identifyUser` on `SIGNED_IN` / `TOKEN_REFRESHED`; `resetPostHog` on `SIGNED_OUT`
+
+#### `ApartmentDetail.tsx` — Price format + HostCard (L3)
+- Monthly price now uses `formatListingPrice()` → `$3.800.000 COP` / `$450 USD` (was raw `toLocaleString`)
+- Weekly/daily price tiles hidden when `null` instead of always showing `$N/A`
+- `<HostCard landlordId={...} />` renders when `apartment.landlord_id` present; falls back to legacy host_name card
+
+#### `Login.tsx` — Smart post-login routing (L4)
+- Reads `?returnTo=` query param (set by `HeroChatPrompt.savePendingPrompt`) with open-redirect guard
+- On success without explicit `returnTo`: fetches `account_type` metadata → landlord → `/host/dashboard`, renter → `/`
+- `signInWithGoogle` passes `explicitReturn` so OAuth callback lands on correct page
+
+#### `Onboarding.tsx` — Landlord bypass (L5)
+- Added guard: if `user_metadata.account_type === "landlord"` → `<Navigate to="/host/onboarding" replace />`
+
+#### `Signup.tsx` — 3-step landlord-aware flow (L6)
+- Step 1: `AccountTypeStep` — renter vs. landlord card picker
+- Step 2: Email/password form with landlord-specific copy ("List your space")
+- Step 3: Inline success surface (`signupComplete` state) instead of navigate-to-/login redirect
+- Passes `accountType` to `signUp()` so metadata + redirect are set correctly
+
+#### `index.html` — Debug script cleanup (L7)
+- Removed temporary `window.__errors = []` error-capture script added during diagnostic session
+
+### Root cause resolved: split-module AuthContext crash
+The blank-page crash affecting all routes was caused by Vite's browser HTTP cache serving the old `useAuth.tsx?t=<timestamp>` module alongside the fresh server version. `AuthProvider` used the new `AuthContext` while downstream components read from the old one → `useContext()` returned `undefined` → throw. Fixed by clearing `node_modules/.vite` + fresh server start.
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| Preview smoke test | ✅ `/apartments/:id` renders price, HostCard, MobileNav — no errors |
+| Build | ✅ Clean |
+| Vite cache cleared | ✅ `node_modules/.vite` removed before commit |
+
+### Open (L8 + landlord V1 remainders)
+| Priority | Item |
+|---|---|
+| 🔴 | L8: Listing wizard Step 1 "Continue" stuck disabled when Places autocomplete returns no suggestions |
+| 🔴 | `/host/onboarding` page (currently 404 — redirect target exists but page not built) |
+| 🔴 | `/host/dashboard` page (currently 404 — redirect target exists but page not built) |
+| 🟡 | Seed 3–5 test apartments with `landlord_id` to QA HostCard end-to-end |
+
+---
+
 ## 2026-05-05 — Full repo restore + 3 sponsor bug-fix migrations + sponsor dashboard
 
 **Commit:** `141a2bb` | **Branch:** `main` | **1321 files committed**
