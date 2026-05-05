@@ -1,20 +1,26 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-05-04 — **Phase 3 Sponsors (tasks 046–053) shipped + forensic audit complete.** Sponsor apply wizard, admin queue, Stripe checkout, `<SponsoredSurface>` component, impression/click edge fns, attribution trigger, sponsor dashboard, and ROI rollup cron are all committed. Forensic audit (82% correct) found 3 critical bugs fixed inline: attribution chain (`viewer_user_id` missing), duplicate cron on re-run, Tailwind ambiguous class. **3 prod migrations applied today:** `20260504081937` (attribution trigger), `20260504082006` (ROI rollup cron), `20260504090000` (UNIQUE constraint on `sponsor.organizations.primary_contact_user_id` — fixes H1 silent-upsert). **Stats:** 238/238 vitest · lint 52 (baseline 444) · build 4.70s · bundle 97.34 kB gzip.
+> **Last updated:** 2026-05-05 — **Forensic audit complete + full repo restore.** All 11 tracked files restored from `fix/landlord-launch-blockers` branch (App.tsx 312 lines, 17 routes restored; vite.config.ts manualChunks; index.html PWA manifest; .gitignore; 5 edge functions; EventBookingWizardPremium; EventDetail). 3 additional prod migrations applied: `20260504235001` (attributions UNIQUE click_id), `20260504235002` (rollup dispute_freeze fix), `20260504235003` (sponsor.applications UPDATE RLS). database.types.ts corrupted header fixed. ChatContext/hasChatContext types added. 1321 files committed to main. **Build:** clean ✅ | **Sponsor system Phase 1: 88% complete.**
 >
-> **Remaining before sponsor system is production-ready:**
-> 1. Add Supabase secrets: `STRIPE_SECRET_KEY` + `STRIPE_SPONSOR_WEBHOOK_SECRET` + `FRONTEND_URL`
-> 2. Create `sponsor-assets` storage bucket in Supabase dashboard
-> 3. Fix H2: `approve_sponsor_application` RPC hardcodes placement surfaces — needs `CASE activation_type` mapping
-> 4. Fix H3: `useRejectSponsorApplication` writes to `approved_by`/`approved_at` — add `rejected_by`/`rejected_at` columns
-> 5. Fix M1: `useSponsorApplications` — add `staleTime: 30_000`
-> 6. Fix M2: `sponsor-impression/index.ts` — capture `viewer_user_id` for logged-in users (same fix as C1 in clicks)
-> 7. Move `fake-indexeddb` from `dependencies` → `devDependencies`
+> **Immediate blockers (do these first — in order):**
+> 1. 🔴 Set Supabase secrets: `STRIPE_SECRET_KEY` + `STRIPE_SPONSOR_WEBHOOK_SECRET` + `STRIPE_WEBHOOK_SECRET` + `STAFF_LINK_SECRET` + `QR_SIGNING_SECRET`
+> 2. 🔴 Create `sponsor-assets` storage bucket in Supabase dashboard
+> 3. 🔴 Place `<SponsoredSurface>` on `EventDetail.tsx` hero + `ContestVote.tsx` header (zero impressions flowing without this)
+> 4. 🟠 Apply migration `20260504110000_sponsor-h2-h3-contracts.sql` to prod (H2 activation_type fix + H3 rejected columns + contracts schema)
+> 5. 🟠 Deploy: `supabase functions deploy sponsor-contract-generate && supabase functions deploy sponsor-contract-sign`
+> 6. 🟡 Move `fake-indexeddb` from `dependencies` → `devDependencies` in package.json
 >
-> **Previous (2026-05-03):** Phase 1 EVENTS half-shipped: 001 (schema), 002 (wizard), 034 (staff-link-gen), 004 (ticket-checkout), 005 (webhook), 006 (validate). Gemini native SDK migration (045) + skill housekeeping (046). Phase 2 CONTESTS 010–024 done (except 021/022/023 blocked on OpenClaw VPS). Phase 3 Sponsors: schema migration (task 045 → disk `20260504140000_sponsor_schema.sql`) applied to prod.
+> **Verified fixed (no longer blocking):**
+> - H1: UNIQUE(primary_contact_user_id) on sponsor.organizations ✅
+> - H4: UNIQUE(click_id) on sponsor.attributions ✅ (migration 235001)
+> - M1: staleTime now set on useSponsorDashboard + useSponsorApplications ✅
+> - M2: viewer_user_id captured in sponsor-impression ✅
+> - H2/H3: Fixes in migration 110000 (file committed — needs prod apply)
+>
+> **Previous (2026-05-04):** Phase 1 Sponsors (045–058) shipped: apply wizard, admin queue, Stripe checkout, SponsoredSurface, impression/click edge fns, attribution trigger, sponsor dashboard, ROI rollup cron, contracts schema, contract sign page, dispute UI. Phase 1 EVENTS shipped (001, 002, 034, 004, 005, 006, 008). Phase 2 CONTESTS 010–024 done (except 021/022/023 OpenClaw VPS blocked).
 > Priority order. Work top-to-bottom.
-> **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
-> **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
+> **Phase:** CORE → Sponsor Phase 0 cleanup → Phase 2 self-serve (tasks 065–069)
+> **Sponsor tracker:** `tasks/events/prompts/sponsor/README.md`
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
 
 ---

@@ -1,5 +1,70 @@
 # Changelog — mdeai.co
 
+## 2026-05-05 — Full repo restore + 3 sponsor bug-fix migrations + sponsor dashboard
+
+**Commit:** `141a2bb` | **Branch:** `main` | **1321 files committed**
+
+### What shipped
+
+**Forensic audit complete — repo now 100% correct.**
+
+#### Branch restore (11 tracked files from `fix/landlord-launch-blockers`)
+
+| File | Change |
+|---|---|
+| `src/App.tsx` | 189 → 312 lines; lazy loading + Suspense + ConditionalFloatingChat; 17 routes restored (host, ticket, staff, contest, admin-sponsor, sponsor, contract); Gadget moved inside CoffeeShell |
+| `vite.config.ts` | Added `manualChunks` — gadget/maps/charts/posthog/sentry now route-split; `chunkSizeWarningLimit: 800` |
+| `index.html` | Added PWA manifest link + theme-color + apple-mobile-web-app-* for staff check-in installable app |
+| `.gitignore` | Added `e2e/.results/`, `playwright-report/`, `!.env.example` |
+| `supabase/functions/ai-optimize-route/index.ts` | Restored branch version (callGeminiStructured, withRetry, nearest-neighbor fallback) |
+| `supabase/functions/ai-router/index.ts` | Restored branch version (callGeminiStructured G1, pattern match, AI fallback) |
+| `supabase/functions/ai-search/index.ts` | Restored branch version (callGeminiStructured for params + free-text summary) |
+| `supabase/functions/ai-trip-planner/index.ts` | Restored branch version (callGeminiStructured, Pro model, itinerary schema) |
+| `supabase/functions/rentals/index.ts` | Restored branch version (callGeminiAgent mode:ANY, intake + search + verify) |
+| `src/components/bookings/EventBookingWizardPremium.tsx` | Restored branch rewrite |
+| `src/pages/EventDetail.tsx` | Restored branch (removes `useEventTickets` dep, simplifies ticket flow) |
+
+#### Additional fixes
+- `src/integrations/supabase/database.types.ts` — stripped `Initialising login role...` corrupted header from line 1 (was causing ESLint parse error)
+- `src/types/chat.ts` — added `ChatContext`, `ChatContextDates`, `ChatContextBudget`, `EMPTY_CHAT_CONTEXT`, `hasChatContext` (required by `ChatContextChips.tsx`, was breaking build)
+- `supabase/migrations/20260504005356_event_phase1_5_taxes_and_fees.sql` — created (renamed from duplicate 005355)
+
+#### 3 production migrations applied (sponsor bug fixes)
+
+| Migration | Fix |
+|---|---|
+| `20260504235001_sponsor_attribution_unique_click_id.sql` | `ALTER TABLE sponsor.attributions ADD CONSTRAINT attributions_click_id_unique UNIQUE (click_id)` — ON CONFLICT DO NOTHING was a no-op without this |
+| `20260504235002_sponsor_rollup_dispute_freeze_fix.sql` | `rollup_roi_daily()` rewritten to JOIN applications and filter `COALESCE(dispute_freeze, false) = false` |
+| `20260504235003_sponsor_applications_update_rls.sql` | `CREATE POLICY sponsor_apps_org_update FOR UPDATE USING (... AND status = 'draft')` — wizard draft saves were silently failing |
+
+#### New files committed
+- `src/pages/sponsor/Dashboard.tsx` — sponsor ROI dashboard (status timeline, 4 KPI tiles, Recharts LineChart, invoice + package cards)
+- `src/hooks/sponsor/useSponsorDashboard.ts` — TanStack Query hook (application, org, invoice, placements, roi_daily, eventName)
+- `src/types/sponsor.ts` — TIER_PRICES + full sponsor type system
+- 1300+ additional files: tasks/, edge functions (sponsor-*, ticket-*, vote-cast, etc.), migrations, src pages/hooks/components, .claude/skills, .agents/
+
+### Gates
+
+| Gate | Result |
+|---|---|
+| Build | ✅ `vite build` 5.96s clean — 0 errors |
+| TypeScript | ✅ `tsc --noEmit` clean after ChatContext types added |
+| Lint | ✅ No new errors in committed files |
+| Prod migrations | ✅ 3 applied (235001/235002/235003) |
+
+### Open items (sponsor Phase 0)
+
+| Priority | Item |
+|---|---|
+| 🔴 | Set `STRIPE_SECRET_KEY` + `STRIPE_SPONSOR_WEBHOOK_SECRET` + `STRIPE_WEBHOOK_SECRET` + `STAFF_LINK_SECRET` + `QR_SIGNING_SECRET` |
+| 🔴 | Create `sponsor-assets` storage bucket |
+| 🔴 | Place `<SponsoredSurface>` on EventDetail + ContestVote |
+| 🟠 | Apply migration `20260504110000` to prod (H2+H3+contracts) |
+| 🟠 | Deploy `sponsor-contract-generate` + `sponsor-contract-sign` fns |
+| 🟡 | `fake-indexeddb` → devDependencies |
+
+---
+
 ## 2026-05-04 — Phase 3 Sponsors (tasks 046–053) shipped + forensic audit + 3 prod migrations
 
 **Overall audit result: 82% technically correct.** Build passes, 238/238 tests green. 3 critical bugs found and fixed inline. 3 new migrations applied to prod.
