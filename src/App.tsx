@@ -53,6 +53,9 @@ import {
   AdminCars,
   AdminUsers,
 } from "./pages/admin";
+// Sponsor pages
+import SponsorApply from "./pages/sponsor/Apply";
+import SponsorDashboard from "./pages/sponsor/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -160,6 +163,16 @@ const App = () => (
             <Route path="/admin/events" element={<AdminEvents />} />
             <Route path="/admin/cars" element={<AdminCars />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            {/* Sponsor Routes */}
+            <Route path="/sponsor/apply" element={<SponsorApply />} />
+            <Route
+              path="/sponsor/dashboard/:applicationId"
+              element={
+                <ProtectedRoute>
+                  <SponsorDashboard />
+                </ProtectedRoute>
+              }
+            />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
