@@ -1,4 +1,6 @@
+import { Navigate } from "react-router-dom";
 import { OnboardingProvider, useOnboarding } from "@/context/OnboardingContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
   UserTypeStep,
   StayDurationStep,
@@ -30,6 +32,14 @@ function OnboardingSteps() {
 }
 
 export default function Onboarding() {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+
+  if (user?.user_metadata?.account_type === "landlord") {
+    return <Navigate to="/host/onboarding" replace />;
+  }
+
   return (
     <OnboardingProvider>
       <OnboardingSteps />

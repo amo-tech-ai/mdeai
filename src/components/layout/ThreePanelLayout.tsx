@@ -4,10 +4,4 @@
 
 // Re-export from new location for backwards compatibility
 export { ThreePanelLayout, useThreePanelContext, usePanel } from "@/components/explore/ThreePanelLayout";
-
-// Legacy alias for any code still using the old usePanelContext
-export const usePanelContext = () => {
-  console.warn("usePanelContext is deprecated. Use useThreePanelContext instead.");
-  const { useThreePanelContext } = require("@/components/explore/ThreePanelLayout");
-  return useThreePanelContext();
-};
+export { useThreePanelContext as usePanelContext } from "@/components/explore/ThreePanelLayout";

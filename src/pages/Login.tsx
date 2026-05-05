@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,16 @@ export default function Login() {
   const location = useLocation();
   const { toast } = useToast();
 
-  const from = (location.state as any)?.from?.pathname || "/";
+  // `returnTo` precedence:
+  //   1. ?returnTo=… query string (set by HeroChatPrompt after savePendingPrompt)
+  //   2. ProtectedRoute's location.state.from.pathname (existing path)
+  //   3. account-type default: landlord -> /host/dashboard, renter -> "/"
+  const params = new URLSearchParams(location.search);
+  const rawReturn = params.get("returnTo");
+  const explicitReturn =
+    rawReturn && rawReturn.startsWith("/") && !rawReturn.startsWith("//")
+      ? rawReturn
+      : (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,13 +49,20 @@ export default function Login() {
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
-      navigate(from, { replace: true });
+      let destination = explicitReturn ?? "/";
+      if (!explicitReturn) {
+        const { data } = await supabase.auth.getUser();
+        if (data.user?.user_metadata?.account_type === "landlord") {
+          destination = "/host/dashboard";
+        }
+      }
+      navigate(destination, { replace: true });
     }
   };
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
-    const { error } = await signInWithGoogle();
+    const { error } = await signInWithGoogle(explicitReturn ?? "/");
     if (error) {
       toast({
         title: "Google login failed",

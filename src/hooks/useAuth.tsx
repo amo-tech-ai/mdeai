@@ -1,14 +1,28 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { identifyUser, resetPostHog } from "@/lib/posthog";
+
+export type AccountType = "renter" | "landlord";
+
+interface SignUpOptions {
+  accountType?: AccountType;
+}
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    options?: SignUpOptions,
+  ) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: (
+    redirectTo?: string,
+    options?: SignUpOptions,
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   updatePassword: (password: string) => Promise<{ error: Error | null }>;
@@ -22,31 +36,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener BEFORE checking session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            identifyUser(session.user.id, { email: session.user.email });
+          }
+        } else if (event === 'SIGNED_OUT') {
+          resetPostHog();
+        }
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      if (session?.user) {
+        identifyUser(session.user.id, { email: session.user.email });
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    options?: SignUpOptions,
+  ) => {
+    const accountType: AccountType = options?.accountType ?? "renter";
+    const redirectPath = accountType === "landlord" ? "/host/onboarding" : "/";
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: `${window.location.origin}${redirectPath}`,
+        data: { account_type: accountType },
       },
     });
     return { error };
@@ -60,11 +89,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (
+    redirectTo?: string,
+    options?: SignUpOptions,
+  ) => {
+    const accountType = options?.accountType;
+    const effectiveRedirect =
+      accountType === "landlord" ? "/host/onboarding" : redirectTo;
+    const absolute =
+      effectiveRedirect && effectiveRedirect.startsWith('/')
+        ? `${window.location.origin}${effectiveRedirect}`
+        : effectiveRedirect || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: absolute,
+        queryParams: accountType ? { account_type: accountType } : undefined,
       },
     });
     return { error };
