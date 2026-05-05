@@ -1,0 +1,256 @@
+{
+  "main": {
+    "id": "53ab796e488cdef6",
+    "type": "split",
+    "children": [
+      {
+        "id": "58757635fcfa1649",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4b0ccc33d65088c1",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "todo.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "todo"
+            }
+          },
+          {
+            "id": "53363ce543882f4e",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "events/prompts/notes-3.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "notes-3"
+            }
+          },
+          {
+            "id": "0f32b173ce0cad03",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "events/prompts/sponsor/104-master-implementation-plan.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "104-master-implementation-plan"
+            }
+          }
+        ],
+        "currentTab": 2
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "57624814cfc1150f",
+    "type": "split",
+    "children": [
+      {
+        "id": "b1fbe17986aab550",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e27adcda6b083546",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "de5bba4b8d628345",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "f011f0bd7db87311",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 419.5
+  },
+  "right": {
+    "id": "c374dd5b92cfc48a",
+    "type": "split",
+    "children": [
+      {
+        "id": "a4dacd0ddcfa2d26",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1751544e8b258835",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "skills/06-neighborhood-guide-creator.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 06-neighborhood-guide-creator"
+            }
+          },
+          {
+            "id": "3f1ca328c2b1000e",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "skills/06-neighborhood-guide-creator.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 06-neighborhood-guide-creator"
+            }
+          },
+          {
+            "id": "dc51e06ced4e371e",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "ebecb4e06316d951",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "0f2c4a4319c7fff8",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "skills/06-neighborhood-guide-creator.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 06-neighborhood-guide-creator"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "0f32b173ce0cad03",
+  "lastOpenFiles": [
+    "events/prompts/sponsor/notes-Sponsor Discovery Engine.md.tmp.489064.1777953017466",
+    "events/prompts/sponsor/061-sponsor-activations-plan.md.tmp.489064.1777953010556",
+    "events/prompts/sponsor/064-postiz-openclaw-campaign-system.md.tmp.489064.1777952994210",
+    "events/prompts/sponsor/notes-activation-types.md.tmp.489064.1777952984824",
+    "events/prompts/sponsor/053-sponsor-roi-rollup-cron.md.tmp.489064.1777952971688",
+    "events/prompts/sponsor/045-sponsor-schema-migration.md.tmp.489064.1777952919493",
+    "events/prompts/sponsor/054-sponsor-ai-edge-fns.md.tmp.489064.1777952744246",
+    "events/prompts/sponsor/058-sponsor-dispute-ui.md.tmp.489064.1777952715895",
+    "events/prompts/sponsor/053-sponsor-roi-rollup-cron.md.tmp.489064.1777952708531",
+    "events/prompts/sponsor/100-sponsorship-system.md.tmp.489064.1777952691108",
+    "events/prompts/sponsor/100-sponsorship-system.md.tmp.489064.1777952683227",
+    "events/audit/06-sponsor-audit.md",
+    "events/prompts/sponsor/100-sponsorship-system.md",
+    "events/prompts/sponsor/104-master-implementation-plan.md",
+    "events/prompts/sponsor/103-sponsorflo-feature-analysis.md",
+    "events/prompts/sponsor/102-marketplace-corrections.md",
+    "events/sponsorship/0b566f95-a798-4057-b1c9-d2a2319a6a78.png",
+    "events/sponsorship/caf6c01c-3d1e-4fa6-a192-874618918bdb.png",
+    "events/prompts/sponsor/101-marketplace-strategy.md",
+    "events/prompts/sponsor/notes-sponsor-outreach.md",
+    "events/prompts/sponsor/Top 20 Sponsors in Colombian Beauty Contestssponsor.md",
+    "events/prompts/sponsor/03-sponsorship-system.md",
+    "events/prompts/sponsor/064-postiz-openclaw-campaign-system.md",
+    "events/prompts/sponsor/063-openclaw-sponsor-discovery-engine.md",
+    "events/prompts/sponsor/notes-sponsor-research.md",
+    "events/prompts/sponsor/notes-Sponsor Discovery Engine.md",
+    "events/prompts/sponsor/060-sponsor-discovery-qualification-module.md",
+    "events/prompts/sponsor/062-openclaw-hermes-paperclip-sponsorship-system.md",
+    "events/prompts/sponsor/061-sponsor-activations-plan.md",
+    "events/prompts/sponsor/notes-activation-types.md",
+    "events/sponsorship/sponsorship system**.md",
+    "events/sponsorship/Sponsorship Opportunities.md",
+    "events/prompts/Top 20 Sponsors in Colombian Beauty Contestssponsor.md",
+    "events/prompts/sponsor/README.md",
+    "events/prompts/sponsor/045-sponsor-schema-migration.md",
+    "events/prompts/sponsor/046-sponsor-apply-wizard.md",
+    "notes-4.md",
+    "events/prompts/notes-3.md"
+  ]
+}

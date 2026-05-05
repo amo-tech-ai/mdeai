@@ -1,0 +1,73 @@
+---
+id: MERM-04
+title: Chat Message Lifecycle
+type: sequence
+phase: CORE
+prd_section: "5. AI agent architecture — OpenClaw conversation flows"
+---
+
+sequenceDiagram
+    participant User
+    participant WebApp as mdeai.co<br/>(React)
+    participant Router as ai-router<br/>(Gemini Lite)
+    participant Chat as ai-chat<br/>(Gemini Flash)
+    participant Rentals as rentals<br/>(Edge Fn)
+    participant Hermes as Hermes Agent<br/>(Claude via OpenRouter)
+    participant DB as Supabase<br/>(PostgreSQL)
+    participant OpenClaw as OpenClaw<br/>(WhatsApp)
+
+    Note over User,OpenClaw: Web Channel Flow
+    User->>WebApp: Types message in FloatingChatWidget
+    WebApp->>Router: POST /ai-router<br/>{message, conversation_id}
+
+    Router->>Router: Classify intent (Gemini Lite)
+    Router-->>WebApp: {intent: RENTAL_SEARCH, confidence: 0.85}
+
+    alt intent = RENTAL_SEARCH
+        WebApp->>Chat: POST /ai-chat<br/>{message, intent, context}
+        Chat->>Chat: Build system prompt<br/>(concierge agent)
+
+        Chat->>Rentals: Tool call: search_apartments<br/>{budget, neighborhood, amenities}
+        Rentals->>DB: SELECT with PostGIS + filters
+        DB-->>Rentals: Matching apartments[]
+        Rentals-->>Chat: Structured results
+
+        Chat->>Chat: Format response with<br/>property cards + explanations
+        Chat-->>WebApp: SSE stream:<br/>text + property_cards[]
+        WebApp-->>User: Renders chat message<br/>+ inline listing cards
+
+    else intent = SCHEDULE_SHOWING
+        WebApp->>Chat: POST /ai-chat<br/>{message, intent, listing_id}
+        Chat->>DB: Check host availability<br/>(showings table)
+        DB-->>Chat: Available slots[]
+        Chat-->>WebApp: SSE: "Available: Thu 2pm, Fri 10am"
+        User->>WebApp: Selects Thursday 2pm
+        WebApp->>Chat: POST /showing-create<br/>{listing_id, slot, lead_id}
+        Chat->>DB: INSERT showings (status=proposed)
+        Chat->>OpenClaw: Notify host via WhatsApp
+        OpenClaw-->>Chat: Delivery confirmed
+        Chat-->>WebApp: SSE: "Showing scheduled! Calendar invite sent."
+
+    else intent = GENERAL
+        WebApp->>Chat: POST /ai-chat<br/>{message, intent}
+        Chat->>Chat: Concierge response<br/>(neighborhood tips, FAQ)
+        Chat-->>WebApp: SSE stream: text response
+    end
+
+    WebApp->>DB: Log to conversations + messages
+    WebApp->>DB: Log to ai_runs<br/>(agent, tokens, duration)
+
+    Note over User,OpenClaw: WhatsApp Channel Flow
+    User->>OpenClaw: WhatsApp message<br/>(via Infobip webhook)
+    OpenClaw->>Router: Classify intent
+    Router-->>OpenClaw: {intent, language: "pt"}
+    OpenClaw->>Chat: Forward with channel=whatsapp
+    Chat-->>OpenClaw: Response + property cards
+    OpenClaw->>OpenClaw: Format for WhatsApp<br/>(inline images, quick replies)
+    OpenClaw-->>User: WhatsApp response<br/>with property carousel
+
+    Note over Chat,DB: Confidence < 0.3 triggers human handover
+    Chat->>Chat: confidence = 0.2
+    Chat->>DB: Flag conversation for escalation
+    Chat-->>WebApp: "Let me connect you with our team..."
+    Chat->>OpenClaw: Alert ops team

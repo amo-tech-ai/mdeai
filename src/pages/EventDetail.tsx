@@ -22,16 +22,19 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useEvent } from "@/hooks/useEvents";
+import { useEventTickets } from "@/hooks/useEventTickets";
 import { useIsSaved, useToggleSave } from "@/hooks/useSavedPlaces";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import eventPlaceholder from "@/assets/event-1.jpg";
 import { EventBookingWizardPremium } from "@/components/bookings/EventBookingWizardPremium";
+import { toast } from "sonner";
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: event, isLoading, error } = useEvent(id);
+  const { data: eventTickets = [] } = useEventTickets(id);
   const { user } = useAuth();
   const { data: isSaved = false } = useIsSaved(id || "", "event");
   const toggleSave = useToggleSave();
@@ -49,7 +52,15 @@ export default function EventDetail() {
 
   const handleGetTickets = () => {
     if (!user) return;
-    setShowBookingWizard(true);
+    // P1: if this event has internal ticket tiers, use the wizard (will call ticket-checkout).
+    // Legacy: if no internal tiers but has external URL, open that. Otherwise toast.
+    if (eventTickets.length > 0) {
+      setShowBookingWizard(true);
+    } else if (event?.ticket_url) {
+      window.open(event.ticket_url, "_blank", "noopener,noreferrer");
+    } else {
+      toast("Tickets coming soon");
+    }
   };
 
   const getEventTypeColor = (type: string | null) => {
@@ -369,7 +380,7 @@ export default function EventDetail() {
         {/* Booking Wizard Dialog */}
         <Dialog open={showBookingWizard} onOpenChange={setShowBookingWizard}>
           <DialogContent className="max-w-6xl h-[90vh] p-0 overflow-hidden">
-            <EventBookingWizardPremium 
+            <EventBookingWizardPremium
               event={{
                 id: event.id,
                 name: event.name,
@@ -377,11 +388,11 @@ export default function EventDetail() {
                 event_end_time: event.event_end_time || undefined,
                 address: event.address || undefined,
                 venue_name: event.address || undefined,
-                ticket_price_min: event.ticket_price_min || undefined,
-                ticket_price_max: event.ticket_price_max || undefined,
                 primary_image_url: event.primary_image_url || undefined,
                 category: event.event_type || undefined,
               }}
+              tickets={eventTickets}
+              user={user}
               onComplete={() => setShowBookingWizard(false)}
               onCancel={() => setShowBookingWizard(false)}
             />

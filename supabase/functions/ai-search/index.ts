@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { callGeminiStructured, geminiClient, withRetry } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,8 +49,32 @@ function getSupabaseClient(authHeader: string | null) {
   });
 }
 
-// Extract search parameters using Gemini
-async function extractSearchParams(query: string): Promise<{
+// JSON schema for structured search-param extraction (G1).
+const searchParamsSchema = {
+  type: "object",
+  properties: {
+    keywords: { type: "array", items: { type: "string" } },
+    domain: {
+      type: ["string", "null"],
+      enum: ["apartments", "cars", "restaurants", "events", null],
+    },
+    neighborhood: { type: ["string", "null"] },
+    priceRange: {
+      type: "object",
+      properties: {
+        min: { type: ["number", "null"] },
+        max: { type: ["number", "null"] },
+      },
+    },
+    cuisineType: { type: ["string", "null"] },
+    eventType: { type: ["string", "null"] },
+    vehicleType: { type: ["string", "null"] },
+  },
+  required: ["keywords"],
+  additionalProperties: false,
+};
+
+interface ExtractedSearchParams {
   keywords: string[];
   domain: string | null;
   neighborhood: string | null;
@@ -57,72 +82,12 @@ async function extractSearchParams(query: string): Promise<{
   cuisineType: string | null;
   eventType: string | null;
   vehicleType: string | null;
-}> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  
-  if (!GEMINI_API_KEY) {
-    // Fallback to simple extraction
-    return {
-      keywords: query.toLowerCase().split(/\s+/).filter(w => w.length > 2),
-      domain: null,
-      neighborhood: null,
-      priceRange: { min: null, max: null },
-      cuisineType: null,
-      eventType: null,
-      vehicleType: null,
-    };
-  }
+}
 
-  try {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are a search query analyzer for a Medellín travel app. Extract structured search parameters from natural language queries.
-            
-Respond with JSON only:
-{
-  "keywords": ["array", "of", "important", "words"],
-  "domain": "apartments|cars|restaurants|events|null",
-  "neighborhood": "El Poblado|Laureles|Envigado|null",
-  "priceRange": { "min": number|null, "max": number|null },
-  "cuisineType": "Colombian|Italian|Japanese|etc|null",
-  "eventType": "concert|festival|cultural|null",
-  "vehicleType": "sedan|SUV|luxury|null"
-}`
-          },
-          { role: "user", content: query }
-        ],
-        max_tokens: 300,
-        temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`AI Gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "{}";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch (error) {
-    console.error("AI extraction failed:", error);
-  }
-
-  // Fallback
+// Default fallback when Gemini is unavailable or errors out.
+function fallbackSearchParams(query: string): ExtractedSearchParams {
   return {
-    keywords: query.toLowerCase().split(/\s+/).filter(w => w.length > 2),
+    keywords: query.toLowerCase().split(/\s+/).filter((w) => w.length > 2),
     domain: null,
     neighborhood: null,
     priceRange: { min: null, max: null },
@@ -130,6 +95,47 @@ Respond with JSON only:
     eventType: null,
     vehicleType: null,
   };
+}
+
+// Extract search parameters using Gemini
+async function extractSearchParams(query: string): Promise<ExtractedSearchParams> {
+  if (!Deno.env.get("GEMINI_API_KEY")) {
+    return fallbackSearchParams(query);
+  }
+
+  const systemInstruction =
+    `You are a search query analyzer for a Medellín travel app. ` +
+    `Extract structured search parameters from natural language queries.\n\n` +
+    `Map vague price words to ranges (cheap=$0-50, mid=$50-150, luxury=$150+).\n` +
+    `Common neighborhoods: El Poblado, Laureles, Envigado, Sabaneta, Belén.\n` +
+    `Common cuisines: Colombian, Italian, Japanese, Mexican, Mediterranean, Seafood, Vegetarian.\n` +
+    `Set fields to null when no signal — never guess.`;
+
+  try {
+    const result = await withRetry(() =>
+      callGeminiStructured<ExtractedSearchParams>({
+        model: "gemini-3-flash-preview",
+        prompt: query,
+        systemInstruction,
+        responseJsonSchema: searchParamsSchema, // G1
+        thinkingLevel: "low",
+        agentName: "search_param_extractor",
+        timeoutMs: 10_000,
+      })
+    );
+
+    // Make sure keywords field is always populated even if model omitted it.
+    return {
+      ...fallbackSearchParams(query),
+      ...result.data,
+      keywords: result.data.keywords?.length
+        ? result.data.keywords
+        : fallbackSearchParams(query).keywords,
+    };
+  } catch (error) {
+    console.error("AI extraction failed:", error);
+    return fallbackSearchParams(query);
+  }
 }
 
 // Search apartments
@@ -299,48 +305,40 @@ async function searchEvents(
   }));
 }
 
-// Generate AI summary of results
+// Generate AI summary of results using a free-text (non-structured) call.
+// Summary doesn't need a JSON schema — it's a 1-2 sentence string.
 async function generateSummary(query: string, results: SearchResult[]): Promise<string> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  
-  if (!GEMINI_API_KEY || results.length === 0) {
-    return results.length === 0 
+  if (!Deno.env.get("GEMINI_API_KEY") || results.length === 0) {
+    return results.length === 0
       ? "No results found for your search. Try broadening your criteria."
       : `Found ${results.length} results matching your search.`;
   }
 
   try {
-    const resultSummary = results.slice(0, 5).map(r => 
-      `- ${r.title} (${r.type}): ${r.price ? `$${r.price}` : "Price varies"}, Rating: ${r.rating || "N/A"}`
+    const resultSummary = results.slice(0, 5).map((r) =>
+      `- ${r.title} (${r.type}): ${r.price ? `$${r.price}` : "Price varies"}, Rating: ${r.rating ?? "N/A"}`
     ).join("\n");
 
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful travel assistant. Provide a brief, friendly 1-2 sentence summary of search results for Medellín, Colombia. Be concise and highlight the best options."
-          },
-          {
-            role: "user",
-            content: `User searched for: "${query}"\n\nTop results:\n${resultSummary}\n\nProvide a brief summary.`
-          }
-        ],
-        max_tokens: 150,
-        temperature: 0.7,
-      }),
-    });
+    const prompt = `User searched for: "${query}"\n\nTop results:\n${resultSummary}\n\nProvide a brief summary.`;
 
-    if (response.ok) {
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || `Found ${results.length} great options!`;
-    }
+    const response = await Promise.race([
+      geminiClient().models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          systemInstruction:
+            "You are a helpful travel assistant. Provide a brief, friendly 1-2 sentence summary of search results for Medellín, Colombia. Be concise and highlight the best options.",
+          thinkingConfig: { thinkingLevel: "low" },
+          // No temperature — G2.
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("GEMINI_TIMEOUT")), 10_000)
+      ),
+    ]);
+
+    const text = (response as { text?: string }).text;
+    return text?.trim() || `Found ${results.length} great options!`;
   } catch (error) {
     console.error("Summary generation failed:", error);
   }

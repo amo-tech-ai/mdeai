@@ -47,3 +47,40 @@ export const agentTypeToTab: Record<string, ChatTab> = {
   local_scout: 'explore',
   booking_assistant: 'bookings',
 };
+
+// ─── Persistent context chips ─────────────────────────────────────────────
+// Neighborhood, dates, travelers, budget — rendered as chips above the
+// message list; values flow into every tool call via the ai-chat request.
+
+export interface ChatContextDates {
+  start?: string | null;
+  end?: string | null;
+}
+
+export interface ChatContextBudget {
+  min?: number | null;
+  max?: number | null;
+}
+
+export interface ChatContext {
+  neighborhood?: string | null;
+  dates?: ChatContextDates | null;
+  travelers?: number | null;
+  budget?: ChatContextBudget | null;
+}
+
+export const EMPTY_CHAT_CONTEXT: ChatContext = {
+  neighborhood: null,
+  dates: null,
+  travelers: null,
+  budget: null,
+};
+
+export function hasChatContext(ctx: ChatContext | null | undefined): boolean {
+  if (!ctx) return false;
+  if (ctx.neighborhood && ctx.neighborhood.trim().length > 0) return true;
+  if (ctx.travelers != null) return true;
+  if (ctx.dates && (ctx.dates.start || ctx.dates.end)) return true;
+  if (ctx.budget && (ctx.budget.min != null || ctx.budget.max != null)) return true;
+  return false;
+}

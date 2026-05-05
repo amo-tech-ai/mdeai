@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { callGeminiAgent, withRetry } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,11 +107,63 @@ RULES:
 5. Default furnished to true for nomads/expats
 6. Default currency to USD unless they mention pesos`;
 
+// Function declaration for the intake agent. Forced via mode: "ANY" so the
+// model always returns structured analysis (never raw text).
+const ANALYZE_CRITERIA_DECLARATION = {
+  name: "analyze_criteria",
+  description:
+    "Analyze user criteria and return structured search parameters or next questions",
+  parameters: {
+    type: "object",
+    properties: {
+      filter_json: {
+        type: "object",
+        description: "Structured search filters when ready",
+        properties: {
+          bedrooms_min: { type: "number" },
+          bedrooms_max: { type: "number" },
+          budget_min: { type: "number" },
+          budget_max: { type: "number" },
+          currency: { type: "string", enum: ["USD", "COP"] },
+          neighborhoods: { type: "array", items: { type: "string" } },
+          furnished: { type: "boolean" },
+          amenities: { type: "array", items: { type: "string" } },
+          pets: { type: "boolean" },
+          parking: { type: "boolean" },
+        },
+      },
+      next_questions: {
+        type: "array",
+        items: { type: "string" },
+        description: "2-3 follow-up questions if more info needed",
+      },
+      ready_to_search: {
+        type: "boolean",
+        description: "True if we have enough info to search",
+      },
+      reasoning: {
+        type: "string",
+        description: "Brief explanation of what info we have/need",
+      },
+    },
+    required: ["ready_to_search"],
+  },
+};
+
+// Map OpenAI-compat `messages` shape to native Gemini `contents`.
+// System prompts go into `systemInstruction` separately.
+function toGeminiContents(messages: Message[]): Array<
+  { role: "user" | "model"; parts: Array<Record<string, unknown>> }
+> {
+  return messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+}
+
 async function runIntakeAgent(messages: Message[]): Promise<IntakeResult> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!GEMINI_API_KEY) {
+  if (!Deno.env.get("GEMINI_API_KEY")) {
     console.error("GEMINI_API_KEY not configured");
-    // Return fallback questions
     return {
       filter_json: null,
       next_questions: [
@@ -123,89 +176,38 @@ async function runIntakeAgent(messages: Message[]): Promise<IntakeResult> {
     };
   }
 
-  const aiMessages = [
-    { role: "system", content: INTAKE_SYSTEM_PROMPT },
-    ...messages,
-  ];
-
   try {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const result = await withRetry(() =>
+      callGeminiAgent({
         model: "gemini-3.1-pro-preview",
-        messages: aiMessages,
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "analyze_criteria",
-              description: "Analyze user criteria and return structured search parameters or next questions",
-              parameters: {
-                type: "object",
-                properties: {
-                  filter_json: {
-                    type: "object",
-                    description: "Structured search filters when ready",
-                    properties: {
-                      bedrooms_min: { type: "number" },
-                      bedrooms_max: { type: "number" },
-                      budget_min: { type: "number" },
-                      budget_max: { type: "number" },
-                      currency: { type: "string", enum: ["USD", "COP"] },
-                      neighborhoods: { type: "array", items: { type: "string" } },
-                      furnished: { type: "boolean" },
-                      amenities: { type: "array", items: { type: "string" } },
-                      pets: { type: "boolean" },
-                      parking: { type: "boolean" },
-                    },
-                  },
-                  next_questions: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "2-3 follow-up questions if more info needed",
-                  },
-                  ready_to_search: {
-                    type: "boolean",
-                    description: "True if we have enough info to search",
-                  },
-                  reasoning: {
-                    type: "string",
-                    description: "Brief explanation of what info we have/need",
-                  },
-                },
-                required: ["ready_to_search"],
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "analyze_criteria" } },
-      }),
-    });
+        contents: toGeminiContents(messages),
+        systemInstruction: INTAKE_SYSTEM_PROMPT,
+        functionDeclarations: [ANALYZE_CRITERIA_DECLARATION],
+        mode: "ANY",
+        allowedFunctionNames: ["analyze_criteria"],
+        thinkingLevel: "medium",
+        agentName: "rentals_intake",
+        timeoutMs: 30_000,
+      })
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    
-    if (toolCall?.function?.arguments) {
-      const args = JSON.parse(toolCall.function.arguments);
+    const call = result.functionCalls.find((c) => c.name === "analyze_criteria");
+    if (call?.args) {
+      const args = call.args as {
+        filter_json?: FilterJson;
+        next_questions?: string[];
+        ready_to_search?: boolean;
+        reasoning?: string;
+      };
       return {
-        filter_json: args.filter_json || null,
-        next_questions: args.next_questions || null,
-        ready_to_search: args.ready_to_search || false,
+        filter_json: args.filter_json ?? null,
+        next_questions: args.next_questions ?? null,
+        ready_to_search: args.ready_to_search ?? false,
         reasoning: args.reasoning,
       };
     }
 
-    // Fallback if no tool call
+    // Fallback if no tool call (mode:ANY should prevent this, but defend anyway)
     return {
       filter_json: null,
       next_questions: ["What are you looking for in an apartment?"],
@@ -232,7 +234,7 @@ async function runIntakeAgent(messages: Message[]): Promise<IntakeResult> {
 
 async function executeSearch(filterJson: FilterJson, limit = 50) {
   const service = getServiceClient();
-  
+
   let query = service
     .from("apartments")
     .select("*")
@@ -242,41 +244,41 @@ async function executeSearch(filterJson: FilterJson, limit = 50) {
   if (filterJson.neighborhoods?.length) {
     query = query.in("neighborhood", filterJson.neighborhoods);
   }
-  
+
   if (filterJson.bedrooms_min !== undefined) {
     query = query.gte("bedrooms", filterJson.bedrooms_min);
   }
-  
+
   if (filterJson.bedrooms_max !== undefined) {
     query = query.lte("bedrooms", filterJson.bedrooms_max);
   }
-  
+
   if (filterJson.budget_max !== undefined) {
     query = query.lte("price_monthly", filterJson.budget_max);
   }
-  
+
   if (filterJson.budget_min !== undefined) {
     query = query.gte("price_monthly", filterJson.budget_min);
   }
-  
+
   if (filterJson.furnished !== undefined) {
     query = query.eq("furnished", filterJson.furnished);
   }
-  
+
   if (filterJson.pets) {
     query = query.eq("pet_friendly", true);
   }
-  
+
   if (filterJson.parking) {
     query = query.eq("parking_included", true);
   }
-  
+
   if (filterJson.verified_only) {
     query = query.eq("freshness_status", "active");
   }
 
   const { data: listings, error } = await query.limit(limit);
-  
+
   if (error) {
     console.error("Search query error:", error);
     throw error;
@@ -284,14 +286,14 @@ async function executeSearch(filterJson: FilterJson, limit = 50) {
 
   // Generate map pins
   const mapPins: MapPin[] = (listings || [])
-    .filter((l: any) => l.latitude && l.longitude)
-    .map((l: any) => ({
-      id: l.id,
+    .filter((l: Record<string, unknown>) => l.latitude && l.longitude)
+    .map((l: Record<string, unknown>) => ({
+      id: l.id as string,
       lat: Number(l.latitude),
       lng: Number(l.longitude),
       price: Number(l.price_monthly) || 0,
-      bedrooms: l.bedrooms || 0,
-      freshness_status: l.freshness_status || "unconfirmed",
+      bedrooms: (l.bedrooms as number) || 0,
+      freshness_status: (l.freshness_status as string) || "unconfirmed",
     }));
 
   // Calculate facets
@@ -320,9 +322,9 @@ async function executeSearch(filterJson: FilterJson, limit = 50) {
     filters_available: {
       neighborhoods: Array.from(neighborhoodCounts).map(([value, count]) => ({ value, count })),
       bedrooms: Array.from(bedroomCounts).map(([value, count]) => ({ value, count })),
-      price_range: { 
-        min: priceMin === Infinity ? 0 : priceMin, 
-        max: priceMax 
+      price_range: {
+        min: priceMin === Infinity ? 0 : priceMin,
+        max: priceMax
       },
     },
   };
@@ -500,15 +502,13 @@ Deno.serve(async (req) => {
 
     // Actions that require authentication
     const authRequiredActions = ["intake", "verify"];
-    
+
     if (authRequiredActions.includes(action) && !authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log(`Rentals action: ${action}`);
 
     console.log(`Rentals action: ${action}`);
 
@@ -534,7 +534,7 @@ Deno.serve(async (req) => {
         const userId = authHeader ? await getUserId(authHeader) : null;
 
         const searchResult = await executeSearch(filterJson, limit);
-        const resultIds = searchResult.listings.map((l: any) => l.id);
+        const resultIds = searchResult.listings.map((l: Record<string, unknown>) => l.id);
 
         // Store search session if user is authenticated
         let jobId = null;
@@ -596,7 +596,7 @@ Deno.serve(async (req) => {
 
         // Fetch listings by IDs
         const resultIds = (session.result_ids as string[]) || [];
-        let listings: any[] = [];
+        let listings: Record<string, unknown>[] = [];
         if (resultIds.length > 0) {
           const { data } = await service
             .from("apartments")
@@ -608,12 +608,12 @@ Deno.serve(async (req) => {
         const mapPins: MapPin[] = listings
           .filter((l) => l.latitude && l.longitude)
           .map((l) => ({
-            id: l.id,
+            id: l.id as string,
             lat: Number(l.latitude),
             lng: Number(l.longitude),
             price: Number(l.price_monthly) || 0,
-            bedrooms: l.bedrooms || 0,
-            freshness_status: l.freshness_status || "unconfirmed",
+            bedrooms: (l.bedrooms as number) || 0,
+            freshness_status: (l.freshness_status as string) || "unconfirmed",
           }));
 
         return new Response(
@@ -688,9 +688,9 @@ Deno.serve(async (req) => {
 
       default:
         return new Response(
-          JSON.stringify({ 
-            error: "Unknown action", 
-            available_actions: ["intake", "search", "result", "verify", "listing"] 
+          JSON.stringify({
+            error: "Unknown action",
+            available_actions: ["intake", "search", "result", "verify", "listing"]
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -698,8 +698,8 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Rentals function error:", error);
     return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Internal server error" 
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error"
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

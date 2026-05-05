@@ -1,9 +1,33 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { callGeminiStructured, withRetry } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// JSON schema for the AI optimization output (G1).
+const optimizationSchema = {
+  type: "object",
+  properties: {
+    order: {
+      type: "array",
+      items: { type: "integer", minimum: 1 },
+      description: "1-indexed positions of items in their optimal sequence",
+    },
+    reasoning: {
+      type: "string",
+      description: "Brief explanation of the optimization logic",
+    },
+  },
+  required: ["order", "reasoning"],
+  additionalProperties: false,
+};
+
+interface OptimizationSchemaShape {
+  order: number[];
+  reasoning: string;
+}
 
 // Haversine formula for distance calculation
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -63,7 +87,7 @@ serve(async (req) => {
 
     if (!items || items.length < 2) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           optimizedOrder: items?.map(i => i.id) || [],
           explanation: "Need at least 2 items to optimize route.",
           savings: { distanceKm: 0, timeMinutes: 0 }
@@ -92,18 +116,18 @@ serve(async (req) => {
 
     // Use AI to suggest optimal order with context
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    
+
     if (!GEMINI_API_KEY) {
       // Fallback: Use nearest neighbor algorithm
       const optimized = nearestNeighborOptimize(itemsWithCoords, preferences?.startLocation);
       const newDistance = calculateTotalDistance(optimized);
       const savings = originalDistance - newDistance;
-      
+
       return new Response(
         JSON.stringify({
           optimizedOrder: [...optimized.map(i => i.id), ...itemsWithoutCoords.map(i => i.id)],
           explanation: `Route optimized using nearest-neighbor algorithm. Estimated savings: ${savings.toFixed(1)} km.`,
-          savings: { 
+          savings: {
             distanceKm: Math.max(0, savings),
             timeMinutes: Math.round(Math.max(0, savings) / 25 * 60)
           }
@@ -113,11 +137,11 @@ serve(async (req) => {
     }
 
     // Build prompt for AI
-    const itemDescriptions = itemsWithCoords.map((item, idx) => 
+    const itemDescriptions = itemsWithCoords.map((item, idx) =>
       `${idx + 1}. "${item.title}" (${item.item_type}) at coordinates (${item.latitude}, ${item.longitude})`
     ).join("\n");
 
-    const systemPrompt = `You are an expert route optimizer for Medellín, Colombia. Given a list of activities with their coordinates, suggest the optimal order to visit them to minimize total travel time and distance.
+    const systemInstruction = `You are an expert route optimizer for Medellín, Colombia. Given a list of activities with their coordinates, suggest the optimal order to visit them to minimize total travel time and distance.
 
 Consider:
 - Geographic clustering (visit nearby places together)
@@ -125,78 +149,60 @@ Consider:
 - Logical meal timing (restaurants around lunch/dinner hours)
 - Activity types (start with outdoor activities in morning when cooler)
 
-Respond ONLY with a JSON object in this exact format:
-{
-  "order": [1, 3, 2, 4],
-  "reasoning": "Brief explanation of the optimization logic"
-}
-
-Where "order" is an array of the original position numbers (1-indexed) in the optimal sequence.`;
+The "order" array contains the original position numbers (1-indexed) in the optimal sequence.`;
 
     const userPrompt = `Optimize this itinerary for ${dayDate}:
 
 ${itemDescriptions}
 
-${preferences?.startLocation ? `Starting from coordinates: (${preferences.startLocation.lat}, ${preferences.startLocation.lng})` : ""}
+${preferences?.startLocation ? `Starting from coordinates: (${preferences.startLocation.lat}, ${preferences.startLocation.lng})` : ""}`;
 
-Return the optimal order as a JSON object.`;
+    let optimizationResult: OptimizationSchemaShape;
+    try {
+      const result = await withRetry(() =>
+        callGeminiStructured<OptimizationSchemaShape>({
+          model: "gemini-3-flash-preview",
+          prompt: userPrompt,
+          systemInstruction,
+          responseJsonSchema: optimizationSchema, // G1
+          thinkingLevel: "low",
+          agentName: "route_optimizer",
+          timeoutMs: 15_000,
+        })
+      );
+      optimizationResult = result.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = (err as { status?: number })?.status;
 
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.3,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
+      // Surface explicit rate / credit errors so the UI can render them.
+      if (status === 429 || message === "RESOURCE_EXHAUSTED") {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
+      if (status === 402) {
         return new Response(
           JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      throw new Error("AI gateway error");
-    }
 
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content || "";
-
-    // Parse AI response
-    let optimizationResult: { order: number[]; reasoning: string };
-    try {
-      // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
-      optimizationResult = JSON.parse(jsonMatch[0]);
-    } catch {
-      // Fallback to nearest neighbor if AI response parsing fails
+      // Fallback to nearest neighbor on schema/parse/timeout errors
+      console.error("AI optimization failed, using nearest-neighbor:", message);
       const optimized = nearestNeighborOptimize(itemsWithCoords, preferences?.startLocation);
       const newDistance = calculateTotalDistance(optimized);
       const savings = originalDistance - newDistance;
-      
+
       return new Response(
         JSON.stringify({
           optimizedOrder: [...optimized.map(i => i.id), ...itemsWithoutCoords.map(i => i.id)],
           explanation: `Route optimized algorithmically. Estimated savings: ${savings.toFixed(1)} km.`,
-          savings: { 
+          savings: {
             distanceKm: Math.max(0, savings),
-            timeMinutes: Math.round(Math.max(0, savings) / 25 * 60)
-          }
+            timeMinutes: Math.round(Math.max(0, savings) / 25 * 60),
+          },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -235,7 +241,7 @@ Return the optimal order as a JSON object.`;
 
 // Nearest neighbor algorithm as fallback
 function nearestNeighborOptimize(
-  items: TripItemInput[], 
+  items: TripItemInput[],
   startLocation?: { lat: number; lng: number }
 ): TripItemInput[] {
   if (items.length <= 1) return items;
@@ -245,7 +251,7 @@ function nearestNeighborOptimize(
 
   // Start with the item closest to start location, or first item
   let current: { lat: number; lng: number };
-  
+
   if (startLocation) {
     current = startLocation;
   } else {

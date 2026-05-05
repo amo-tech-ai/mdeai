@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# ~/bin/git — Safe git wrapper.
+#
+# Intercepts dangerous git invocations that have caused data loss in
+# this user's repos. Validated against best practices from git-scm.com,
+# Atlassian, and the open Claude Code platform safety issue
+# (anthropics/claude-code#11821).
+#
+# What it blocks:
+#   - git stash -u / -a / --include-untracked / --all
+#       → swept tasks/ on 2026-04-29 (700+ files into stash@{2}^3)
+#   - git clean -f / -fd / -fdx / etc.
+#       → no-recovery delete of untracked files
+#
+# What it does NOT block (intentional):
+#   - git stash (no -u/-a) — safe; only stashes tracked changes
+#   - git clean -n / -nd — dry run, shows what *would* be deleted
+#   - git status / git log / etc. — read-only
+#   - Manual override: command git ... or REAL_GIT directly
+#
+# Created: 2026-05-02 (after the 2nd visible files-vanished incident).
+# To uninstall: rm ~/bin/git
+# To bypass once: command git ...   OR   /usr/bin/git ...
+
+set -e
+REAL_GIT=/usr/bin/git
+
+block() {
+  # $1 = subcommand (stash|clean), $2 = the offending flag, rest = full original args
+  local cmd="$1"; shift
+  local flag="$1"; shift
+  local full_args="$*"
+  echo ""                                                          >&2
+  echo "❌ Blocked: 'git $full_args'"                              >&2
+  echo "   The flag '$flag' is destructive and has caused data loss" >&2
+  echo "   in this user's repos. See ~/mde/CLAUDE.md absolute rule." >&2
+  echo ""                                                          >&2
+  echo "   Safer alternatives:"                                    >&2
+  echo "     git status -uall          # see what would be touched" >&2
+  if [ "$cmd" = "stash" ]; then
+    echo "     git stash push -m 'msg'   # stash TRACKED changes only (safe)" >&2
+    echo "     git add <path> && git commit -m '...'  # commit important files first" >&2
+  elif [ "$cmd" = "clean" ]; then
+    echo "     git clean -nd             # DRY RUN — show what clean would delete" >&2
+    echo "     git clean -ni             # INTERACTIVE — confirm each file" >&2
+  fi
+  echo ""                                                          >&2
+  echo "   Override (only if you really mean it):"                 >&2
+  echo "     command git $full_args"                               >&2
+  echo "     $REAL_GIT $full_args"                                 >&2
+  echo ""                                                          >&2
+  exit 1
+}
+
+# Inspect args. We only block specific subcommand+flag combos.
+case "$1" in
+  stash)
+    for arg in "$@"; do
+      case "$arg" in
+        -u|-a|--include-untracked|--all)
+          block stash "$arg" "$*" ;;
+        # Combined short flags that contain u or a
+        -au|-ua|-uk|-ku|-ak|-ka|-akm|-aum|-uam|-akm)
+          block stash "$arg" "$*" ;;
+        # Catch -ux, -ax, -uax, -aux, etc. (any combined flag with u or a)
+        -*[ua]*)
+          # Skip non-flag args and benign flags. -m is fine, -k is fine alone.
+          if [[ "$arg" =~ ^-[ukam]+$ ]] && [[ "$arg" =~ [ua] ]]; then
+            block stash "$arg" "$*"
+          fi
+          ;;
+      esac
+    done
+    ;;
+  clean)
+    for arg in "$@"; do
+      case "$arg" in
+        -f|--force)
+          block clean "$arg" "$*" ;;
+        # Combined short flags containing f
+        -*f*)
+          block clean "$arg" "$*" ;;
+      esac
+    done
+    ;;
+esac
+
+# Pass through everything else unchanged.
+exec "$REAL_GIT" "$@"

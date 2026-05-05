@@ -1,0 +1,226 @@
+---
+id: MERM-08
+title: Frontend Component Hierarchy
+type: classDiagram
+phase: CORE
+prd_section: "4. Feature inventory, 7. Technical specifications"
+---
+
+classDiagram
+    direction TB
+
+    class App {
+        +AuthProvider
+        +QueryClientProvider
+        +TripProvider
+        +ThreePanelProvider
+        +Routes
+    }
+
+    class ThreePanelLayout {
+        +ReactNode leftPanel
+        +ReactNode mainPanel
+        +ReactNode rightPanel
+        +boolean collapsed
+        +togglePanel()
+    }
+
+    %% ==========================================
+    %% RENTAL PAGES
+    %% ==========================================
+
+    class RentalsPage {
+        +CoffeeFilters filters
+        +useCoffee() hook
+        +handleSearch()
+    }
+
+    class RentalsIntakeWizard {
+        +string userMessage
+        +FilterJson extractedCriteria
+        +boolean isProcessing
+        +parseWithGemini()
+        +createLead()
+    }
+
+    class RentalsSearchResults {
+        +Apartment[] results
+        +SortOption sortBy
+        +boolean isLoading
+        +handleSort()
+        +handleCardClick()
+    }
+
+    class RentalsListingDetail {
+        +Apartment apartment
+        +boolean showGallery
+        +handleScheduleShowing()
+        +handleApply()
+    }
+
+    %% ==========================================
+    %% NEW COMPONENTS — P0
+    %% ==========================================
+
+    class ShowingScheduler {
+        +Apartment apartment
+        +TimeSlot[] availableSlots
+        +selectSlot()
+        +confirmShowing()
+    }
+
+    class ApplicationWizard {
+        +number currentStep
+        +PersonalInfo personal
+        +File[] documents
+        +Reference[] references
+        +nextStep()
+        +submitApplication()
+    }
+
+    class MapView {
+        +LatLng center
+        +Apartment[] pins
+        +number zoom
+        +PricePin[] markers
+        +handlePinClick()
+    }
+
+    class PricePin {
+        +number price
+        +string currency
+        +boolean selected
+        +handleClick()
+    }
+
+    class ModerationQueue {
+        +Listing[] pending
+        +approve()
+        +reject()
+        +requestChanges()
+    }
+
+    class NeighborhoodCard {
+        +Neighborhood data
+        +number safetyScore
+        +number walkabilityScore
+        +number nomadScore
+        +number avgPrice
+    }
+
+    class PaymentButton {
+        +number amount
+        +string currency
+        +string stripeClientSecret
+        +handlePayment()
+    }
+
+    class BookingConfirmation {
+        +Booking booking
+        +Payment payment
+        +showMoveInChecklist()
+    }
+
+    %% ==========================================
+    %% NEW COMPONENTS — P1
+    %% ==========================================
+
+    class LandlordDashboard {
+        +KPICard[] metrics
+        +Listing[] myListings
+        +Booking[] requests
+        +Payout[] payouts
+    }
+
+    class LeaseReviewCard {
+        +LeaseReview review
+        +string riskScore
+        +RiskFlag[] flags
+        +string summaryEn
+        +string summaryEs
+    }
+
+    class HermesScoreBreakdown {
+        +number compositeScore
+        +FactorScore[] factors
+        +string explanation
+    }
+
+    %% ==========================================
+    %% AI / CHAT COMPONENTS
+    %% ==========================================
+
+    class FloatingChatWidget {
+        +boolean isOpen
+        +Conversation conversation
+        +toggleOpen()
+        +sendMessage()
+    }
+
+    class AIProposalCard {
+        +Suggestion suggestion
+        +onAccept()
+        +onDismiss()
+        +onUndo()
+    }
+
+    %% ==========================================
+    %% SHARED UI (shadcn/ui)
+    %% ==========================================
+
+    class Button {
+        +variant: default|destructive|outline|secondary|ghost|link
+        +size: default|sm|lg|icon
+    }
+
+    class Card {
+        +CardHeader
+        +CardContent
+        +CardFooter
+    }
+
+    class Dialog {
+        +boolean open
+        +onOpenChange()
+    }
+
+    class Skeleton {
+        +string className
+    }
+
+    %% ==========================================
+    %% RELATIONSHIPS
+    %% ==========================================
+
+    App --> ThreePanelLayout
+    App --> FloatingChatWidget
+
+    ThreePanelLayout --> RentalsPage
+    RentalsPage --> RentalsIntakeWizard
+    RentalsPage --> RentalsSearchResults
+    RentalsPage --> MapView
+
+    RentalsSearchResults --> Card
+    RentalsSearchResults --> HermesScoreBreakdown
+    RentalsSearchResults --> NeighborhoodCard
+
+    RentalsListingDetail --> ShowingScheduler
+    RentalsListingDetail --> ApplicationWizard
+    RentalsListingDetail --> PaymentButton
+    RentalsListingDetail --> LeaseReviewCard
+
+    MapView --> PricePin
+
+    ApplicationWizard --> BookingConfirmation
+    PaymentButton --> BookingConfirmation
+
+    LandlordDashboard --> ModerationQueue
+    LandlordDashboard --> Card
+
+    FloatingChatWidget --> AIProposalCard
+
+    ShowingScheduler --> Button
+    ShowingScheduler --> Dialog
+    ApplicationWizard --> Button
+    ModerationQueue --> Button
+    ModerationQueue --> Dialog

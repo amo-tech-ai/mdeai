@@ -1,66 +1,140 @@
+import { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Provider as GadgetProvider } from "@gadgetinc/react";
-import { gadgetApi } from "@/integrations/gadget/client";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+// Gadget client + provider are NO longer eager-imported here. They live
+// inside <CoffeeShell> (lazy-loaded below) so the ~24 KB gzip gadget
+// chunk only ships on `/coffee*` routes. See vite.config.ts manualChunks.
 import { AuthProvider } from "@/hooks/useAuth";
 import { TripProvider } from "@/context/TripContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
-import Index from "./pages/Index";
-import Dashboard from "./pages/Dashboard";
-import Onboarding from "./pages/Onboarding";
-import Explore from "./pages/Explore";
-import Apartments from "./pages/Apartments";
-import ApartmentDetail from "./pages/ApartmentDetail";
-import Rentals from "./pages/Rentals";
-import Coffee from "./pages/Coffee";
-import CoffeeDetail from "./pages/CoffeeDetail";
-import Cars from "./pages/Cars";
-import CarDetail from "./pages/CarDetail";
-import Restaurants from "./pages/Restaurants";
-import RestaurantDetail from "./pages/RestaurantDetail";
-import Events from "./pages/Events";
-import EventDetail from "./pages/EventDetail";
-import PlaceDetail from "./pages/PlaceDetail";
-import Saved from "./pages/Saved";
-import Collections from "./pages/Collections";
-import Trips from "./pages/Trips";
-import TripDetail from "./pages/TripDetail";
-import TripNew from "./pages/TripNew";
-import Bookings from "./pages/Bookings";
-import Concierge from "./pages/Concierge";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
+
+// EAGER imports — only the routes most likely to load on first paint:
+//   • Home    — every anonymous landing hits this.
+//   • NotFound — catch-all needs to be available even when chunks fail.
+// Everything else lazy-loads behind a Suspense boundary so the entry
+// chunk stays small. See vite.config.ts for the vendor split.
+import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
-import Sitemap from "./pages/Sitemap";
-// Marketing pages
-import HowItWorks from "./pages/HowItWorks";
-import Pricing from "./pages/Pricing";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
-import Notifications from "./pages/Notifications";
-// Admin pages
-import {
-  AdminDashboard,
-  AdminApartments,
-  AdminRestaurants,
-  AdminEvents,
-  AdminCars,
-  AdminUsers,
-} from "./pages/admin";
-// Sponsor pages
-import SponsorApply from "./pages/sponsor/Apply";
-import SponsorDashboard from "./pages/sponsor/Dashboard";
+
+// LAZY routes — React.lazy creates a separate chunk per import, named
+// after the source file (e.g. `ApartmentDetail-<hash>.js`). Default-
+// export pages can use the simple form; named exports need the
+// `.then(m => ({ default: m.X }))` shim.
+const ChatCanvas = lazy(() =>
+  import("@/components/chat/ChatCanvas").then((m) => ({ default: m.ChatCanvas })),
+);
+const Index = lazy(() => import("./pages/Index"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Explore = lazy(() => import("./pages/Explore"));
+const Apartments = lazy(() => import("./pages/Apartments"));
+const ApartmentDetail = lazy(() => import("./pages/ApartmentDetail"));
+const Rentals = lazy(() => import("./pages/Rentals"));
+const Coffee = lazy(() => import("./pages/Coffee"));
+const CoffeeDetail = lazy(() => import("./pages/CoffeeDetail"));
+// CoffeeShell wraps `/coffee*` routes with <GadgetProvider>. Lazy so
+// the gadget vendor chunk is only fetched when a user lands on coffee.
+const CoffeeShell = lazy(() => import("./components/coffee/CoffeeShell"));
+const Cars = lazy(() => import("./pages/Cars"));
+const CarDetail = lazy(() => import("./pages/CarDetail"));
+const Restaurants = lazy(() => import("./pages/Restaurants"));
+const RestaurantDetail = lazy(() => import("./pages/RestaurantDetail"));
+const Events = lazy(() => import("./pages/Events"));
+const EventDetail = lazy(() => import("./pages/EventDetail"));
+const PlaceDetail = lazy(() => import("./pages/PlaceDetail"));
+const Saved = lazy(() => import("./pages/Saved"));
+const Collections = lazy(() => import("./pages/Collections"));
+const Trips = lazy(() => import("./pages/Trips"));
+const TripDetail = lazy(() => import("./pages/TripDetail"));
+const TripNew = lazy(() => import("./pages/TripNew"));
+const Bookings = lazy(() => import("./pages/Bookings"));
+const Concierge = lazy(() => import("./pages/Concierge"));
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Sitemap = lazy(() => import("./pages/Sitemap"));
+const HowItWorks = lazy(() => import("./pages/HowItWorks"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+// Host pages — landlord V1. Lazy so the host bundle is zero cost on the
+// renter side. RoleProtectedRoute lands D7; for D2 the route is gated
+// inside the page (anon -> /login, renter -> /dashboard, landlord -> ok).
+const HostOnboarding = lazy(() => import("./pages/host/Onboarding"));
+const HostListingNew = lazy(() => import("./pages/host/ListingNew"));
+const HostDashboard = lazy(() => import("./pages/host/Dashboard"));
+const HostLeads = lazy(() => import("./pages/host/Leads"));
+const HostLeadDetail = lazy(() => import("./pages/host/LeadDetail"));
+const HostEventNew = lazy(() => import("./pages/host/HostEventNew"));
+const HostEventDashboard = lazy(() => import("./pages/host/HostEventDashboard"));
+// Buyer ticket pages (task 008) — lazy so the qrcode chunk only ships when needed.
+const MyTickets = lazy(() => import("./pages/me/MyTickets"));
+const TicketDetail = lazy(() => import("./pages/me/TicketDetail"));
+// Staff check-in PWA (task 007) — public route; staff JWT is the auth.
+const StaffCheckIn = lazy(() => import("./pages/staff/StaffCheckIn"));
+// Contest voting pages (task 012) — mobile-first, lazy so the chunk is zero cost elsewhere.
+const ContestVote = lazy(() => import("./pages/contest/Vote"));
+// Contest trust / transparency page — public, per-contest.
+const ContestHowItWorks = lazy(() => import("./pages/contest/HowItWorks"));
+// Contestant intake wizard (task 018) — authenticated, lazy so the chunk only loads on this path.
+const ContestApply = lazy(() => import("./pages/host/contest/Apply"));
+const ContestApplyThanks = lazy(() => import("./pages/host/contest/ApplyThanks"));
+// Admin pages — default exports per file, lazy-loaded individually so
+// the admin bundle only ships when an admin actually navigates here.
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminApartments = lazy(() => import("./pages/admin/AdminApartments"));
+const AdminRestaurants = lazy(() => import("./pages/admin/AdminRestaurants"));
+const AdminEvents = lazy(() => import("./pages/admin/AdminEvents"));
+const AdminCars = lazy(() => import("./pages/admin/AdminCars"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+// Entity moderation queue (task: admin entities) — lazy; admin-only.
+const AdminEntities = lazy(() => import("./pages/admin/AdminEntities"));
+// Sponsor admin pages — application list + detail (task 047).
+const AdminSponsorships = lazy(() => import("./pages/admin/AdminSponsorships"));
+const AdminSponsorshipDetail = lazy(() => import("./pages/admin/AdminSponsorshipDetail"));
+const AdminSponsorDispute = lazy(() => import("./pages/admin/AdminSponsorDispute"));
+// Sponsor application wizard — public route (auth-gated at step 4 by the page itself).
+const SponsorApply = lazy(() => import("./pages/sponsor/Apply"));
+// Sponsor dashboard — protected; requires auth + ownership of the application.
+const SponsorDashboard = lazy(() => import("./pages/sponsor/Dashboard"));
+// Sponsor contract signing — protected; requires auth + ownership of the contract.
+const ContractSign = lazy(() => import("./pages/sponsor/ContractSign"));
 
 const queryClient = new QueryClient();
 
+/**
+ * Full-screen Suspense fallback. Intentionally minimal — most lazy
+ * chunks resolve in <300 ms on a warm cache, so a heavy skeleton would
+ * cause more layout shift than the spinner. The container has the
+ * background class so cold-load doesn't flash white.
+ */
+function RouteFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" aria-label="Loading" />
+    </div>
+  );
+}
+
+/**
+ * Render the FloatingChatWidget on every route EXCEPT the chat-canvas pages.
+ * Canvas pages (`/` and future `/c/:id`) already have chat as their primary
+ * surface — a floating widget would be redundant and confusing.
+ */
+function ConditionalFloatingChat() {
+  const { pathname } = useLocation();
+  if (pathname === "/" || pathname.startsWith("/c/")) return null;
+  return <FloatingChatWidget />;
+}
+
 const App = () => (
-  <GadgetProvider api={gadgetApi}>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -68,14 +142,38 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <TripProvider>
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
-            <Route path="/" element={<Index />} />
+            {/* Public marketing homepage — logged-in users get
+                <Navigate to="/chat" replace /> inside <Home>. */}
+            <Route path="/" element={<Home />} />
+            {/* Chat-as-app — anon (3-msg gate) + authed both supported.
+                Auto-fires saved pending prompt when URL is /chat?send=pending. */}
+            <Route path="/chat" element={<ChatCanvas defaultTab="concierge" />} />
+            {/* Legacy alias; kept reachable. */}
+            <Route path="/welcome" element={<Index />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
             } />
             <Route path="/onboarding" element={<Onboarding />} />
+            {/* Landlord V1 — see tasks/plan/06-landlord-v1-30day.md §5.1.
+                D2: post-signup landing only. D3: 3-step onboarding wizard.
+                D7: full host shell (HostShell + HostLeftNav + dashboard). */}
+            <Route path="/host/onboarding" element={<HostOnboarding />} />
+            {/* D4: 4-step listing wizard. Steps 1-3 functional; Step 4 + submit land D5. */}
+            <Route path="/host/listings/new" element={<HostListingNew />} />
+            {/* D7: host dashboard — landlord home, listings list, leads CTA. */}
+            <Route path="/host/dashboard" element={<HostDashboard />} />
+            {/* D9: leads inbox. D10 detail page. */}
+            <Route path="/host/leads" element={<HostLeads />} />
+            <Route path="/host/leads/:id" element={<HostLeadDetail />} />
+            {/* Phase 1 events MVP — task 002 organizer wizard */}
+            <Route path="/host/event/new" element={<HostEventNew />} />
+            <Route path="/host/event/:id" element={<HostEventDashboard />} />
+            {/* D7: /host/ alias → dashboard */}
+            <Route path="/host" element={<Navigate to="/host/dashboard" replace />} />
             {/* Marketing Routes */}
             <Route path="/how-it-works" element={<HowItWorks />} />
             <Route path="/pricing" element={<Pricing />} />
@@ -85,14 +183,27 @@ const App = () => (
             <Route path="/apartments" element={<Apartments />} />
             <Route path="/apartments/:id" element={<ApartmentDetail />} />
             <Route path="/rentals" element={<Rentals />} />
-            <Route path="/coffee" element={<Coffee />} />
-            <Route path="/coffee/:handle" element={<CoffeeDetail />} />
+            {/* Coffee routes share <GadgetProvider> via the shell — see
+                src/components/coffee/CoffeeShell.tsx for rationale. The
+                shell + the gadget vendor chunk are lazy-loaded so they
+                cost zero on every other route. */}
+            <Route element={<CoffeeShell />}>
+              <Route path="/coffee" element={<Coffee />} />
+              <Route path="/coffee/:handle" element={<CoffeeDetail />} />
+            </Route>
             <Route path="/cars" element={<Cars />} />
             <Route path="/cars/:id" element={<CarDetail />} />
             <Route path="/restaurants" element={<Restaurants />} />
             <Route path="/restaurants/:id" element={<RestaurantDetail />} />
             <Route path="/events" element={<Events />} />
             <Route path="/events/:id" element={<EventDetail />} />
+            {/* Contest voting (task 012) — public, mobile-first */}
+            <Route path="/vote/:slug" element={<ContestVote />} />
+            {/* Contest trust page — public; reads scoring_formula from contest row */}
+            <Route path="/vote/:slug/how-it-works" element={<ContestHowItWorks />} />
+            {/* Contestant intake wizard (task 018) — auth-gated inside the page */}
+            <Route path="/host/contest/:slug/apply" element={<ContestApply />} />
+            <Route path="/host/contest/:slug/apply/thanks" element={<ContestApplyThanks />} />
             <Route path="/:type/:id" element={<PlaceDetail />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
@@ -156,6 +267,20 @@ const App = () => (
             />
             <Route path="/concierge" element={<Concierge />} />
             <Route path="/sitemap" element={<Sitemap />} />
+            {/* Buyer ticket routes (task 008).
+                /me/tickets — authenticated list (ProtectedRoute).
+                /me/tickets/:id — fullscreen QR, public (handles both auth + anon ?token= path). */}
+            <Route
+              path="/me/tickets"
+              element={
+                <ProtectedRoute>
+                  <MyTickets />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/me/tickets/:id" element={<TicketDetail />} />
+            {/* Staff check-in PWA — public (task 007). Auth via ?token= staff JWT. */}
+            <Route path="/staff/check-in/:event_id" element={<StaffCheckIn />} />
             {/* Admin Routes */}
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/apartments" element={<AdminApartments />} />
@@ -163,27 +288,29 @@ const App = () => (
             <Route path="/admin/events" element={<AdminEvents />} />
             <Route path="/admin/cars" element={<AdminCars />} />
             <Route path="/admin/users" element={<AdminUsers />} />
-            {/* Sponsor Routes */}
+            {/* Entity moderation queue — admin only (enforced via AdminLayout) */}
+            <Route path="/admin/entities" element={<AdminEntities />} />
+            {/* Sponsor application admin — list + detail (task 047) */}
+            <Route path="/admin/sponsorships" element={<AdminSponsorships />} />
+            <Route path="/admin/sponsorships/:id" element={<AdminSponsorshipDetail />} />
+            <Route path="/admin/sponsorships/:id/dispute" element={<AdminSponsorDispute />} />
+            {/* Sponsor application wizard — auth-gated at step 4 inside the page */}
             <Route path="/sponsor/apply" element={<SponsorApply />} />
-            <Route
-              path="/sponsor/dashboard/:applicationId"
-              element={
-                <ProtectedRoute>
-                  <SponsorDashboard />
-                </ProtectedRoute>
-              }
-            />
+            {/* Sponsor dashboard — protected; requires auth */}
+            <Route path="/sponsor/dashboard/:applicationId" element={<ProtectedRoute><SponsorDashboard /></ProtectedRoute>} />
+            {/* Sponsor contract signing — auth required; ownership enforced by the edge fn */}
+            <Route path="/sponsor/contract/:contractId" element={<ProtectedRoute><ContractSign /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-            {/* Global Floating Chat Widget */}
-            <FloatingChatWidget />
+          </Suspense>
+            {/* Floating widget only on non-chat routes; the canvas at `/` IS the chat. */}
+            <ConditionalFloatingChat />
           </TripProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-  </GadgetProvider>
 );
 
 export default App;

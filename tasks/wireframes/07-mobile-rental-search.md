@@ -1,0 +1,235 @@
+# 07 — Mobile Rental Search
+
+Single-column layout with bottom navigation. Filter sheet slides up from bottom.
+
+```
+┌───────────────────────────┐
+│ ┌───────────────────────┐ │
+│ │  mdeai.co     [🔔] [☰]│ │
+│ └───────────────────────┘ │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ 🔍 Search Medellín... │ │
+│ │                  [⚙ ] │ │
+│ └───────────────────────┘ │
+│   ⚙ = opens filter sheet  │
+│                           │
+│ ┌───────────┐┌──────────┐ │
+│ │ 📋 List   ││ 🗺 Map   │ │
+│ │  (active) ││          │ │
+│ └───────────┘└──────────┘ │
+│                           │
+│  24 results · Poblado +2  │
+│  ┌────────┐┌────────┐     │
+│  │$800-1.2k││WiFi 50+│    │
+│  └────────┘└────────┘     │
+│  (active filter badges,   │
+│   tap X to remove)        │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ ┌───────────────────┐ │ │
+│ │ │                   │ │ │
+│ │ │                   │ │ │
+│ │ │    LISTING IMAGE  │ │ │
+│ │ │                   │ │ │
+│ │ │          🟢 2d ago│ │ │
+│ │ └───────────────────┘ │ │
+│ │                       │ │
+│ │  Modern Loft          │ │
+│ │  Poblado              │ │
+│ │                       │ │
+│ │  $800/mo              │ │
+│ │  🛏 2 bed  🚿 1 bath   │ │
+│ │  65 m²  · WiFi 120Mbps│ │
+│ │                       │ │
+│ │  WiFi  Gym  Pool      │ │
+│ │                       │ │
+│ │  ┌─────────────────┐  │ │
+│ │  │    View Details  │  │ │
+│ │  └─────────────────┘  │ │
+│ └───────────────────────┘ │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ ┌───────────────────┐ │ │
+│ │ │                   │ │ │
+│ │ │    LISTING IMAGE  │ │ │
+│ │ │                   │ │ │
+│ │ │          🟡 1w ago│ │ │
+│ │ └───────────────────┘ │ │
+│ │                       │ │
+│ │  Cozy Studio          │ │
+│ │  Laureles             │ │
+│ │                       │ │
+│ │  $650/mo              │ │
+│ │  🛏 1 bed  🚿 1 bath   │ │
+│ │  40 m²  · WiFi 80Mbps │ │
+│ │                       │ │
+│ │  WiFi  Rooftop        │ │
+│ │                       │ │
+│ │  ┌─────────────────┐  │ │
+│ │  │    View Details  │  │ │
+│ │  └─────────────────┘  │ │
+│ └───────────────────────┘ │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ ┌───────────────────┐ │ │
+│ │ │                   │ │ │
+│ │ │    LISTING IMAGE  │ │ │
+│ │ │                   │ │ │
+│ │ └───────────────────┘ │ │
+│ │  Penthouse Suite      │ │
+│ │  Poblado · $1,200/mo  │ │
+│ │  🛏 2  🚿 2  85 m²     │ │
+│ │  ┌─────────────────┐  │ │
+│ │  │    View Details  │  │ │
+│ │  └─────────────────┘  │ │
+│ └───────────────────────┘ │
+│                           │
+│  Loading more...          │
+│  (infinite scroll)        │
+│                           │
+│ ┌───────────────────────┐ │
+│ │🏠 Home │🔍Search│♥Saved│ │
+│ │        │(active)│      │ │
+│ │💬 Chat │👤Profile│      │ │
+│ └───────────────────────┘ │
+│                           │
+│            ┌────────────┐ │
+│            │ 💬 Chat    │ │
+│            │  Concierge │ │
+│            └────────────┘ │
+│  (FloatingChatWidget,     │
+│   overlays bottom-right,  │
+│   above bottom nav)       │
+└───────────────────────────┘
+
+
+═══════════════════════════════════════
+
+MAP VIEW (toggle):
+
+┌───────────────────────────┐
+│ ┌───────────────────────┐ │
+│ │  mdeai.co     [🔔] [☰]│ │
+│ └───────────────────────┘ │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ 🔍 Search Medellín... │ │
+│ └───────────────────────┘ │
+│                           │
+│ ┌───────────┐┌──────────┐ │
+│ │ 📋 List   ││ 🗺 Map   │ │
+│ │           ││ (active) │ │
+│ └───────────┘└──────────┘ │
+│                           │
+│ ┌───────────────────────┐ │
+│ │                       │ │
+│ │   FULL-WIDTH MAP      │ │
+│ │                       │ │
+│ │  [$800]    [$1200]    │ │
+│ │    •          •       │ │
+│ │                       │ │
+│ │       [$650]          │ │
+│ │         •             │ │
+│ │                       │ │
+│ │    [$950]  [$1100]    │ │
+│ │      •       •        │ │
+│ │                       │ │
+│ │                       │ │
+│ │  [+][-]               │ │
+│ │                       │ │
+│ └───────────────────────┘ │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ ◀ Modern Loft $800/mo▶│ │
+│ │   Poblado · 2BR       │ │
+│ │   [View Details]      │ │
+│ └───────────────────────┘ │
+│ (swipeable card at bottom │
+│  for selected pin)        │
+│                           │
+│ ┌───────────────────────┐ │
+│ │🏠 Home │🔍Search│♥Saved│ │
+│ │        │(active)│      │ │
+│ │💬 Chat │👤Profile│      │ │
+│ └───────────────────────┘ │
+└───────────────────────────┘
+
+
+═══════════════════════════════════════
+
+FILTER BOTTOM SHEET (slides up):
+
+┌───────────────────────────┐
+│                           │
+│  (dimmed background)      │
+│                           │
+│ ┌───────────────────────┐ │
+│ │ ━━━ (drag handle)     │ │
+│ │                       │ │
+│ │  Filters        [Clear│ │
+│ │                  All] │ │
+│ │                       │ │
+│ │  Neighborhoods         │ │
+│ │  ┌───────┐┌────────┐  │ │
+│ │  │Poblado││Laureles│  │ │
+│ │  │  ✓   ││  ✓    │  │ │
+│ │  └───────┘└────────┘  │ │
+│ │  ┌────────┐┌────────┐ │ │
+│ │  │Envigado││Sabaneta│ │ │
+│ │  └────────┘└────────┘ │ │
+│ │  ┌──────┐┌────────┐   │ │
+│ │  │Belén ││Estadio│   │ │
+│ │  └──────┘└────────┘   │ │
+│ │                       │ │
+│ │  Price Range           │ │
+│ │  $400 ────●──── $2000 │ │
+│ │       $800   $1200    │ │
+│ │                       │ │
+│ │  Bedrooms              │ │
+│ │  [Any▾]                │ │
+│ │                       │ │
+│ │  Furnished             │ │
+│ │  ○ Yes  ○ No  ● Any   │ │
+│ │                       │ │
+│ │  Wi-Fi Speed           │ │
+│ │  [50+ Mbps ▾]         │ │
+│ │                       │ │
+│ │  Amenities             │ │
+│ │  ☑WiFi ☐Pool ☐Gym    │ │
+│ │  ☐Parking ☐Laundry   │ │
+│ │  ☐AC ☐Rooftop        │ │
+│ │                       │ │
+│ │  Move-in Date          │ │
+│ │  [📅 Pick date]       │ │
+│ │                       │ │
+│ │ ┌───────────────────┐ │ │
+│ │ │  Show 24 Results  │ │ │
+│ │ └───────────────────┘ │ │
+│ └───────────────────────┘ │
+└───────────────────────────┘
+```
+
+## Annotations
+
+| Element | Component | Interaction |
+|---------|-----------|-------------|
+| Search bar | `<Input>` | Tap focuses, keyboard opens. Filter icon opens bottom sheet |
+| List/Map toggle | `<ToggleGroup>` | Switches between list view and full-screen map |
+| Filter badges | `<Badge>` with X icon | Shows active filters. Tap X removes that filter |
+| Listing cards | `<Card>` full-width | Tap opens listing detail page. Swipe left to save |
+| Freshness badge | Overlay on image corner | Green=<3d, Yellow=<1w |
+| "View Details" button | `<Button>` full-width | Navigates to `/apartments/:id` |
+| Infinite scroll | IntersectionObserver | Loads next page when scrolling near bottom |
+| Bottom nav | Fixed `<nav>` at bottom | 5 tabs: Home, Search, Saved, Chat, Profile |
+| FloatingChatWidget | Fixed button above bottom nav | 56px above bottom nav to avoid overlap |
+| Map pins | Google Maps markers | Price labels. Tap pin shows swipeable card at bottom |
+| Bottom card (map view) | Swipeable `<Card>` | Swipe left/right to cycle through nearby listings |
+| Filter bottom sheet | `<Sheet>` from shadcn (side="bottom") | Slides up, drag handle to resize, "Show Results" applies |
+| "Show Results" button | `<Button>` in sheet | Shows result count, applies filters and closes sheet |
+
+## Responsive Breakpoints
+
+- Mobile: < 768px (this wireframe)
+- Tablet: 768-1024px (2-col grid, no right panel)
+- Desktop: > 1024px (full 3-panel, see wireframe 01)

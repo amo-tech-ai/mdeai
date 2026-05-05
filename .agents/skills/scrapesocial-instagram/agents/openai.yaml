@@ -1,0 +1,4 @@
+interface:
+  display_name: "ScrapeSocial Instagram"
+  short_description: "Guide for Instagram research workflows"
+  default_prompt: "Choose the right scrapesocial command for Instagram research, including influencer discovery, brand monitoring, competitor analysis, trend research, and audience analysis."

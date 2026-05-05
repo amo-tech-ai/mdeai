@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { callGeminiStructured, withRetry } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,7 +50,7 @@ interface TripPlanResponse {
 function getSupabaseClient(authHeader: string | null) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
+
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -63,7 +64,7 @@ function getSupabaseClient(authHeader: string | null) {
 
 async function getUserIdFromAuth(authHeader: string | null, supabase: ReturnType<typeof getSupabaseClient>): Promise<string | null> {
   if (!authHeader) return null;
-  
+
   try {
     const token = authHeader.replace("Bearer ", "");
     const { data: { user } } = await supabase.auth.getUser(token);
@@ -104,14 +105,60 @@ async function fetchListingsContext(supabase: ReturnType<typeof getSupabaseClien
   };
 }
 
+// JSON schema for itinerary output (G1).
+const itinerarySchema = {
+  type: "object",
+  properties: {
+    tripTitle: { type: "string" },
+    summary: { type: "string" },
+    itinerary: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          day: { type: "integer", minimum: 1 },
+          date: { type: "string" },
+          timeSlot: { type: "string", enum: ["morning", "afternoon", "evening", "night"] },
+          startTime: { type: "string" },
+          endTime: { type: "string" },
+          type: {
+            type: "string",
+            enum: ["restaurant", "apartment", "car", "event", "activity", "transport"],
+          },
+          title: { type: "string" },
+          description: { type: "string" },
+          location: { type: "string" },
+          estimatedCost: { type: ["number", "null"] },
+          resourceId: { type: ["string", "null"] },
+          resourceType: { type: ["string", "null"] },
+          notes: { type: "string" },
+        },
+        required: ["day", "type", "title", "description", "location"],
+      },
+    },
+    totalEstimatedCost: { type: "number" },
+    tips: { type: "array", items: { type: "string" } },
+  },
+  required: ["tripTitle", "summary", "itinerary"],
+  additionalProperties: false,
+};
+
+interface ItinerarySchemaShape {
+  tripTitle?: string;
+  summary?: string;
+  itinerary: ItineraryItem[];
+  totalEstimatedCost?: number;
+  tips?: string[];
+}
+
+const TRIP_PLANNER_MODEL = "gemini-3.1-pro-preview"; // Pro for deep itinerary reasoning
+
 // Generate itinerary using Gemini
 async function generateItinerary(
   request: TripPlanRequest,
   listings: Awaited<ReturnType<typeof fetchListingsContext>>
 ): Promise<TripPlanResponse> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  
-  if (!GEMINI_API_KEY) {
+  if (!Deno.env.get("GEMINI_API_KEY")) {
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
@@ -120,11 +167,11 @@ async function generateItinerary(
   const numDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
   // Format listings for context
-  const restaurantList = listings.restaurants.slice(0, 10).map(r => 
+  const restaurantList = listings.restaurants.slice(0, 10).map((r) =>
     `- ${r.name} (${r.cuisine_types?.join(", ") || "Various"}, ${"$".repeat(r.price_level || 2)}, Rating: ${r.rating || "N/A"}) at ${r.address || r.city}`
   ).join("\n");
 
-  const eventList = listings.events.slice(0, 8).map(e =>
+  const eventList = listings.events.slice(0, 8).map((e) =>
     `- ${e.name} (${e.event_type || "Event"}) on ${new Date(e.event_start_time).toLocaleDateString()} at ${e.address || "Medellín"}`
   ).join("\n");
 
@@ -155,93 +202,51 @@ POPULAR ACTIVITIES IN MEDELLÍN:
 - Plaza Botero (1-2 hours, free)
 - Museo de Antioquia (2-3 hours, ~$8)
 
-Generate a JSON response with this EXACT structure:
-{
-  "tripTitle": "Creative trip title",
-  "summary": "2-3 sentence trip overview",
-  "itinerary": [
-    {
-      "day": 1,
-      "date": "${request.startDate}",
-      "timeSlot": "morning|afternoon|evening|night",
-      "startTime": "09:00",
-      "endTime": "12:00",
-      "type": "activity|restaurant|event",
-      "title": "Activity name",
-      "description": "Brief description",
-      "location": "Neighborhood or address",
-      "estimatedCost": 25,
-      "resourceId": null,
-      "resourceType": null,
-      "notes": "Any tips"
-    }
-  ],
-  "totalEstimatedCost": 500,
-  "tips": ["Tip 1", "Tip 2", "Tip 3"]
-}
-
 Include 3-5 activities per day. Use REAL restaurant names from the list when suggesting meals. Match activities to their interests. Be specific with times.`;
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${GEMINI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gemini-3.1-pro-preview",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert Medellín travel planner. Create detailed, realistic itineraries using real local knowledge. Always respond with valid JSON only, no markdown."
-        },
-        { role: "user", content: prompt }
-      ],
-      max_tokens: 4000,
-      temperature: 0.7,
-    }),
-  });
+  const result = await withRetry(() =>
+    callGeminiStructured<ItinerarySchemaShape>({
+      model: TRIP_PLANNER_MODEL,
+      prompt,
+      systemInstruction:
+        "You are an expert Medellín travel planner. Create detailed, realistic itineraries using real local knowledge. Output structured JSON matching the provided schema.",
+      responseJsonSchema: itinerarySchema, // G1
+      thinkingLevel: "high", // deep reasoning for multi-day plans
+      agentName: "trip_planner",
+      timeoutMs: 45_000, // longer than default — Pro thinks for a while
+    })
+  );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("AI Gateway error:", errorText);
-    throw new Error(`AI Gateway returned ${response.status}`);
-  }
+  const parsed = result.data;
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "";
-  
-  // Parse JSON from response
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Could not parse itinerary response");
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]);
-  
   // Validate and fix dates
   const itinerary = (parsed.itinerary || []).map((item: ItineraryItem, idx: number) => {
-    const dayOffset = item.day - 1;
+    const dayOffset = (item.day || 1) - 1;
     const itemDate = new Date(startDate);
     itemDate.setDate(itemDate.getDate() + dayOffset);
-    
+
     return {
       ...item,
       day: item.day || Math.floor(idx / 4) + 1,
       date: itemDate.toISOString().split("T")[0],
       timeSlot: item.timeSlot || "afternoon",
-      estimatedCost: item.estimatedCost || null,
-      resourceId: item.resourceId || null,
-      resourceType: item.resourceType || null,
+      estimatedCost: item.estimatedCost ?? null,
+      resourceId: item.resourceId ?? null,
+      resourceType: item.resourceType ?? null,
     };
   });
 
   return {
     success: true,
     tripTitle: parsed.tripTitle || `${numDays}-Day Medellín Adventure`,
-    summary: parsed.summary || `An exciting ${numDays}-day journey through Medellín featuring ${request.interests.join(", ")}.`,
+    summary: parsed.summary ||
+      `An exciting ${numDays}-day journey through Medellín featuring ${request.interests.join(", ")}.`,
     itinerary,
-    totalEstimatedCost: parsed.totalEstimatedCost || itinerary.reduce((sum: number, i: ItineraryItem) => sum + (i.estimatedCost || 0), 0),
+    totalEstimatedCost: parsed.totalEstimatedCost ||
+      itinerary.reduce(
+        (sum: number, i: ItineraryItem) => sum + (i.estimatedCost || 0),
+        0,
+      ),
     tips: parsed.tips || [
       "Bring sunscreen - Medellín's sun is strong!",
       "Use Uber or InDriver for safe transportation",
@@ -263,7 +268,7 @@ serve(async (req) => {
     const userId = await getUserIdFromAuth(authHeader, supabase);
 
     const body: TripPlanRequest = await req.json();
-    
+
     // Validate required fields
     if (!body.startDate || !body.endDate) {
       return new Response(
@@ -292,7 +297,7 @@ serve(async (req) => {
         output_data: { itemCount: plan.itinerary.length, totalCost: plan.totalEstimatedCost },
         duration_ms: Date.now() - startTime,
         status: "completed",
-        model_name: "gemini-3-pro-preview",
+        model_name: TRIP_PLANNER_MODEL,
       });
     }
 
@@ -313,9 +318,9 @@ serve(async (req) => {
   } catch (error) {
     console.error("Trip planner error:", error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : "Trip planning failed" 
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Trip planning failed"
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -1,0 +1,30 @@
+-- Restore EXECUTE on acting_landlord_ids() to authenticated.
+-- ────────────────────────────────────────────────────────────
+-- Fixes a regression introduced by the security sweep
+-- (20260430172404_landlord_v1_security_sweep) where REVOKEing EXECUTE
+-- from anon + authenticated + PUBLIC broke the landlord_inbox SELECT
+-- path.
+--
+-- Why the revoke was wrong: SECURITY DEFINER changes the privileges
+-- the function BODY runs with (so it can read tables the caller
+-- can't), but the CALL itself still requires EXECUTE for the caller's
+-- role. The landlord_inbox_select policy
+--    (landlord_id IN (SELECT acting_landlord_ids()))
+-- is evaluated in the caller's context — without EXECUTE, the policy
+-- check fails with "permission denied for function acting_landlord_ids".
+--
+-- Symptom caught in the D10 browser proof:
+--    `await sb.from('landlord_inbox').select(…)` as qa-landlord
+--    returned the above error and the leads inbox + lead-detail
+--    page rendered empty.
+--
+-- Trade-off: re-granting EXECUTE re-exposes /rest/v1/rpc/acting_landlord_ids
+-- to authenticated users. Low-impact: it returns the CALLING user's own
+-- landlord_profiles.id — same info they could derive from a SELECT on
+-- landlord_profiles (which RLS already allows for own row). Not a leak.
+--
+-- We KEEP the REVOKE on auto_create_landlord_inbox_from_message()
+-- because it's a trigger function (no policy depends on it).
+
+GRANT EXECUTE ON FUNCTION public.acting_landlord_ids() TO authenticated;
+-- anon doesn't query landlord_inbox; leave revoked from anon.
