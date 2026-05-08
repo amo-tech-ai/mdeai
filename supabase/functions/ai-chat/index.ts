@@ -24,6 +24,7 @@ const AGENT_LABELS: Record<string, string> = {
   get_user_trips: "Trip Planner",
   get_user_bookings: "Booking Assistant",
   create_booking_preview: "Booking Assistant",
+  capture_lead: "Lead Capture",
 };
 
 /**
@@ -247,6 +248,30 @@ const TOOLS: Record<string, ToolExecutor> = {
     // Sync function — still return the expected Promise-compatible shape.
     execute: (ctx) => Promise.resolve(executeCreateBookingPreview(ctx.params, ctx.userId)),
   },
+  capture_lead: {
+    definition: {
+      name: "capture_lead",
+      description: "Save the user's contact details and housing intent when they express strong interest or provide their email/phone. Use this when: (1) user says 'contact me', 'I want to apply', 'send me details', (2) user provides email or phone number, (3) user has 3+ turns in a housing conversation and confirms interest. Do NOT use for casual browsing.",
+      parameters: {
+        type: "object",
+        properties: {
+          intent: {
+            type: "string",
+            enum: ["rental", "host", "buyer", "event_organizer", "sponsor"],
+            description: "What the user is trying to accomplish",
+          },
+          email: { type: "string", description: "User email if provided in chat" },
+          phone: { type: "string", description: "User phone number if provided" },
+          name: { type: "string", description: "User name if provided" },
+          neighborhood: { type: "string", description: "Neighborhood they are interested in" },
+          budget_max: { type: "number", description: "Max monthly budget in USD" },
+          move_in_date: { type: "string", description: "Desired move-in date (YYYY-MM-DD)" },
+        },
+        required: ["intent"],
+      },
+    },
+    execute: (ctx) => executeCaptureLead(ctx.params, ctx.userId, ctx.authHeader),
+  },
 };
 
 // Gemini request format derived from the registry — single source of truth.
@@ -277,8 +302,15 @@ Primary job: help people find an apartment to rent in Medellín. Use tools:
 - search_apartments — quick direct lookup by neighborhood, price, bedrooms, amenities
 - get_user_trips / get_user_bookings — recall the user's existing trips/bookings when they ask
 - create_booking_preview — propose a booking for user approval (never auto-confirm)
+- capture_lead — save user contact details when they want to be contacted (see rules below)
 
 When users ask for recommendations, USE THE TOOLS to search the database and give real results.
+
+LEAD CAPTURE RULES (important):
+- Call capture_lead when: user says "contact me", "send me details", "I want to apply", or provides their email/phone number.
+- Call capture_lead after 3+ turns if the user has confirmed strong interest in a specific listing or neighborhood.
+- After capture_lead succeeds, say: "Perfect — I've saved your details. A local agent who specializes in [neighborhood] will reach out within 24 hours."
+- Never ask for contact info unless the user has already expressed strong intent.
 
 You can also answer local questions about:
 - Neighborhoods (El Poblado, Laureles, Envigado, Provenza, Belén, Sabaneta)
@@ -647,6 +679,57 @@ async function executeRentalsIntake(
     console.error("Rentals intake error:", error);
     return { error: "Failed to process rental inquiry", details: String(error) };
   }
+}
+
+async function executeCaptureLead(
+  params: Record<string, unknown>,
+  userId: string | null,
+  authHeader: string | null,
+): Promise<unknown> {
+  const serviceClient = getServiceClient();
+  const { intent, email, phone, name, neighborhood, budget_max, move_in_date } = params;
+
+  const entities: Record<string, unknown> = {};
+  if (neighborhood) entities.neighborhood = neighborhood;
+  if (budget_max) entities.budget_max = budget_max;
+  if (move_in_date) entities.move_in_date = move_in_date;
+
+  // Derive conversation_id from authHeader if available (passed via request context)
+  const { data: lead, error } = await serviceClient
+    .from("leads")
+    .insert({
+      user_id: userId ?? null,
+      intent: intent as string,
+      email: (email as string) ?? null,
+      phone: (phone as string) ?? null,
+      name: (name as string) ?? null,
+      source: "chat_auto",
+      metadata: entities,
+      status: "new",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("capture_lead insert error:", error);
+    return { error: "Failed to save lead", details: error.message };
+  }
+
+  console.log(`[capture_lead] saved lead ${lead.id} | intent=${intent} | email=${email ?? "—"}`);
+
+  return {
+    message: "Lead saved. An agent will reach out within 24 hours.",
+    lead_id: lead.id,
+    actions: [
+      {
+        type: "OPEN_LEAD_CAPTURED",
+        payload: {
+          lead_id: lead.id,
+          message: "Agent notified — someone will reach out within 24h.",
+        },
+      },
+    ],
+  };
 }
 
 // Execute a tool call via the registry. Adding a new tool = add an entry to
