@@ -48,33 +48,16 @@ Then write a short, helpful reply in English. Keep replies under 160 characters.
 For opt_out, confirm they will be removed and apologize for the interruption.
 For other, offer to connect them with a human agent.`;
 
-// Timing-safe HMAC-SHA256 verify (same contract as delivery webhook).
-async function verifySignature(
-  rawBody: Uint8Array,
-  signatureHeader: string | null,
-  secret: string,
-): Promise<boolean> {
-  if (!signatureHeader) return false;
-  const prefix = "sha256=";
-  if (!signatureHeader.startsWith(prefix)) return false;
-  const sigHex = signatureHeader.slice(prefix.length).toLowerCase();
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, rawBody));
-
-  if (sigHex.length !== mac.length * 2) return false;
-  const sigBytes = new Uint8Array(mac.length);
-  for (let i = 0; i < mac.length; i++) {
-    sigBytes[i] = parseInt(sigHex.substr(i * 2, 2), 16);
-  }
+// Timing-safe Bearer token comparison.
+// OpenClaw sends: Authorization: Bearer <hooks.token from openclaw.json>
+function verifyBearer(authHeader: string | null, secret: string): boolean {
+  if (!authHeader) return false;
+  const expected = `Bearer ${secret}`;
+  if (authHeader.length !== expected.length) return false;
+  const a = new TextEncoder().encode(authHeader);
+  const b = new TextEncoder().encode(expected);
   let diff = 0;
-  for (let i = 0; i < mac.length; i++) diff |= mac[i]! ^ sigBytes[i]!;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
 }
 
@@ -111,21 +94,15 @@ Deno.serve(async (req) => {
     return jsonResponse(errorBody("CONFIG_ERROR", "Webhook secret not configured"), 500, req);
   }
 
-  const rawBody = new Uint8Array(await req.arrayBuffer());
-
-  const valid = await verifySignature(
-    rawBody,
-    req.headers.get("x-openclaw-signature"),
-    webhookSecret,
-  );
+  const valid = verifyBearer(req.headers.get("Authorization"), webhookSecret);
   if (!valid) {
-    console.warn("openclaw-concierge-webhook: invalid signature");
-    return jsonResponse(errorBody("UNAUTHORIZED", "Invalid webhook signature"), 401, req);
+    console.warn("openclaw-concierge-webhook: invalid bearer token");
+    return jsonResponse(errorBody("UNAUTHORIZED", "Invalid webhook token"), 401, req);
   }
 
   let msg: InboundMessage;
   try {
-    msg = JSON.parse(new TextDecoder().decode(rawBody)) as InboundMessage;
+    msg = await req.json() as InboundMessage;
   } catch {
     return jsonResponse(errorBody("BAD_REQUEST", "Invalid JSON body"), 400, req);
   }
@@ -141,18 +118,17 @@ Deno.serve(async (req) => {
   const db = getServiceClient();
 
   // Store inbound message immediately — before classification.
-  const { error: insertErr } = await db
-    .schema("marketing")
-    .from("openclaw_conversations")
-    .insert({
+  const { error: insertErr } = await db.rpc("fn_insert_conversation", {
+    p_data: {
       contact_phone:       msg.from,
       direction:           "inbound",
       channel:             "whatsapp",
       body:                msg.body,
       openclaw_message_id: msg.messageId,
       campaign_id:         msg.campaignId ?? null,
-      metadata:            { chatId: msg.chatId, event: msg.event },
-    });
+      metadata:            JSON.stringify({ chatId: msg.chatId, event: msg.event }),
+    },
+  });
 
   if (insertErr && insertErr.code !== "23505") {
     // 23505 = unique violation (duplicate delivery) — safe to continue
@@ -185,17 +161,12 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Update the conversation row with intent + reply.
-  await db
-    .schema("marketing")
-    .from("openclaw_conversations")
-    .update({
-      intent:      result.intent,
-      confidence:  result.confidence,
-      reply_body:  result.reply,
-      replied_at:  new Date().toISOString(),
-    })
-    .eq("openclaw_message_id", msg.messageId);
+  await db.rpc("fn_update_conversation_intent", {
+    p_message_id: msg.messageId,
+    p_intent:     result.intent,
+    p_confidence: result.confidence,
+    p_reply:      result.reply,
+  });
 
   // Opt-out: add to suppression list.
   if (result.intent === "opt_out") {
@@ -203,7 +174,7 @@ Deno.serve(async (req) => {
     await db
       .from("suppression_list")
       .upsert(
-        { channel: "whatsapp", identifier, reason: "user_opted_out" },
+        { channel: "whatsapp", identifier, reason: "user_stop", source: "openclaw_concierge" },
         { onConflict: "channel,identifier" },
       );
     console.log("openclaw-concierge-webhook: opted out", identifier);
@@ -212,19 +183,17 @@ Deno.serve(async (req) => {
   // Send reply via OpenClaw gateway.
   await sendReply(msg.chatId, result.reply);
 
-  // Store outbound reply as a conversation turn.
-  await db
-    .schema("marketing")
-    .from("openclaw_conversations")
-    .insert({
+  await db.rpc("fn_insert_conversation", {
+    p_data: {
       contact_phone: msg.from,
       direction:     "outbound",
       channel:       "whatsapp",
       body:          result.reply,
       intent:        result.intent,
       campaign_id:   msg.campaignId ?? null,
-      metadata:      { chatId: msg.chatId, in_reply_to: msg.messageId },
-    });
+      metadata:      JSON.stringify({ chatId: msg.chatId, in_reply_to: msg.messageId }),
+    },
+  });
 
   console.log(`openclaw-concierge-webhook: ${msg.from} → intent=${result.intent}`);
   return jsonResponse({ ok: true, intent: result.intent, reply: result.reply }, 200, req);

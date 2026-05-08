@@ -26,35 +26,16 @@ function normalizeStatus(event: string, status?: string): string {
   return "sent";
 }
 
-// Timing-safe HMAC-SHA256 verify.
-// OpenClaw signs delivery webhooks with:
-//   X-Openclaw-Signature: sha256=<hex(hmac_sha256(OPENCLAW_WEBHOOK_SECRET, rawBody))>
-async function verifySignature(
-  rawBody: Uint8Array,
-  signatureHeader: string | null,
-  secret: string,
-): Promise<boolean> {
-  if (!signatureHeader) return false;
-  const prefix = "sha256=";
-  if (!signatureHeader.startsWith(prefix)) return false;
-  const sigHex = signatureHeader.slice(prefix.length).toLowerCase();
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, rawBody));
-
-  if (sigHex.length !== mac.length * 2) return false;
-  const sigBytes = new Uint8Array(mac.length);
-  for (let i = 0; i < mac.length; i++) {
-    sigBytes[i] = parseInt(sigHex.substr(i * 2, 2), 16);
-  }
+// Timing-safe Bearer token comparison.
+// OpenClaw sends: Authorization: Bearer <hooks.token from openclaw.json>
+function verifyBearer(authHeader: string | null, secret: string): boolean {
+  if (!authHeader) return false;
+  const expected = `Bearer ${secret}`;
+  if (authHeader.length !== expected.length) return false;
+  const a = new TextEncoder().encode(authHeader);
+  const b = new TextEncoder().encode(expected);
   let diff = 0;
-  for (let i = 0; i < mac.length; i++) diff |= mac[i]! ^ sigBytes[i]!;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
 }
 
@@ -69,18 +50,15 @@ Deno.serve(async (req) => {
     return jsonResponse(errorBody("CONFIG_ERROR", "Webhook secret not configured"), 500, req);
   }
 
-  const rawBody = new Uint8Array(await req.arrayBuffer());
-
-  const signatureHeader = req.headers.get("x-openclaw-signature");
-  const valid = await verifySignature(rawBody, signatureHeader, webhookSecret);
+  const valid = verifyBearer(req.headers.get("Authorization"), webhookSecret);
   if (!valid) {
-    console.warn("openclaw-delivery-webhook: invalid signature");
-    return jsonResponse(errorBody("UNAUTHORIZED", "Invalid webhook signature"), 401, req);
+    console.warn("openclaw-delivery-webhook: invalid bearer token");
+    return jsonResponse(errorBody("UNAUTHORIZED", "Invalid webhook token"), 401, req);
   }
 
   let event: DeliveryEvent;
   try {
-    event = JSON.parse(new TextDecoder().decode(rawBody)) as DeliveryEvent;
+    event = await req.json() as DeliveryEvent;
   } catch {
     return jsonResponse(errorBody("BAD_REQUEST", "Invalid JSON body"), 400, req);
   }
@@ -111,9 +89,7 @@ Deno.serve(async (req) => {
   if (status === "read")      logRow.read_at      = event.timestamp ?? new Date().toISOString();
 
   const { error: logErr } = await db
-    .schema("marketing")
-    .from("delivery_logs")
-    .upsert(logRow, { onConflict: "openclaw_message_id" });
+    .rpc("fn_upsert_delivery_log", { p_data: logRow });
 
   if (logErr) {
     console.error("delivery_logs upsert error:", logErr.message);
@@ -126,7 +102,7 @@ Deno.serve(async (req) => {
     const { error: suppErr } = await db
       .from("suppression_list")
       .upsert(
-        { channel: "whatsapp", identifier, reason: "user_opted_out", created_at: new Date().toISOString() },
+        { channel: "whatsapp", identifier, reason: "user_stop", source: "openclaw_webhook", created_at: new Date().toISOString() },
         { onConflict: "channel,identifier" },
       );
     if (suppErr) {
