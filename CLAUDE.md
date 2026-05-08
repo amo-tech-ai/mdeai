@@ -1,12 +1,19 @@
 # CLAUDE.md — mdeai.co
 
+> **Source of truth for product strategy:** [prd.md](./prd.md) (v5.1, 2026-05-05). When CLAUDE.md and prd.md disagree, prd.md wins.
+
 ## Project Overview
 
-**mdeai.co** is an AI-powered marketplace connecting travelers and locals to premium coffee, luxury stays, and experiences in Medellin, Colombia. It's a "Digital Concierge" vendor marketplace with AI discovery, automated payouts, and zero-friction purchasing.
+**mdeai.co** is an AI-first platform for Medellín built around four product pillars (see prd.md §1):
 
-**Status:** 95%+ complete. 25+ features working with real Supabase data. Commerce layer (Shopify + Gadget) integrated. AI chat fully wired (6 edge functions, 7 agents).
+1. **Rentals AI Chat** — semantic apartment + rental search with lead capture (Live)
+2. **Events + Tickets** — host wizard, ticket buy flow, staff PWA scanner (Phase 1, current)
+3. **Contests + Voting** — Miss Elegance Colombia flagship, hybrid scoring, leaderboard (Phase 2)
+4. **Sponsorship Marketplace** — sponsor onboarding, ROI dashboard, AI brand-fit (Phase 3)
 
-**Website:** https://www.mdeai.co/ (live on Vercel: medell-n-connect.vercel.app)
+**Status:** ~55% overall (42/76 tasks per prd.md). 259/259 tests passing. Build clean (~6s). Live at https://www.mdeai.co.
+
+**Vercel:** auto-deploys `main` to mdeai.co.
 
 ## Tech Stack
 
@@ -18,7 +25,7 @@
 | Routing | react-router-dom v6 |
 | Backend | Supabase PostgreSQL + pgvector + 9 Edge Functions |
 | Auth | Supabase Auth (email/password + Google OAuth) |
-| AI | Claude 3.5 Sonnet via Supabase Edge Functions |
+| AI | Google Gemini via Supabase Edge Functions (see "AI Models" table below) |
 | Forms | react-hook-form + Zod validation |
 | Design | "Paisa" theme — DM Sans + Playfair Display, emerald/cream/charcoal palette |
 | Testing | Vitest (unit) + Playwright (e2e) |
@@ -218,13 +225,19 @@ PostGIS enabled for geospatial queries. pgvector for semantic search embeddings.
 
 ## AI Integration
 
-Claude 3.5 Sonnet powers 6 AI edge functions:
-- `ai-chat` — Multi-agent chat with tool-calling and streaming
-- `ai-search` — Semantic search across apartments, restaurants, cars, events
-- `ai-router` — Intent classification (routes to correct agent)
-- `ai-trip-planner` — AI-assisted trip planning
-- `ai-optimize-route` — Route optimization for trips
-- `ai-suggest-collections` — Curated collection suggestions
+All AI runs on **Google Gemini** via the OpenAI-compatible endpoint
+`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
+There is **no Anthropic / Claude API in production** — Claude is only used in dev tooling (Claude Code).
+
+Core agents (see "AI Models" table below for the exact model per function):
+- `ai-router` — Intent classification (cheapest model)
+- `ai-chat` — Multi-agent chat with tool-calling + SSE streaming
+- `rentals` — Rental intake + structured lead extraction
+- `ai-search` — Semantic search (pgvector) across listings
+- `ai-trip-planner` — Multi-day itinerary generation
+- `ai-optimize-route` — Trip item reordering by proximity
+
+Phase 2/3 agents: `ai-roi-explain`, `ai-creative-gen`, `ai-audience-match`, `vote-cast`, `scam-score`, `listing-moderate`. Full agent inventory in [prd.md §3.1](./prd.md).
 
 Google Directions API proxied through `google-directions` edge function.
 
@@ -235,37 +248,15 @@ Google Directions API proxied through `google-directions` edge function.
 VITE_SUPABASE_PROJECT_ID       # Supabase project ID
 VITE_SUPABASE_PUBLISHABLE_KEY  # Supabase anon key
 VITE_SUPABASE_URL              # Supabase API URL
-VITE_GOOGLE_MAPS_API_KEY       # Google Maps (currently empty)
+VITE_GOOGLE_MAPS_API_KEY       # Google Maps JS key (set in Vercel for prod)
 ```
 
-### Private (in `.env.local` — git-ignored via `*.local`)
-```
-SHOPIFY_CATALOG_API_KEY              # Shopify catalog access
-SHOPIFY_DEV_DASHBOARD_ID             # Shopify partner dashboard
-SHOPIFY_CLI_TOKEN                    # Shopify CLI auth (CRITICAL — never commit)
-SHOPIFY_CLI_ORGANIZATION_ID          # Shopify org ID
-PUBLIC_STORE_DOMAIN                  # mdeaidev.myshopify.com
-PUBLIC_STOREFRONT_API_TOKEN          # Storefront API (read-only, public)
-PRIVATE_ADMIN_API_ACCESS_TOKEN       # Admin API (CRITICAL — never commit)
-PUBLIC_STOREFRONT_API_VERSION        # API version (2026-01)
-GADGET_API_KEY                       # Gadget public key
-GADGET_API_SECRET                    # Gadget secret (CRITICAL — never commit)
-```
+`.env` may only contain the four `VITE_*` vars above. All other secrets live in Infisical (source of truth) and sync to Supabase / Vercel — never in `.env`.
 
-Edge function secrets configured in Supabase dashboard:
-`GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `INFOBIP_API_KEY`, `INFOBIP_BASE_URL`, `INFOBIP_PHONE_NUMBER`
+### Edge function secrets (Supabase dashboard)
+`GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `INFOBIP_API_KEY`, `INFOBIP_BASE_URL`, `INFOBIP_PHONE_NUMBER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TICKET_CHECKOUT_KEY`, `STRIPE_TICKET_WEBHOOK_KEY`, `STRIPE_SPONSOR_CHECKOUT_KEY` (⚠ not yet set — blocks sponsor checkout), `STRIPE_SPONSOR_WEBHOOK_KEY`, `STAFF_LINK_SECRET`, `QR_SIGNING_SECRET`, `LEAD_REMINDER_CRON_SECRET`.
 
-## Commerce Tooling
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Gadget CLI (`ggt`) | 3.0.0 | Sync Gadget app locally |
-| Shopify CLI | 3.93.0 | Manage Shopify app + extensions |
-| Shopify app | `mdeai-development` | Scaffolded at `~/mdeai-development/`, connected to Gadget |
-| Dev store | `mdeaidev.myshopify.com` | Headless Shopify dev store |
-
-### Shopify App Location
-The Shopify React Router app lives at `~/mdeai-development/` (separate repo from this one). It connects to Gadget at `mdeai--development.gadget.app`.
+> **Commerce / e-commerce is out of scope.** Shopify, Gadget, Hydrogen, and any storefront layer belong to a far-future phase. Do **not** add `SHOPIFY_*`, `GADGET_*`, or storefront variables, skills, or scaffolding to this repo.
 
 ## AI Models (Edge Functions)
 
@@ -274,12 +265,15 @@ All edge functions call Google Gemini directly via OpenAI-compatible endpoint:
 
 | Edge Function | Model | Purpose |
 |--------------|-------|---------|
+| ai-router | `gemini-3.1-flash-lite-preview` | Intent classification (cheapest) |
 | ai-chat (x3 calls) | `gemini-3-flash-preview` | Main conversational AI |
 | ai-search (x2) | `gemini-3-flash-preview` | Semantic search parsing |
-| ai-router | `gemini-3.1-flash-lite-preview` | Intent classification (cheapest) |
 | ai-trip-planner | `gemini-3.1-pro-preview` | Complex trip generation |
 | ai-optimize-route | `gemini-3-flash-preview` | Route optimization |
 | rentals | `gemini-3.1-pro-preview` | Rental intake conversation |
+| ai-roi-explain (P3) | `gemini-3.1-pro-preview` | Sponsor ROI insight |
+| ai-creative-gen (P3) | `gemini-3.1-pro-preview` | Ad copy / image prompts |
+| ai-audience-match (P3) | `gemini-3.1-pro-preview` | Brand ↔ contest fit scoring |
 
 Auth: `GEMINI_API_KEY` secret in Supabase dashboard.
 
@@ -294,40 +288,48 @@ Auth: `GEMINI_API_KEY` secret in Supabase dashboard.
 ### Commands (`.claude/commands/`)
 - `/process-task [ID|description|latest]` — Execute a task from backlog
 - `/deploy-check [quick|full]` — Pre-deployment verification checklist
+- `/code-review` — Parallel security + performance review of current diff
 
 ### Skills (`.claude/skills/`)
-- `mdeai-freshness` — Triggers on: freshness, roasted, badge, coffee age
-- `mdeai-commerce` — Triggers on: shopify, gadget, cart, checkout, buy, order
-- `mdeai-three-panel` — Triggers on: panel, layout, sidebar, responsive
+
+Domain owners used in Phase 1 — Phase 3:
+- `mde-task-lifecycle` — 5-phase ship workflow (planning → release)
+- `mde-supabase` — RLS, edge fns, migrations
+- `mde-vercel` — deploy + React perf
+- `mde-github` — `gh`, PRs, Actions
+- `mde-stripe` — payments (tickets, sponsors)
+- `mde-whatsapp` — Twilio + Kapso (lead replies, OTP)
+- `mde-real-estate` — rentals marketplace
+- `mde-testing` — Vitest + Playwright + Chrome DevTools MCP
+- `mdeai-three-panel` — left/main/right layout
+
+> Removed (do not reference): `mdeai-freshness`, `mdeai-commerce`, any `shopify-*`, `gadget-best-practices`, `shopify-hydrogen`, `shopify-app-deployment`. Commerce is out of scope.
 
 ### Agents (`.claude/agents/`)
-- `security-auditor` — Scans for exposed secrets, missing RLS, auth bypasses (haiku)
-- `performance-reviewer` — Checks re-renders, query efficiency, bundle size (haiku)
+- `mdeai-planner` — strategic plans before code (read-only)
+- `mdeai-executor` — implements an approved plan
+- `security-auditor` — exposed secrets, missing RLS, auth bypasses
+- `performance-reviewer` — re-renders, query efficiency, bundle size
 
-### Installed Skills (`.agents/skills/`)
-- `gadget-best-practices` — Gadget models, actions, routes, Shopify integration
-- `shopify-development` — GraphQL Admin API, CLI, Polaris, Liquid
-- `shopify-apps` — Modern Shopify app template with React Router
-- `shopify-hydrogen` — Hydrogen + Oxygen storefront
-- `shopify-app-deployment` — Deployment strategies for Shopify apps
+## Phase 1 Priorities (current — Events + Tickets MVP)
 
-## Phase 1 Priorities
+Per [prd.md §5.2](./prd.md), Phase 1 build is **100% done**, gate is **not yet passed**. Five items block Phase 2:
 
-Commerce integration (IN PROGRESS):
-1. ~~Connect Shopify headless dev store via Gadget.dev~~ DONE
-2. ~~Build `/coffee` route displaying products from Gadget~~ DONE
-3. ~~Cart via Storefront API mutations~~ DONE (useShopifyCart hook)
-4. Test full checkout flow (needs test products in Shopify)
-5. Extend `ai-chat` to search real Shopify products
-6. ~~Deploy to mdeai.co via Vercel~~ DONE (live at www.mdeai.co)
+1. **Camila E2E** — buy ticket → email arrives → QR displayed (QA, not run)
+2. **Roberto E2E** — valid scan ✓ + rescan returns `ALREADY_USED` (QA, not run)
+3. **Staff link revocation** — scanner denied within 60s of revoke (QA, not run)
+4. **Load test** — 50 concurrent buyers → 0 oversell (Eng, not run)
+5. **Lighthouse a11y ≥ 90** on event listing, ticket buy, scanner, host dashboard (QA, not run)
+
+Until all 5 are green, no Phase 2 (contests/voting) work ships.
 
 ## Known Issues
 
-- Admin routes lack proper admin auth guards (useAdminAuth hook needs audit)
-- No e2e tests written yet (Playwright configured but empty)
-- Unit test coverage is minimal
+- Admin routes lack proper admin auth guards (`useAdminAuth` hook needs audit)
+- No Playwright e2e tests written yet (config present, suite empty)
+- Unit test coverage is uneven across pages
 - `bun.lockb` and `package-lock.json` both present — pick one package manager
-- Need test coffee products in Shopify dev store + Gadget sync
+- `STRIPE_SPONSOR_CHECKOUT_KEY` not yet set in Supabase prod — sponsor checkout will 500 until set
 
 ## Communication style — plain English by default
 
