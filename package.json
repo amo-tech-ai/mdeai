@@ -12,7 +12,8 @@
     "scrape:restaurant-images": "node scripts/scrape-restaurant-images.mjs",
     "scrape:restaurant-images:dry-run": "node scripts/scrape-restaurant-images.mjs --dry-run",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:edge": "supabase functions list --project-ref zkwcbyxiwklihegjhuql"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
