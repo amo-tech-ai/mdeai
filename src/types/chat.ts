@@ -85,6 +85,27 @@ export interface ChatAction {
   payload: Record<string, unknown>;
 }
 
+// ─── Inline listing card shape ───────────────────────────────────────────────
+// Emitted inside OPEN_RENTALS_RESULTS action payload.listings[].
+// Matches the SELECT fields returned by the `rentals` edge function.
+
+export interface RentalInlineListing {
+  id: string;
+  title: string;
+  price_monthly: number | null;
+  price_daily?: number | null;
+  neighborhood: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  images: string[];
+  rating: number | null;
+  source_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  description?: string | null;
+  verified?: boolean;
+}
+
 export function hasChatContext(ctx: ChatContext | null | undefined): boolean {
   if (!ctx) return false;
   if (ctx.neighborhood && ctx.neighborhood.trim().length > 0) return true;
