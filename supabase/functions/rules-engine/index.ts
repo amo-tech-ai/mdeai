@@ -1,10 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, jsonResponse, errorBody } from "../_shared/http.ts";
+import { getServiceClient } from "../_shared/supabase-clients.ts";
 
 interface RuleResult {
   userId: string;
@@ -16,51 +11,27 @@ interface RuleResult {
   priority?: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: getCorsHeaders(req) });
   }
 
-  // Auth gate — rules-engine uses service_role internally; caller must be authenticated.
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(
-      JSON.stringify({ success: false, error: { code: "UNAUTHORIZED", message: "Missing auth" } }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-  const anonClient = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-  const { data: { user }, error: authError } = await anonClient.auth.getUser(
-    authHeader.replace("Bearer ", "")
-  );
-  if (authError || !user) {
-    return new Response(
-      JSON.stringify({ success: false, error: { code: "UNAUTHORIZED", message: "Invalid token" } }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  // Auth: RULES_ENGINE_SECRET header (service-to-service, called by pg_cron)
+  const secret = Deno.env.get("RULES_ENGINE_SECRET");
+  if (secret) {
+    const incoming = req.headers.get("x-rules-engine-secret");
+    if (incoming !== secret) {
+      return jsonResponse(errorBody("UNAUTHORIZED", "Invalid or missing rules engine secret"), 401, req);
+    }
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
+    const supabase = getServiceClient();
     const suggestions: RuleResult[] = [];
     const now = new Date();
 
     // ============================================
     // RULE 1: Empty Day Detection
-    // Find trips with days that have no items
     // ============================================
     const { data: trips, error: tripsError } = await supabase
       .from("trips")
@@ -86,8 +57,7 @@ serve(async (req) => {
         const startDate = new Date(trip.start_date);
         const endDate = new Date(trip.end_date);
         const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        
-        // Get days with items
+
         const daysWithItems = new Set<number>();
         for (const item of trip.trip_items || []) {
           if (item.start_at) {
@@ -99,19 +69,15 @@ serve(async (req) => {
           }
         }
 
-        // Find empty days
         const emptyDays: number[] = [];
         for (let i = 0; i < totalDays; i++) {
-          if (!daysWithItems.has(i)) {
-            emptyDays.push(i + 1); // 1-indexed for display
-          }
+          if (!daysWithItems.has(i)) emptyDays.push(i + 1);
         }
 
         if (emptyDays.length > 0 && emptyDays.length < totalDays) {
-          const dayText = emptyDays.length === 1 
-            ? `Day ${emptyDays[0]}` 
+          const dayText = emptyDays.length === 1
+            ? `Day ${emptyDays[0]}`
             : `Days ${emptyDays.slice(0, 3).join(", ")}${emptyDays.length > 3 ? ` and ${emptyDays.length - 3} more` : ""}`;
-          
           suggestions.push({
             userId: trip.user_id,
             type: "empty_day",
@@ -127,7 +93,6 @@ serve(async (req) => {
 
     // ============================================
     // RULE 2: Budget Threshold Alert
-    // Notify when spending exceeds 80% of budget
     // ============================================
     const { data: budgets, error: budgetsError } = await supabase
       .from("budget_tracking")
@@ -150,10 +115,9 @@ serve(async (req) => {
       console.error("Error fetching budgets:", budgetsError);
     } else if (budgets) {
       for (const budget of budgets) {
-        // Handle the joined trips data - it's an object, not array
         const tripData = budget.trips as unknown as { id: string; title: string; user_id: string; status: string } | null;
         if (!tripData || !budget.total_budget) continue;
-        
+
         const spent = budget.total_spent || 0;
         const threshold = budget.alert_threshold || 0.8;
         const percentUsed = spent / budget.total_budget;
@@ -184,7 +148,6 @@ serve(async (req) => {
 
     // ============================================
     // RULE 3: Upcoming Event Reminder
-    // Remind about events happening in the next 24-48 hours
     // ============================================
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -205,7 +168,6 @@ serve(async (req) => {
         const bookingDate = new Date(booking.start_date);
         const isToday = bookingDate.toDateString() === now.toDateString();
         const isTomorrow = bookingDate.toDateString() === tomorrow.toDateString();
-
         if (isToday || isTomorrow) {
           suggestions.push({
             userId: booking.user_id,
@@ -222,7 +184,6 @@ serve(async (req) => {
 
     // ============================================
     // RULE 4: Trip Starting Soon
-    // Remind about trips starting in the next 3 days
     // ============================================
     const threeDaysOut = new Date(now);
     threeDaysOut.setDate(threeDaysOut.getDate() + 3);
@@ -241,7 +202,6 @@ serve(async (req) => {
       for (const trip of upcomingTrips) {
         const tripDate = new Date(trip.start_date);
         const daysUntil = Math.ceil((tripDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
         if (daysUntil >= 0 && daysUntil <= 3) {
           const timeText = daysUntil === 0 ? "starts today" : daysUntil === 1 ? "starts tomorrow" : `starts in ${daysUntil} days`;
           suggestions.push({
@@ -258,17 +218,14 @@ serve(async (req) => {
     }
 
     // ============================================
-    // Insert suggestions into proactive_suggestions
-    // (Avoiding duplicates by checking existing)
+    // Insert suggestions (dedup by type+trip+user in last 24h)
     // ============================================
     let inserted = 0;
     let skipped = 0;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
 
     for (const suggestion of suggestions) {
-      // Check if similar suggestion exists (same type + trip/booking + user in last 24h)
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-
       const { data: existing } = await supabase
         .from("proactive_suggestions")
         .select("id")
@@ -304,28 +261,11 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Rules engine completed: ${inserted} inserted, ${skipped} skipped (duplicates)`);
+    console.log(`Rules engine completed: ${inserted} inserted, ${skipped} skipped`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        processed: suggestions.length,
-        inserted,
-        skipped,
-        timestamp: now.toISOString(),
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return jsonResponse({ success: true, processed: suggestions.length, inserted, skipped, timestamp: now.toISOString() }, 200, req);
   } catch (error) {
     console.error("Rules engine error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return jsonResponse(errorBody("INTERNAL", error instanceof Error ? error.message : "Unknown error"), 500, req);
   }
 });
