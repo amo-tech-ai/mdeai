@@ -245,9 +245,26 @@ Phase 2/3 agents: `ai-roi-explain`, `ai-creative-gen`, `ai-audience-match`, `vot
 
 Google Directions API proxied through `google-directions` edge function.
 
-## Environment Variables
+## Secrets — Infisical Agent Vault is the only source of truth
 
-### Public (safe for frontend — in `.env`)
+**All credentials, API keys, and tokens live in self-hosted Infisical at `http://localhost:80`.** Never paste a secret into chat, into a file, into a `.env`, or into a commit. If Claude needs a secret, it gets injected at runtime by Agent Vault — Claude never sees the raw value.
+
+| Surface | URL / command |
+|---|---|
+| Dashboard | http://localhost:80/login |
+| Project overview | http://localhost/organizations/0efac210-70fc-457b-accc-b56fe6835162/projects/secret-management/82d12c1d-c7dc-4b0e-82e2-2fca61340102/overview |
+| Project ID | `82d12c1d-c7dc-4b0e-82e2-2fca61340102` |
+| Org ID | `0efac210-70fc-457b-accc-b56fe6835162` |
+| CLI config | `~/.infisical/infisical-config.json` (already pointing at `localhost:80/api`) |
+| Launch Claude with secrets injected | `agent-vault run -- claude` |
+| One-shot inject | `infisical run --env=prod -- <cmd>` |
+| List secrets | `infisical secrets --env=prod` |
+| Push to Supabase edge fns | `supabase secrets set` (Infisical → Supabase, never the reverse) |
+| Upstream | https://github.com/infisical/infisical |
+
+> **Skill:** read [`.claude/skills/mde-infisical/SKILL.md`](./.claude/skills/mde-infisical/SKILL.md) before doing any secret-related work (rotation, sync, agent broker, secret-sync targets).
+
+### Public env vars (the only things allowed in `.env`)
 ```
 VITE_SUPABASE_PROJECT_ID       # Supabase project ID
 VITE_SUPABASE_PUBLISHABLE_KEY  # Supabase anon key
@@ -255,7 +272,7 @@ VITE_SUPABASE_URL              # Supabase API URL
 VITE_GOOGLE_MAPS_API_KEY       # Google Maps JS key (set in Vercel for prod)
 ```
 
-`.env` may only contain the four `VITE_*` vars above. All other secrets live in Infisical (source of truth) and sync to Supabase / Vercel — never in `.env`.
+`.env` may only contain the four `VITE_*` vars above. Every other credential — Stripe, Gemini, Infobip, Supabase service role, staff/QR signing secrets, cron secrets — lives in Infisical and is synced to Supabase / Vercel by `mde-infisical`. **Never** put a service role key, Stripe secret, Gemini key, or any non-`VITE_*` value into `.env`, the repo, or chat.
 
 ### Edge function secrets (Supabase dashboard)
 `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `INFOBIP_API_KEY`, `INFOBIP_BASE_URL`, `INFOBIP_PHONE_NUMBER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TICKET_CHECKOUT_KEY`, `STRIPE_TICKET_WEBHOOK_KEY`, `STRIPE_SPONSOR_CHECKOUT_KEY` (⚠ not yet set — blocks sponsor checkout), `STRIPE_SPONSOR_WEBHOOK_KEY`, `STAFF_LINK_SECRET`, `QR_SIGNING_SECRET`, `LEAD_REMINDER_CRON_SECRET`.
