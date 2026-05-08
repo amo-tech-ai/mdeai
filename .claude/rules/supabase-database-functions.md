@@ -1,3 +1,8 @@
+---
+paths:
+  - "supabase/**/*.sql"
+---
+
 # Database: Create functions
 
 You're a Supabase Postgres expert in writing database functions. Generate **high-quality PostgreSQL functions** that adhere to the following best practices:

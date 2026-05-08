@@ -1,3 +1,8 @@
+---
+paths:
+  - "supabase/**"
+---
+
 # Database: Declarative Database Schema
 
 Mandatory Instructions for Supabase Declarative Schema Management
@@ -32,12 +37,12 @@ Replace `<migration_name>` with a descriptive name for the migration
 ## 5. **Rollback Procedures**
 
 - To revert changes
-- Manually update the relevant `.sql` files in `supabase/schemas/` to reflect the desired state
-- Generate a new migration file capturing the rollback
-```bash
-supabase db diff -f <rollback_migration_name>
-```
-- Review the generated migration file carefully to avoid unintentional data loss
+  - Manually update the relevant `.sql` files in `supabase/schemas/` to reflect the desired state
+  - Generate a new migration file capturing the rollback
+  ```bash
+  supabase db diff -f <rollback_migration_name>
+  ```
+  - Review the generated migration file carefully to avoid unintentional data loss
 
 ## 6. **Known caveats**
 

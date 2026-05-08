@@ -1,3 +1,9 @@
+---
+paths:
+  - "supabase/**/*.sql"
+  - "**/*.sql"
+---
+
 # Postgres SQL Style Guide
 
 ## General
