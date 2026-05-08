@@ -2,6 +2,10 @@
 
 > **Source of truth for product strategy:** [prd.md](./prd.md) (v5.1, 2026-05-05). When CLAUDE.md and prd.md disagree, prd.md wins.
 
+> **Active work + ordering:** [tasks/todo.md](./tasks/todo.md). Top of file = next thing to ship. When a task ships, move it to [changelog](./changelog) — don't leave `[x]` rows in todo.md.
+
+> **Skills (mandatory check before non-trivial work):** browse [.claude/skills/](./.claude/skills/) and load any matching domain skill before editing. Each skill is a folder with a `SKILL.md` (or `.md` file at the root) containing `name`, `description`, and instructions. Owner skills for this repo: `mde-supabase`, `mde-vercel`, `mde-github`, `mde-stripe`, `mde-whatsapp`, `mde-real-estate`, `mde-testing`, `mde-task-lifecycle`, `mde-infisical`, `mde-firecrawl`, `mde-roadmap`, `mde-writing-plans`, `mdeai-three-panel`, `working-with-claude-code`. If a request matches a skill name or its triggers (Supabase / RLS / Vercel / Stripe / WhatsApp / events / sponsors / etc.), open the skill file first.
+
 ## Project Overview
 
 **mdeai.co** is an AI-first platform for Medellín built around four product pillars (see prd.md §1):
