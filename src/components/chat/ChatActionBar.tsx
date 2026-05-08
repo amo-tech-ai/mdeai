@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Map, ArrowRight } from 'lucide-react';
+import { Map, ArrowRight, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ChatAction } from '@/types/chat';
 
@@ -41,6 +41,20 @@ export function ChatActionBar({ actions, onActionDispatched }: ChatActionBarProp
               <Map className="w-3.5 h-3.5 mr-1.5" />
               See {count > 0 ? `all ${count}` : 'all'} on the map
               <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+            </Button>
+          );
+        }
+        if (action.type === 'OPEN_LEAD_CAPTURED') {
+          return (
+            <Button
+              key={`${action.type}-${i}`}
+              size="sm"
+              variant="outline"
+              onClick={() => onActionDispatched?.(action)}
+              className="rounded-full"
+            >
+              <UserCheck className="w-3.5 h-3.5 mr-1.5 text-green-600" />
+              {action.payload.message}
             </Button>
           );
         }
