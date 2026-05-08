@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Sparkles, Maximize2, DollarSign, Heart, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -8,6 +8,7 @@ import { ChatInput } from './ChatInput';
 import { useChat } from '@/hooks/useChat';
 import { ChatTab } from '@/types/chat';
 import { useAuth } from '@/hooks/useAuth';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import { cn } from '@/lib/utils';
 
 const quickActions = [
@@ -20,7 +21,9 @@ export function FloatingChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChatTab>('concierge');
   const { user } = useAuth();
-  
+  const workspace = useWorkspace();
+  const workspacePromptFiredRef = useRef(false);
+
   const {
     messages,
     isLoading,
@@ -44,6 +47,14 @@ export function FloatingChatWidget() {
       setMessages([]);
     }
   }, [user, activeTab, isOpen, fetchConversations, setCurrentConversation, setMessages]);
+
+  // When the widget opens on a page with a detected workspace, send the
+  // workspace chatPrompt as the first message so AI is immediately context-aware.
+  useEffect(() => {
+    if (!isOpen || !workspace || workspacePromptFiredRef.current) return;
+    workspacePromptFiredRef.current = true;
+    void sendMessage(workspace.chatPrompt);
+  }, [isOpen, workspace, sendMessage]);
 
   const handleTabChange = (tab: ChatTab) => {
     setActiveTab(tab);
@@ -102,7 +113,9 @@ export function FloatingChatWidget() {
                 {/* Welcome Message */}
                 <div className="bg-muted/50 rounded-xl p-4 mb-4">
                   <p className="text-sm text-foreground">
-                    Welcome to Medellín. I am your personal concierge. Ask me about events, real estate, or planning your trip.
+                    {workspace
+                      ? workspace.chatPrompt
+                      : 'Welcome to Medellín. I am your personal concierge. Ask me about events, real estate, or planning your trip.'}
                   </p>
                 </div>
 

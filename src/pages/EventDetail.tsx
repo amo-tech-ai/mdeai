@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { BackToChatBar } from "@/components/chat/BackToChatBar";
 import {
   ArrowLeft,
   Heart,
@@ -201,7 +202,9 @@ export default function EventDetail() {
 
   return (
     <ThreePanelLayout>
-      <div className="space-y-6">
+      <div>
+        <BackToChatBar />
+      <div className="space-y-6 p-6">
         {/* Back Link */}
         <Link
           to="/events"
@@ -387,6 +390,7 @@ export default function EventDetail() {
             />
           </DialogContent>
         </Dialog>
+      </div>
       </div>
     </ThreePanelLayout>
   );

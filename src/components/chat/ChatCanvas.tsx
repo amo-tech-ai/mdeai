@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { type WorkspaceConfig, type WorkspaceId } from '@/config/workspaces';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, DollarSign, Heart, MapPin, Calendar, Map as MapIcon } from 'lucide-react';
 import { ChatMessageList } from './ChatMessageList';
@@ -147,6 +148,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
   // area" search from inside the drawer — feels weird if the map stays
   // open while the chat is updating behind it).
   const [mobileMapOpen, setMobileMapOpen] = useState(false);
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceConfig | null>(null);
 
   const {
     messages,
@@ -173,6 +175,14 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
       setEmailGateOpen(true);
     },
   });
+
+  const handleWorkspaceActivate = useCallback(
+    (workspace: WorkspaceConfig) => {
+      setActiveWorkspace(workspace);
+      void sendMessage(workspace.chatPrompt);
+    },
+    [sendMessage],
+  );
 
   useEffect(() => {
     if (user) fetchConversations();
@@ -222,6 +232,21 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     trackEvent({ name: 'prompt_autofired', promptLength: prompt.length });
     void sendMessage(prompt);
     // Strip the ?send=pending param so a refresh doesn't replay the prompt.
+    navigate('/chat', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, authLoading, user, anonSessionId]);
+
+  // Auto-fire ?q= param — sent by the Explore AI prompt bar.
+  const qFiredRef = useRef(false);
+  useEffect(() => {
+    if (qFiredRef.current) return;
+    const params = new URLSearchParams(location.search);
+    const q = params.get('q');
+    if (!q) return;
+    if (authLoading) return;
+    if (!user && !anonSessionId) return;
+    qFiredRef.current = true;
+    void sendMessage(q);
     navigate('/chat', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, authLoading, user, anonSessionId]);
@@ -320,10 +345,17 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
             onSelectConversation={selectConversation}
             onNewChat={newChat}
             onArchiveConversation={archiveConversation}
+            onWorkspaceActivate={handleWorkspaceActivate}
+            activeWorkspaceId={activeWorkspace?.id as WorkspaceId | null}
           />
         </div>
         <main className="flex-1 flex flex-col min-w-0">
-          <ChatContextChips value={chatContext} onChange={updateChatContext} />
+          <ChatContextChips
+            value={chatContext}
+            onChange={updateChatContext}
+            activeWorkspace={activeWorkspace}
+            onFilterQuery={sendMessage}
+          />
           <div className="flex-1 min-h-0 overflow-hidden">
             {messages.length === 0 ? (
               <WelcomeState onQuery={sendMessage} />
@@ -337,6 +369,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
                 pendingActions={pendingActions}
                 onActionDispatched={() => setPendingActions([])}
                 reasoningPhases={reasoningPhases}
+                conversationId={currentConversation?.id}
               />
             )}
           </div>
@@ -366,11 +399,18 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
             onSelectConversation={selectConversation}
             onNewChat={newChat}
             onArchiveConversation={archiveConversation}
+            onWorkspaceActivate={handleWorkspaceActivate}
+            activeWorkspaceId={activeWorkspace?.id as WorkspaceId | null}
             compact
           />
         </div>
         <main className="flex-1 flex flex-col min-w-0">
-          <ChatContextChips value={chatContext} onChange={updateChatContext} />
+          <ChatContextChips
+            value={chatContext}
+            onChange={updateChatContext}
+            activeWorkspace={activeWorkspace}
+            onFilterQuery={sendMessage}
+          />
           <div className="flex-1 min-h-0 overflow-hidden">
             {messages.length === 0 ? (
               <WelcomeState onQuery={sendMessage} />
@@ -384,6 +424,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
                 pendingActions={pendingActions}
                 onActionDispatched={() => setPendingActions([])}
                 reasoningPhases={reasoningPhases}
+                conversationId={currentConversation?.id}
               />
             )}
           </div>
@@ -407,7 +448,12 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
           different rendering surface for the same map. */}
       <div className="md:hidden flex flex-col min-h-screen pb-20">
         <main className="flex-1 flex flex-col min-w-0">
-          <ChatContextChips value={chatContext} onChange={updateChatContext} />
+          <ChatContextChips
+            value={chatContext}
+            onChange={updateChatContext}
+            activeWorkspace={activeWorkspace}
+            onFilterQuery={sendMessage}
+          />
           <div className="flex-1 min-h-0 overflow-hidden">
             {messages.length === 0 ? (
               <WelcomeState onQuery={sendMessage} />
@@ -421,6 +467,7 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
                 pendingActions={pendingActions}
                 onActionDispatched={() => setPendingActions([])}
                 reasoningPhases={reasoningPhases}
+                conversationId={currentConversation?.id}
               />
             )}
           </div>

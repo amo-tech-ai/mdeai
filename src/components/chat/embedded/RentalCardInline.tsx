@@ -17,6 +17,8 @@ interface RentalCardInlineProps {
   saved?: boolean;
   /** Social-proof save count from apartment_save_counts RPC (Week 2 Tue). */
   saveCount?: number;
+  /** Passed as router state so ApartmentDetail can show BackToChatBar. */
+  conversationId?: string;
 }
 
 /**
@@ -36,6 +38,7 @@ export function RentalCardInline({
   onAddToTrip,
   saved = false,
   saveCount = 0,
+  conversationId,
 }: RentalCardInlineProps) {
   const [imgError, setImgError] = useState(false);
   const img = !imgError && listing.images?.[0] ? listing.images[0] : apartmentPlaceholder;
@@ -70,6 +73,7 @@ export function RentalCardInline({
   return (
     <Link
       to={`/apartments/${listing.id}`}
+      state={{ from: 'chat', conversationId }}
       className={cn(
         'group relative flex overflow-hidden rounded-2xl border border-border bg-card transition-all hover:shadow-md',
         layout === 'horizontal' ? 'flex-row h-[140px]' : 'flex-col',

@@ -2,6 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ArrowLeft, MapPin, Bed, Bath, Wifi, Star, Heart, Share2, Calendar, CheckCircle, XCircle, Sparkles } from "lucide-react";
 import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
+import { BackToChatBar } from "@/components/chat/BackToChatBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -181,7 +182,9 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
   const mainImage = apartment.images?.[0] || "/placeholder.svg";
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="max-w-4xl">
+      <BackToChatBar />
+      <div className="p-6">
       {/* Back Link */}
       <Link to="/apartments" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6">
         <ArrowLeft className="w-4 h-4" />
@@ -369,9 +372,6 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
         </div>
       </div>
 
-      {/* Booking + Contact Host dialogs — portal to document root, so it's
-          fine to mount them here even though the trigger lives in the
-          right panel (different DOM subtree). */}
       <BookingDialog
         open={bookingOpen}
         onOpenChange={setBookingOpen}
@@ -382,6 +382,7 @@ function ApartmentDetailContent({ apartment, isSaved, handleSave, user }: {
         onOpenChange={setContactOpen}
         apartment={apartment}
       />
+      </div>
     </div>
   );
 }

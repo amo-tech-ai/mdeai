@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { MapPin, Calendar, Users, DollarSign, X } from 'lucide-react';
+import { MapPin, Calendar, Users, DollarSign, X, Zap } from 'lucide-react';
+import type { WorkspaceConfig } from '@/config/workspaces';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +22,9 @@ import { cn } from '@/lib/utils';
 interface ChatContextChipsProps {
   value: ChatContext;
   onChange: (next: ChatContext) => void;
-  /** Show a subtle "Add context" placeholder when all chips are empty. */
   showPlaceholder?: boolean;
+  activeWorkspace?: WorkspaceConfig | null;
+  onFilterQuery?: (query: string) => void;
 }
 
 const NEIGHBORHOODS = [
@@ -424,19 +426,37 @@ export function ChatContextChips({
   value,
   onChange,
   showPlaceholder = true,
+  activeWorkspace,
+  onFilterQuery,
 }: ChatContextChipsProps) {
   const has = hasChatContext(value);
   const ctx = value ?? EMPTY_CHAT_CONTEXT;
 
-  if (!has && !showPlaceholder) return null;
+  if (!has && !showPlaceholder && !activeWorkspace) return null;
 
   const update = (patch: Partial<ChatContext>) => onChange({ ...ctx, ...patch });
 
   return (
     <div
       aria-label="Search context"
-      className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-border bg-background/60 backdrop-blur"
+      className="flex flex-col border-b border-border bg-background/60 backdrop-blur"
     >
+      {activeWorkspace && onFilterQuery && (
+        <div className="flex items-center gap-2 px-4 pt-2 pb-1 overflow-x-auto scrollbar-none">
+          <Zap className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+          {activeWorkspace.quickFilters.map((filter) => (
+            <button
+              key={filter.label}
+              type="button"
+              onClick={() => onFilterQuery(filter.query)}
+              className="flex-shrink-0 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs hover:bg-primary/10 transition-colors"
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2">
       <NeighborhoodPopover
         value={ctx.neighborhood ?? null}
         onChange={(v) => update({ neighborhood: v })}
@@ -469,6 +489,7 @@ export function ChatContextChips({
           Clear all
         </button>
       )}
+      </div>
     </div>
   );
 }
