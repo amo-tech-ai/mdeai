@@ -11,6 +11,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { TripProvider } from "@/context/TripContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FloatingChatWidget } from "@/components/chat/FloatingChatWidget";
+import { Analytics } from "@vercel/analytics/react";
 
 // EAGER imports — only the routes most likely to load on first paint:
 //   • Home    — every anonymous landing hits this.
@@ -217,6 +218,7 @@ const App = () => (
           </TripProvider>
         </AuthProvider>
       </BrowserRouter>
+      <Analytics />
     </TooltipProvider>
   </QueryClientProvider>
   </GadgetProvider>
