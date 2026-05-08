@@ -1,5 +1,33 @@
 # Changelog — mdeai.co
 
+## 2026-05-08 — Chat workspace nav + page integration ([PR #10](https://github.com/amo-tech-ai/mdeai/pull/10), [PR #12](https://github.com/amo-tech-ai/mdeai/pull/12))
+
+Two PRs landed on `main` and auto-deployed to https://www.mdeai.co.
+
+### PR #10 — feat(chat): C11+C12+C13 workspace nav, context chips, page integration
+
+Merge commit: `eaf92b9`. 13 files, 523 insertions, 29 deletions.
+
+**C11 — Workspace config singleton.** New [src/config/workspaces.ts](src/config/workspaces.ts) defines the 8 verticals (real-estate, events, restaurants, tours, nightlife, organizers, landlords, sponsors) with `id / label / icon / href / chatPrompt / quickFilters / mapCategory / agentHint / group`. New [src/hooks/useWorkspace.ts](src/hooks/useWorkspace.ts) detects the active workspace from `location.pathname` (longest-href wins; `/chat` is skipped).
+
+**C12 — ChatLeftNav multi-vertical sidebar.** Adds collapsible EXPLORE and MANAGE sections in [ChatLeftNav.tsx](src/components/chat/ChatLeftNav.tsx); collapse state persists in `localStorage`. Click an item → `sendMessage(workspace.chatPrompt)` so the AI reframes around the chosen vertical. [ChatContextChips.tsx](src/components/chat/ChatContextChips.tsx) renders a quick-filter chip row above the Neighborhood/Dates/Travelers/Budget bar when a workspace is active. [ChatCanvas.tsx](src/components/chat/ChatCanvas.tsx) holds `activeWorkspace` state; `handleWorkspaceActivate` is placed AFTER `useChat` destructuring to avoid a TDZ `ReferenceError` on `sendMessage`. `?q=…` URL param auto-fires once and the query string is cleared to prevent replay.
+
+**C13 — Page integration map (chat ↔ detail pages).** New [BackToChatBar.tsx](src/components/chat/BackToChatBar.tsx) renders only when `location.state.from === 'chat'` and returns to `/chat?conversationId=…`. [RentalCardInline.tsx](src/components/chat/embedded/RentalCardInline.tsx) Link state threads `{ from: 'chat', conversationId }`. [ApartmentDetail.tsx](src/pages/ApartmentDetail.tsx) + [EventDetail.tsx](src/pages/EventDetail.tsx) mount `<BackToChatBar />` at top. [Explore.tsx](src/pages/Explore.tsx) "Ask AI about {neighborhood}…" pill navigates to `/chat?q=…`. [FloatingChatWidget.tsx](src/components/chat/FloatingChatWidget.tsx) auto-fires `workspace.chatPrompt` on first open via `workspacePromptFiredRef`.
+
+**Path taken.** Local `main` was 12 ahead, 46 behind `origin/main`. Cherry-picked just the C11+C12+C13 commit (`a40fb82`) onto a fresh branch from `origin/main`. Resolved 2 conflicts (ChatMessageList + ApartmentDetail) by keeping the more advanced HEAD versions and threading the new `conversationId` prop + `BackToChatBar`.
+
+**Verification.** `npm run build` clean 4.31s · `npm run test` 41/41 on `main` · PR #10 Vercel preview SUCCESS · production `/chat` HTTP 200 with new bundle hash `index-BHDG50xm.js`.
+
+### PR #12 — docs(CLAUDE.md): plain-English shipping explainer
+
+Merge commit: `4038f6e`. 1 file, 55 insertions. Adds a section to [CLAUDE.md](CLAUDE.md) explaining local-vs-GitHub divergence, the commit→push→PR→merge→deploy chain, recovery via cherry-pick, and why test counts vary between branches. Captures the operational lesson from PR #10.
+
+### Still on local `main`, not on production
+
+11 local-only commits remain — host page tests + sponsor flows + landlord V1 fixes (~218 additional tests). They need their own PRs from a fresh branch off `origin/main`. None are blockers for the next chat sprint (C02 / C03 / C14).
+
+---
+
 ## 2026-04-28 — sprint rollup (PR #6, 7 commits since main)
 
 The Day 2 / 3 / 4 sprint plus audit § 6 plus a code-splitting pass all landed on `fix/chat-production-hardening` over 24 hours. Production readiness moves from **96 → 98** pending PR #6 merge + post-merge migration push.
