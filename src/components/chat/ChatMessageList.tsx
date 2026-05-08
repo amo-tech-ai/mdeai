@@ -20,6 +20,7 @@ interface ChatMessageListProps {
   onActionDispatched?: (action: ChatAction) => void;
   /** Reasoning-trace phases for the "Thought for Ns" collapsible. */
   reasoningPhases?: ReasoningPhase[];
+  conversationId?: string | null;
 }
 
 export function ChatMessageList({
@@ -31,6 +32,7 @@ export function ChatMessageList({
   pendingActions,
   onActionDispatched,
   reasoningPhases,
+  conversationId,
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -68,9 +70,6 @@ export function ChatMessageList({
                   : 'bg-muted/50'
               )}
             >
-              {/* Reasoning trace renders above the latest assistant message's
-                  content so the user sees "Handing off to Rentals Concierge…"
-                  → "Considering 43 matches…" BEFORE the final text arrives. */}
               {message.role === 'assistant' &&
                 messages[messages.length - 1].id === message.id &&
                 reasoningPhases && reasoningPhases.length > 0 && (
@@ -96,19 +95,12 @@ export function ChatMessageList({
                   {message.agent_name.replace(/_/g, ' ')}
                 </p>
               )}
-              {/* Inline listing cards + rejection-transparency table +
-                  structured action affordances (e.g. "See all on the map →")
-                  render under the latest assistant message once the stream
-                  ends. Cards come from the tool response payload; the
-                  button navigates to /apartments?q=… */}
               {message.role === 'assistant' &&
                 !isStreaming &&
                 messages[messages.length - 1].id === message.id &&
                 pendingActions && pendingActions.length > 0 && (
                   <>
-                    <EmbeddedListings actions={pendingActions} />
-                    {/* Rejection-transparency: render a "Not a Good Fit"
-                        table whenever any action carried rejected rows. */}
+                    <EmbeddedListings actions={pendingActions} conversationId={conversationId} />
                     {pendingActions
                       .flatMap((a) =>
                         a.type === 'OPEN_RENTALS_RESULTS' && a.payload.considered_but_rejected

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -10,7 +10,20 @@ import {
   LogOut,
   User,
   Trash2,
+  ChevronDown,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  EXPLORE_WORKSPACES,
+  MANAGE_WORKSPACES,
+  type WorkspaceConfig,
+  type WorkspaceId,
+} from '@/config/workspaces';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -50,8 +63,111 @@ interface ChatLeftNavProps {
   onSelectConversation: (c: Conversation) => void;
   onNewChat: () => void;
   onArchiveConversation?: (id: string) => void;
+  onWorkspaceActivate?: (workspace: WorkspaceConfig) => void;
+  activeWorkspaceId?: WorkspaceId | null;
   /** Compact width for tablet breakpoint. */
   compact?: boolean;
+}
+
+function WorkspaceNavItem({
+  workspace,
+  isActive,
+  onActivate,
+  compact,
+}: {
+  workspace: WorkspaceConfig;
+  isActive: boolean;
+  onActivate?: (w: WorkspaceConfig) => void;
+  compact?: boolean;
+}) {
+  const btn = (
+    <button
+      type="button"
+      onClick={() => onActivate?.(workspace)}
+      className={cn(
+        'flex items-center gap-3 w-full px-2 py-2 rounded-md text-sm transition-colors text-left',
+        isActive
+          ? 'bg-primary/10 text-primary'
+          : 'text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground',
+      )}
+    >
+      <workspace.icon className="w-4 h-4 flex-shrink-0" />
+      {!compact && <span>{workspace.label}</span>}
+    </button>
+  );
+
+  if (compact) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{btn}</TooltipTrigger>
+        <TooltipContent side="right">{workspace.label}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return btn;
+}
+
+function WorkspaceSection({
+  title,
+  storageKey,
+  items,
+  activeId,
+  onActivate,
+  compact,
+}: {
+  title: string;
+  storageKey: string;
+  items: WorkspaceConfig[];
+  activeId?: WorkspaceId | null;
+  onActivate?: (w: WorkspaceConfig) => void;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(storageKey) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(storageKey, String(next));
+      } catch { /* private mode */ }
+      return next;
+    });
+  };
+
+  return (
+    <div className="px-2 py-1 border-t border-sidebar-border">
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          'flex items-center justify-between w-full px-2 py-1 mb-0.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors',
+          compact && 'justify-center',
+        )}
+      >
+        {!compact && <span>{title}</span>}
+        <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="space-y-0.5">
+          {items.map((workspace) => (
+            <WorkspaceNavItem
+              key={workspace.id}
+              workspace={workspace}
+              isActive={activeId === workspace.id}
+              onActivate={onActivate}
+              compact={compact}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const MAX_VISIBLE_CONVERSATIONS = 8;
@@ -158,6 +274,8 @@ export function ChatLeftNav({
   onSelectConversation,
   onNewChat,
   onArchiveConversation,
+  onWorkspaceActivate,
+  activeWorkspaceId,
   compact = false,
 }: ChatLeftNavProps) {
   const { user, signOut } = useAuth();
@@ -256,6 +374,26 @@ export function ChatLeftNav({
           iconClassName="text-blue-500"
         />
       </div>
+
+      {/* Workspace sections */}
+      <TooltipProvider>
+        <WorkspaceSection
+          title="Explore"
+          storageKey="sidebar-explore-open"
+          items={EXPLORE_WORKSPACES}
+          activeId={activeWorkspaceId}
+          onActivate={onWorkspaceActivate}
+          compact={compact}
+        />
+        <WorkspaceSection
+          title="Manage"
+          storageKey="sidebar-manage-open"
+          items={MANAGE_WORKSPACES}
+          activeId={activeWorkspaceId}
+          onActivate={onWorkspaceActivate}
+          compact={compact}
+        />
+      </TooltipProvider>
 
       {/* Quick links */}
       <div className="px-2 py-2 border-t border-sidebar-border space-y-0.5">

@@ -6,6 +6,7 @@ import { AddToTripModal } from '../AddToTripModal';
 
 interface EmbeddedListingsProps {
   actions: ChatAction[];
+  conversationId?: string | null;
 }
 
 /**
@@ -18,7 +19,7 @@ interface EmbeddedListingsProps {
  *
  * See: tasks/CHAT-CENTRAL-PLAN.md §5 · Week 1 Tue + Week 2 Tue.
  */
-export function EmbeddedListings({ actions }: EmbeddedListingsProps) {
+export function EmbeddedListings({ actions, conversationId }: EmbeddedListingsProps) {
   const chatActions = useChatActions();
   const { savedIds, saveCounts, toggleSave, fetchSaveCounts } = chatActions;
   const [tripModalOpen, setTripModalOpen] = useState(false);
@@ -61,6 +62,7 @@ export function EmbeddedListings({ actions }: EmbeddedListingsProps) {
             onAddToTrip={() => openTripModal(l)}
             saved={savedIds.has(l.id)}
             saveCount={saveCounts.get(l.id) ?? 0}
+            conversationId={conversationId ?? undefined}
           />
         ))}
       </div>

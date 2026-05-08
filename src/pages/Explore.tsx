@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { Search, MapPin, Sparkles, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ThreePanelLayout, useThreePanelContext } from "@/components/explore/ThreePanelLayout";
 import { ExploreCard } from "@/components/explore/ExploreCard";
 import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
@@ -26,8 +26,10 @@ const categoryRoutes: Record<string, { label: string; route: string }> = {
 
 // Inner content component that uses panel context
 function ExploreContent() {
+  const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<ExploreCategory>("all");
   const [neighborhood, setNeighborhood] = useState("El Poblado");
+  const [chatPrompt, setChatPrompt] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSearchResults, setAISearchResults] = useState<AISearchResult[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
@@ -124,6 +126,34 @@ function ExploreContent() {
             onSelect={setNeighborhood}
           />
         </div>
+
+        {/* Ask AI — navigates to /chat with query pre-filled */}
+        <form
+          className="flex items-center gap-2 mb-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!chatPrompt.trim()) return;
+            navigate(`/chat?q=${encodeURIComponent(chatPrompt.trim())}`);
+          }}
+        >
+          <div className="relative flex-1">
+            <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+            <input
+              type="text"
+              value={chatPrompt}
+              onChange={(e) => setChatPrompt(e.target.value)}
+              placeholder={`Ask AI about ${neighborhood}…`}
+              className="w-full pl-9 pr-4 py-2 rounded-full border border-primary/30 bg-primary/5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <button
+            type="submit"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            Ask AI
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </form>
 
         {/* AI-Powered Search */}
         <AISearchInput
