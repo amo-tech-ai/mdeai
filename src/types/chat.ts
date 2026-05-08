@@ -76,6 +76,15 @@ export const EMPTY_CHAT_CONTEXT: ChatContext = {
   budget: null,
 };
 
+// ─── Structured actions emitted by edge functions via SSE sidecar ────────────
+// The ai-chat function emits `data: {"__mdeai_actions__": [...]}` before
+// streaming the text response when a tool result contains structured actions.
+
+export interface ChatAction {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
 export function hasChatContext(ctx: ChatContext | null | undefined): boolean {
   if (!ctx) return false;
   if (ctx.neighborhood && ctx.neighborhood.trim().length > 0) return true;

@@ -826,7 +826,47 @@ serve(async (req) => {
         throw new Error("Failed to get final AI response after tool execution");
       }
 
-      // Stream the final response back
+      // Extract any structured actions from tool results so we can
+      // prepend them as a sidecar SSE event before the text stream.
+      const structuredActions: Array<{ type: string; payload: Record<string, unknown> }> = [];
+      for (const tr of toolResults) {
+        try {
+          const parsed = JSON.parse(tr.content) as { actions?: Array<{ type: string; payload: Record<string, unknown> }> };
+          if (parsed.actions && Array.isArray(parsed.actions)) {
+            structuredActions.push(...parsed.actions);
+          }
+        } catch { /* ignore unparseable tool results */ }
+      }
+
+      // Stream the final response back, prepending action sidecar if present
+      if (structuredActions.length > 0 && finalResponse.body) {
+        const encoder = new TextEncoder();
+        const actionLine = `data: ${JSON.stringify({ __mdeai_actions__: structuredActions })}\n\n`;
+        const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+        const writer = writable.getWriter();
+        (async () => {
+          try {
+            await writer.write(encoder.encode(actionLine));
+            const reader = finalResponse.body!.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              await writer.write(value);
+            }
+          } finally {
+            await writer.close();
+          }
+        })();
+        return new Response(readable, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          },
+        });
+      }
+
       return new Response(finalResponse.body, {
         headers: {
           ...corsHeaders,

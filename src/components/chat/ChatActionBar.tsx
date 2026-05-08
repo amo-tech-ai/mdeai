@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Map, ArrowRight } from 'lucide-react';
+import { Map, ArrowRight, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ChatAction } from '@/types/chat';
 
@@ -26,7 +26,7 @@ export function ChatActionBar({ actions, onActionDispatched }: ChatActionBarProp
     <div className="mt-2 flex flex-wrap gap-2">
       {actions.map((action, i) => {
         if (action.type === 'OPEN_RENTALS_RESULTS') {
-          const count = action.payload.listing_ids?.length ?? 0;
+          const count = (action.payload.listing_ids as unknown[])?.length ?? 0;
           return (
             <Button
               key={`${action.type}-${i}`}
@@ -40,6 +40,23 @@ export function ChatActionBar({ actions, onActionDispatched }: ChatActionBarProp
             >
               <Map className="w-3.5 h-3.5 mr-1.5" />
               See {count > 0 ? `all ${count}` : 'all'} on the map
+              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+            </Button>
+          );
+        }
+        if (action.type === 'OPEN_HOST_LISTING_FORM') {
+          return (
+            <Button
+              key={`${action.type}-${i}`}
+              size="sm"
+              onClick={() => {
+                navigate('/host/listings/new');
+                onActionDispatched?.(action);
+              }}
+              className="rounded-full"
+            >
+              <Building2 className="w-3.5 h-3.5 mr-1.5" />
+              Add your rental listing
               <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
             </Button>
           );

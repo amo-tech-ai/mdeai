@@ -40,6 +40,9 @@ const INTENT_CATEGORIES = {
   safety_tips: { agent: 'concierge', description: 'Safety or practical advice' },
   cultural_info: { agent: 'concierge', description: 'Colombian culture, customs, etiquette' },
 
+  // Host / Landlord
+  landlord_listing_create: { agent: 'host', description: 'Host or landlord wanting to list or add a rental property' },
+
   // General
   general_greeting: { agent: 'concierge', description: 'Greetings or casual conversation' },
   general_question: { agent: 'concierge', description: 'General questions not fitting other categories' },
@@ -94,6 +97,17 @@ const QUICK_INTENT_PATTERNS: Array<{ patterns: RegExp[]; intent: IntentCategory;
   // Bookings
   { patterns: [/\b(my booking|my reservation|confirmation|booking status)\b/i], intent: 'booking_status', confidence: 0.90 },
   { patterns: [/\b(cancel|modify|change.*booking|change.*reservation)\b/i], intent: 'booking_modification', confidence: 0.90 },
+
+  // Host / landlord — must appear before generic housing patterns to win
+  {
+    patterns: [
+      /\b(list my|add my|publish my|rent out my|my.*place.*rent|my.*apartment.*available)\b/i,
+      /\b(add.*rental|add.*listing|list.*rental|list.*property|become.*host)\b/i,
+      /\b(i.*landlord|landlord.*want|i.*own.*apartment|i have.*apartment.*rent)\b/i,
+    ],
+    intent: 'landlord_listing_create',
+    confidence: 0.92,
+  },
 
   // Local knowledge
   { patterns: [/\b(safe|safety|dangerous|crime|security)\b/i], intent: 'safety_tips', confidence: 0.88 },

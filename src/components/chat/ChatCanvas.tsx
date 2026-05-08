@@ -4,6 +4,7 @@ import { Sparkles, DollarSign, Heart, MapPin, Calendar, Map as MapIcon } from 'l
 import { ChatMessageList } from './ChatMessageList';
 import { ChatInput } from './ChatInput';
 import { ChatMap, type ViewportSearchPayload } from './ChatMap';
+import { ChatActionBar } from './ChatActionBar';
 import { ChatContextChips } from './ChatContextChips';
 import { EmailGateModal } from './EmailGateModal';
 import { ChatLeftNav } from './ChatLeftNav';
@@ -340,6 +341,14 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
               />
             )}
           </div>
+          {pendingActions.length > 0 && (
+            <div className="px-4 pb-2 max-w-3xl mx-auto w-full">
+              <ChatActionBar
+                actions={pendingActions}
+                onActionDispatched={() => setPendingActions([])}
+              />
+            </div>
+          )}
           <div className="border-t border-border bg-background/80 backdrop-blur p-4">
             <div className="max-w-3xl mx-auto">
               <ChatInput
@@ -387,6 +396,14 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
               />
             )}
           </div>
+          {pendingActions.length > 0 && (
+            <div className="px-4 pb-2">
+              <ChatActionBar
+                actions={pendingActions}
+                onActionDispatched={() => setPendingActions([])}
+              />
+            </div>
+          )}
           <div className="border-t border-border bg-background/80 backdrop-blur p-4">
             <ChatInput
               onSend={sendMessage}
@@ -424,6 +441,14 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
               />
             )}
           </div>
+          {pendingActions.length > 0 && (
+            <div className="px-3 pb-2">
+              <ChatActionBar
+                actions={pendingActions}
+                onActionDispatched={() => setPendingActions([])}
+              />
+            </div>
+          )}
           <div className="border-t border-border bg-background p-3">
             <ChatInput
               onSend={sendMessage}

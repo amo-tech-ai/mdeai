@@ -2,12 +2,20 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripContext } from '@/context/TripContext';
-import { ChatMessage, Conversation, ChatTab, tabToAgentType } from '@/types/chat';
+import {
+  ChatMessage,
+  Conversation,
+  ChatTab,
+  tabToAgentType,
+  ChatAction,
+  ChatContext,
+  EMPTY_CHAT_CONTEXT,
+} from '@/types/chat';
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
-// Use environment variable with fallback for the Supabase URL
 const SUPABASE_URL = 'https://zkwcbyxiwklihegjhuql.supabase.co';
+
 export interface IntentResult {
   intent: string;
   targetAgent: ChatTab;
@@ -18,7 +26,11 @@ export interface IntentResult {
   reasoning?: string;
 }
 
-export function useChat(activeTab: ChatTab) {
+interface UseChatOptions {
+  onAnonLimitExceeded?: (retry: number | undefined) => void;
+}
+
+export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
   const { user } = useAuth();
   const { activeTrip } = useTripContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -26,16 +38,24 @@ export function useChat(activeTab: ChatTab) {
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [lastIntent, setLastIntent] = useState<IntentResult | null>(null);
+  const [pendingActions, setPendingActions] = useState<ChatAction[]>([]);
+  const [chatContext, setChatContext] = useState<ChatContext>(EMPTY_CHAT_CONTEXT);
+  // reasoningPhases is reserved for future thinking-trace UI
+  const reasoningPhases: unknown[] = [];
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const updateChatContext = useCallback((ctx: ChatContext) => {
+    setChatContext(ctx);
+  }, []);
 
   // Realtime subscription handler for message updates
   const handleRealtimeEvent = useCallback((event: RealtimeEvent) => {
     const messagePayload = event.payload as Partial<ChatMessage> & { id: string };
-    
+
     switch (event.type) {
       case 'INSERT':
-        // Only add if not already in list (avoid duplicating our own sent messages)
         setMessages(prev => {
           if (prev.some(m => m.id === messagePayload.id)) return prev;
           return [...prev, messagePayload as ChatMessage];
@@ -52,9 +72,8 @@ export function useChat(activeTab: ChatTab) {
     }
   }, []);
 
-  // Subscribe to realtime updates for current conversation
-  const realtimeTopic = currentConversation?.id 
-    ? `conversation:${currentConversation.id}:messages` 
+  const realtimeTopic = currentConversation?.id
+    ? `conversation:${currentConversation.id}:messages`
     : '';
 
   useRealtimeChannel({
@@ -63,12 +82,11 @@ export function useChat(activeTab: ChatTab) {
     onEvent: handleRealtimeEvent,
   });
 
-  // Fetch conversations for the current tab
   const fetchConversations = useCallback(async () => {
     if (!user) return;
 
     const agentType = tabToAgentType[activeTab] as 'booking_assistant' | 'budget_guardian' | 'dining_orchestrator' | 'event_curator' | 'general_concierge' | 'itinerary_optimizer' | 'local_scout';
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('conversations')
       .select('*')
       .eq('user_id', user.id)
@@ -76,36 +94,34 @@ export function useChat(activeTab: ChatTab) {
       .is('deleted_at', null)
       .order('last_message_at', { ascending: false, nullsFirst: false });
 
-    if (error) {
-      console.error('Error fetching conversations:', error);
+    if (fetchError) {
+      console.error('Error fetching conversations:', fetchError);
       return;
     }
 
     setConversations(data as Conversation[]);
   }, [user, activeTab]);
 
-  // Fetch messages for a conversation
   const fetchMessages = useCallback(async (conversationId: string) => {
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching messages:', error);
+    if (fetchError) {
+      console.error('Error fetching messages:', fetchError);
       return;
     }
 
     setMessages(data as ChatMessage[]);
   }, []);
 
-  // Create a new conversation
   const createConversation = useCallback(async (title: string = 'New conversation') => {
     if (!user) return null;
 
     const agentType = tabToAgentType[activeTab] as 'booking_assistant' | 'budget_guardian' | 'dining_orchestrator' | 'event_curator' | 'general_concierge' | 'itinerary_optimizer' | 'local_scout';
-    const { data, error } = await supabase
+    const { data, error: createError } = await supabase
       .from('conversations')
       .insert({
         user_id: user.id,
@@ -115,8 +131,8 @@ export function useChat(activeTab: ChatTab) {
       .select()
       .single();
 
-    if (error) {
-      console.error('Error creating conversation:', error);
+    if (createError) {
+      console.error('Error creating conversation:', createError);
       toast.error('Failed to create conversation');
       return null;
     }
@@ -128,24 +144,31 @@ export function useChat(activeTab: ChatTab) {
     return conversation;
   }, [user, activeTab]);
 
-  // Select a conversation
   const selectConversation = useCallback(async (conversation: Conversation) => {
     setCurrentConversation(conversation);
+    setPendingActions([]);
     await fetchMessages(conversation.id);
   }, [fetchMessages]);
+
+  const newChat = useCallback(() => {
+    setCurrentConversation(null);
+    setMessages([]);
+    setPendingActions([]);
+    setError(null);
+  }, []);
 
   // Route message through AI Router for intent classification
   const routeMessage = useCallback(async (content: string): Promise<IntentResult | null> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': session?.access_token 
-            ? `Bearer ${session.access_token}` 
+          'Authorization': session?.access_token
+            ? `Bearer ${session.access_token}`
             : `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
@@ -157,7 +180,7 @@ export function useChat(activeTab: ChatTab) {
           })),
           userContext: {
             hasActiveTrip: !!activeTrip,
-            hasPendingBookings: false, // Could be enhanced later
+            hasPendingBookings: false,
             currentPage: window.location.pathname,
           },
         }),
@@ -171,27 +194,30 @@ export function useChat(activeTab: ChatTab) {
         }
       }
       return null;
-    } catch (error) {
-      console.error('Intent routing error:', error);
+    } catch (err) {
+      console.error('Intent routing error:', err);
       return null;
     }
   }, [activeTab, messages, activeTrip]);
 
-  // Send a message with streaming (now includes intent routing)
   const sendMessage = useCallback(async (content: string) => {
     if (!user || !content.trim()) return;
 
-    // Route the message first to classify intent (non-blocking)
-    routeMessage(content).catch(console.error);
+    setError(null);
 
-    // Create conversation if none exists
+    // Route the message to classify intent, then handle special intents
+    routeMessage(content).then(intent => {
+      if (intent?.intent === 'landlord_listing_create') {
+        setPendingActions([{ type: 'OPEN_HOST_LISTING_FORM', payload: {} }]);
+      }
+    }).catch(console.error);
+
     let conversation = currentConversation;
     if (!conversation) {
       conversation = await createConversation(content.slice(0, 50));
       if (!conversation) return;
     }
 
-    // Add user message to UI immediately
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       conversation_id: conversation.id,
@@ -201,16 +227,15 @@ export function useChat(activeTab: ChatTab) {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // Save user message to database
     await supabase.from('messages').insert({
       conversation_id: conversation.id,
       role: 'user',
       content,
     });
 
-    // Start streaming response
     setIsLoading(true);
     setIsStreaming(true);
+    setPendingActions([]);
 
     let assistantContent = '';
     const assistantMessage: ChatMessage = {
@@ -227,13 +252,10 @@ export function useChat(activeTab: ChatTab) {
     try {
       abortControllerRef.current = new AbortController();
 
-      // Get session for auth
       const { data: { session } } = await supabase.auth.getSession();
-
-      // Use anon key as fallback for unauthenticated users
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const authHeader = session?.access_token 
-        ? `Bearer ${session.access_token}` 
+      const authHeader = session?.access_token
+        ? `Bearer ${session.access_token}`
         : `Bearer ${anonKey}`;
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat`, {
@@ -249,7 +271,6 @@ export function useChat(activeTab: ChatTab) {
           })),
           tab: activeTab,
           conversationId: conversation.id,
-          // Pass active trip context to AI
           activeTripContext: activeTrip ? {
             id: activeTrip.id,
             title: activeTrip.title,
@@ -264,6 +285,7 @@ export function useChat(activeTab: ChatTab) {
       if (!response.ok) {
         if (response.status === 429) {
           toast.error('Rate limit exceeded. Please try again later.');
+          options?.onAnonLimitExceeded?.(undefined);
           throw new Error('Rate limit exceeded');
         }
         if (response.status === 402) {
@@ -298,8 +320,16 @@ export function useChat(activeTab: ChatTab) {
           if (jsonStr === '[DONE]') break;
 
           try {
-            const parsed = JSON.parse(jsonStr);
-            const deltaContent = parsed.choices?.[0]?.delta?.content;
+            const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+
+            // Structured action sidecar — emitted by ai-chat before the text stream
+            if (parsed.__mdeai_actions__ && Array.isArray(parsed.__mdeai_actions__)) {
+              setPendingActions(parsed.__mdeai_actions__ as ChatAction[]);
+              continue;
+            }
+
+            const choices = parsed.choices as Array<{ delta?: { content?: string } }> | undefined;
+            const deltaContent = choices?.[0]?.delta?.content;
             if (deltaContent) {
               assistantContent += deltaContent;
               setMessages(prev =>
@@ -311,14 +341,12 @@ export function useChat(activeTab: ChatTab) {
               );
             }
           } catch {
-            // Incomplete JSON, put back in buffer
             buffer = line + '\n' + buffer;
             break;
           }
         }
       }
 
-      // Save assistant message to database
       await supabase.from('messages').insert({
         conversation_id: conversation.id,
         role: 'assistant',
@@ -326,7 +354,6 @@ export function useChat(activeTab: ChatTab) {
         agent_name: tabToAgentType[activeTab],
       });
 
-      // Update conversation
       await supabase
         .from('conversations')
         .update({
@@ -335,22 +362,29 @@ export function useChat(activeTab: ChatTab) {
         })
         .eq('id', conversation.id);
 
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') {
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
         console.log('Request aborted');
       } else {
-        console.error('Chat error:', error);
+        console.error('Chat error:', err);
+        const msg = err instanceof Error ? err.message : 'Failed to get response';
+        setError(msg);
         toast.error('Failed to get response');
-        // Remove failed assistant message
         setMessages(prev => prev.filter(m => m.id !== assistantMessage.id));
       }
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [user, currentConversation, messages, activeTab, activeTrip, createConversation]);
+  }, [user, currentConversation, messages, activeTab, activeTrip, createConversation, routeMessage, options]);
 
-  // Cancel streaming
+  const retryLastMessage = useCallback(async () => {
+    const lastUser = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastUser) return;
+    setMessages(prev => prev.filter(m => m.role !== 'assistant' || m.content.length > 0));
+    await sendMessage(lastUser.content);
+  }, [messages, sendMessage]);
+
   const cancelStream = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -358,14 +392,13 @@ export function useChat(activeTab: ChatTab) {
     }
   }, []);
 
-  // Archive a conversation
   const archiveConversation = useCallback(async (conversationId: string) => {
-    const { error } = await supabase
+    const { error: archiveError } = await supabase
       .from('conversations')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    if (error) {
+    if (archiveError) {
       toast.error('Failed to archive conversation');
       return;
     }
@@ -377,21 +410,32 @@ export function useChat(activeTab: ChatTab) {
     }
   }, [currentConversation]);
 
+  // Suppress unused variable warning — kept for future use
+  void useEffect;
+
   return {
     messages,
     conversations,
     currentConversation,
     isLoading,
     isStreaming,
+    error,
     lastIntent,
+    pendingActions,
+    reasoningPhases,
+    chatContext,
     fetchConversations,
     createConversation,
     selectConversation,
+    newChat,
     sendMessage,
     routeMessage,
+    retryLastMessage,
     cancelStream,
     archiveConversation,
     setCurrentConversation,
     setMessages,
+    setPendingActions,
+    updateChatContext,
   };
 }
