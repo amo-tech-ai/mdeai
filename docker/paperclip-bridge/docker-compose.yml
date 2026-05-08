@@ -1,0 +1,19 @@
+services:
+  bridge:
+    build: .
+    container_name: paperclip-bridge
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    env_file: .env
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bridge.rule=Host(`bridge.srv1641664.hstgr.cloud`)"
+      - "traefik.http.routers.bridge.tls.certresolver=letsencrypt"
+      - "traefik.http.services.bridge.loadbalancer.server.port=3200"
+
+networks:
+  default:
+    name: paperclip-bridge_default
