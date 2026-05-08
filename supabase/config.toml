@@ -1,10 +1,23 @@
 project_id = "zkwcbyxiwklihegjhuql"
 
+# ── AI / Search (anon users allowed) ─────────────────────────────────────────
 [functions.ai-chat]
 enabled = true
 verify_jwt = false
 
 [functions.ai-router]
+enabled = true
+verify_jwt = false
+
+[functions.ai-search]
+enabled = true
+verify_jwt = false
+
+[functions.ai-suggest-collections]
+enabled = true
+verify_jwt = false
+
+[functions.ai-trip-planner]
 enabled = true
 verify_jwt = false
 
@@ -16,22 +29,100 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
-[functions.ai-suggest-collections]
-enabled = true
-verify_jwt = false
-
-[functions.rules-engine]
-enabled = true
-verify_jwt = false
-
-[functions.ai-search]
-enabled = true
-verify_jwt = false
-
-[functions.ai-trip-planner]
-enabled = true
-verify_jwt = false
-
+# ── Listings / Rentals (public browsing) ─────────────────────────────────────
 [functions.rentals]
 enabled = true
+verify_jwt = false
+
+[functions.listing-moderate]
+enabled = true  # email magic-link; HMAC token in payload
+verify_jwt = false
+
+[functions.hermes-ranking]
+enabled = true  # optional auth; public ranking
+verify_jwt = false
+
+# ── CRM / Lead capture (anon form submissions) ────────────────────────────────
+[functions.lead-from-form]
+enabled = true  # rate-limit + honeypot guard
+verify_jwt = false
+
+[functions.lead-reminder-tick]
+enabled = true  # pg_cron; X-Cron-Secret header
+verify_jwt = false
+
+# ── Voting (Turnstile + nonce; anon voters) ───────────────────────────────────
+[functions.vote-cast]
+enabled = true
+verify_jwt = false
+
+[functions.fraud-scan]
+enabled = true  # pg_cron; x-fraud-scan-secret from vault (25H1)
+verify_jwt = false
+
+# ── Stripe webhooks (no Supabase JWT possible) ────────────────────────────────
+[functions.ticket-payment-webhook]
+enabled = true  # Stripe-Signature header is the guard
+verify_jwt = false
+
+[functions.sponsor-payment-webhook]
+enabled = true  # Stripe-Signature header is the guard
+verify_jwt = false
+
+# ── OpenClaw webhooks (Bearer token auth) ────────────────────────────────────
+[functions.openclaw-delivery-webhook]
+enabled = true  # OPENCLAW_WEBHOOK_SECRET Bearer token
+verify_jwt = false
+
+[functions.openclaw-concierge-webhook]
+enabled = true  # OPENCLAW_WEBHOOK_SECRET Bearer token
+verify_jwt = false
+
+[functions.openclaw-outreach]
+enabled = true  # optional user JWT
+verify_jwt = false
+
+# ── Sponsor tracking (public pixels) ─────────────────────────────────────────
+[functions.sponsor-impression]
+enabled = true  # public tracking; no auth required
+verify_jwt = false
+
+[functions.sponsor-click]
+enabled = true  # public tracking; no auth required
+verify_jwt = false
+
+[functions.sponsor-contract-generate]
+enabled = true  # service-role check inside fn body
+verify_jwt = false
+
+[functions.notify-entity-approved]
+enabled = true  # getUserId check inside fn body
+verify_jwt = false
+
+# ── Outbox / Internal workers (pg_cron; HMAC secrets) ────────────────────────
+[functions.outbox-dispatch]
+enabled = true  # pg_cron; OUTBOX_DISPATCH_SECRET header
+verify_jwt = false
+
+[functions.failed-deliveries-digest]
+enabled = true  # internal/cron; reads only
+verify_jwt = false
+
+[functions.postiz-schedule-posts]
+enabled = true  # called internally by postiz-approval-webhook
+verify_jwt = false
+
+# ── WhatsApp inbound ──────────────────────────────────────────────────────────
+[functions.whatsapp-webhook]
+enabled = true  # provider signature is the guard
+verify_jwt = false
+
+# ── Internal rules engine ─────────────────────────────────────────────────────
+[functions.rules-engine]
+enabled = true  # RULES_ENGINE_SECRET header
+verify_jwt = false
+
+# ── Embedding pipeline (pg_net trigger → Gemini embedding-004) ────────────────
+[functions.ai-embed]
+enabled = true  # DB trigger via pg_net; x-ai-embed-secret header
 verify_jwt = false

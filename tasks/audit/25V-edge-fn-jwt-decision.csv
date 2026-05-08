@@ -25,7 +25,7 @@ p1-crm,true,OK,Supabase JWT verification,crm,2026-05-08,
 listing-create,true,OK,Supabase JWT verification,listings,2026-05-08,
 event-staff-link-generator,true,OK,Supabase JWT verification,events,2026-05-08,
 ticket-checkout,true,OK,Supabase JWT verification,events,2026-05-08,
-ticket-payment-webhook,true,OK,Supabase JWT verification,stripe,2026-05-08,Note: Stripe webhooks should be false+Stripe-sig; flagged as low risk since Stripe also signs
+ticket-payment-webhook,false,FIXED,Stripe-Signature header (STRIPE_WEBHOOK_SECRET),stripe,2026-05-08,CRITICAL FIX (25V): was deployed true — Stripe has no JWT; all webhooks were 401. Redeployed false.
 ticket-validate,true,OK,Supabase JWT verification,events,2026-05-08,
 contestant-social-enrich,true,OK,Supabase JWT verification,vote,2026-05-08,
 moderate-asset,true,OK,Supabase JWT verification,vote,2026-05-08,
@@ -39,4 +39,9 @@ sponsor-checkout,true,OK,Supabase JWT verification,sponsor,2026-05-08,
 sponsor-application-create,true,OK,Supabase JWT verification,sponsor,2026-05-08,
 sponsor-cancel,true,OK,Supabase JWT verification,sponsor,2026-05-08,
 event-photo-moderate,true,OK,Supabase JWT verification,events,2026-05-08,
-postiz-approval-webhook,true,OK,BRIDGE_SECRET HMAC (verify_jwt=true for double protection),postiz,2026-05-08,Deployed this session
+postiz-approval-webhook,true,OK,BRIDGE_SECRET HMAC (verify_jwt=true for double protection),postiz,2026-05-08,Deployed this session; db trigger includes service-role JWT — double protection intentional
+outbox-dispatch,false,OK,OUTBOX_DISPATCH_SECRET header (vault),cron,2026-05-08,pg_cron caller; code comment documents verify_jwt:false; confirmed deployed false
+hermes-ranking,false,OK,optional Bearer JWT,ai,2026-05-08,Optional auth; public ranking; code comment documents verify_jwt:false; confirmed deployed false
+openclaw-outreach,false,OK,optional getUserId,openclaw,2026-05-08,Outreach trigger; anon allowed; confirmed deployed false
+failed-deliveries-digest,false,OK,internal/cron — reads only,cron,2026-05-08,No sensitive writes; confirmed deployed false
+postiz-schedule-posts,false,OK,called internally by approval webhook,postiz,2026-05-08,Internal call; confirmed deployed false
