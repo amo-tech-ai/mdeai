@@ -4,6 +4,7 @@
 > - Ordered top → bottom by **implementation order**. Top = ship next. Bottom = later.
 > - Only **open** tasks live here. The moment a task ships (merged to `main` + verified live), **move it to [/home/sk/mde/changelog](../changelog)** with the date and PR link. Do **not** keep `[x]` rows in this file.
 > - Before starting any task, check [.claude/skills/](../.claude/skills/) for a matching owner skill and follow its instructions. Common owners: `mde-task-lifecycle`, `mde-supabase`, `mde-vercel`, `mde-stripe`, `mde-whatsapp`, `mde-testing`.
+> - **When you write a new task** (here or in `tasks/prompts/`), follow [.claude/rules/task-writing.md](../.claude/rules/task-writing.md): Purpose → Goals → Features → Workflows → User journeys → Agents → Integrations → Summary. Plain English. Lead with what the user can see, not file paths.
 > - Source of truth for *why* each task matters: [prd.md](../prd.md) v5.1.
 > - Floor before any PR: `npm run lint && npm run build && npm run test`.
 

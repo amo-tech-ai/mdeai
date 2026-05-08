@@ -4,6 +4,8 @@
 
 > **Active work + ordering:** [tasks/todo.md](./tasks/todo.md). Top of file = next thing to ship. When a task ships, move it to [changelog](./changelog) — don't leave `[x]` rows in todo.md.
 
+> **Task writing convention (mandatory):** every new task (todo.md row, prompt file, planner plan, PR body) must follow [.claude/rules/task-writing.md](./.claude/rules/task-writing.md) — plain-English sections in this order: Purpose → Goals → Features → Workflows → User journeys → Agents → Integrations → Summary. No file paths or jargon in the Purpose / Features / Summary; define acronyms on first use; lead with what the user can see.
+
 > **Skills (mandatory check before non-trivial work):** browse [.claude/skills/](./.claude/skills/) and load any matching domain skill before editing. Each skill is a folder with a `SKILL.md` (or `.md` file at the root) containing `name`, `description`, and instructions. Owner skills for this repo: `mde-supabase`, `mde-vercel`, `mde-github`, `mde-stripe`, `mde-whatsapp`, `mde-real-estate`, `mde-testing`, `mde-task-lifecycle`, `mde-infisical`, `mde-firecrawl`, `mde-roadmap`, `mde-writing-plans`, `mdeai-three-panel`, `working-with-claude-code`. If a request matches a skill name or its triggers (Supabase / RLS / Vercel / Stripe / WhatsApp / events / sponsors / etc.), open the skill file first.
 
 ## Project Overview
