@@ -1,0 +1,42 @@
+function,verify_jwt,decision,auth_method,owner,verified,notes
+ai-router,false,KEEP_FALSE,hand-rolled JWT via getUserId in source,ai,2026-05-08,Fixed in 25H10; extracts+validates Bearer JWT manually
+ai-chat,false,KEEP_FALSE,hand-rolled JWT via getUserId in source,ai,2026-05-08,Fixed in 25H10; streaming SSE requires false
+ai-search,false,KEEP_FALSE,hand-rolled JWT via getUserId in source,ai,2026-05-08,Fixed in 25H10
+ai-trip-planner,false,KEEP_FALSE,hand-rolled JWT via getUserId in source,ai,2026-05-08,Fixed in 25H10
+ai-optimize-route,false,KEEP_FALSE,optional getUserId (log caller),ai,2026-05-08,Fixed 25H10v2; public route fn — anon allowed
+google-directions,false,KEEP_FALSE,optional getUserId (log caller),maps,2026-05-08,Fixed 25H10v2; public directions — anon allowed
+ai-suggest-collections,false,KEEP_FALSE,optional getUserId (log caller),ai,2026-05-08,Fixed 25H10v2
+rules-engine,false,KEEP_FALSE,RULES_ENGINE_SECRET header,internal,2026-05-08,Fixed 25H10v2; service-to-service pattern
+rentals,false,KEEP_FALSE,optional getUserId; required for intake/verify actions,listings,2026-05-08,Anon search allowed; auth required for personalised actions
+listing-moderate,false,KEEP_FALSE,HMAC signed magic-link token,admin,2026-05-08,Email magic-link moderation — no user JWT by design
+lead-from-form,false,KEEP_FALSE,rate-limit (5req/15min/IP) + honeypot,crm,2026-05-08,Public capture — rate limit + honeypot in place
+lead-reminder-tick,false,KEEP_FALSE,X-Cron-Secret header,cron,2026-05-08,pg_cron caller; secret in vault
+vote-cast,false,KEEP_FALSE,Turnstile + nonce JWT + DB dedup + sync rules + async scan,vote,2026-05-08,5-layer fraud defense; anon voting by design
+fraud-scan,false,KEEP_FALSE,x-fraud-scan-secret header,cron,2026-05-08,pg_cron caller; secret checked in source
+sponsor-payment-webhook,false,KEEP_FALSE,Stripe constructEvent signature,stripe,2026-05-08,Stripe webhooks need raw body; SDK verifies signature
+sponsor-impression,false,KEEP_FALSE,public tracking pixel; optional getUserId,sponsor,2026-05-08,No auth required by design; rate-limited at Cloudflare level
+sponsor-click,false,KEEP_FALSE,public click tracking; optional getUserId,sponsor,2026-05-08,No auth required by design
+sponsor-contract-generate,false,KEEP_FALSE,requires Authorization header (service-role only),sponsor,2026-05-08,Manual auth check in source; service-role internal call only
+notify-entity-approved,false,KEEP_FALSE,getUserId required (authenticated user),vote,2026-05-08,Returns 401 if no valid JWT
+openclaw-delivery-webhook,false,KEEP_FALSE,Bearer token constant-time compare,openclaw,2026-05-08,Fixed this session (2026-05-08); OPENCLAW_WEBHOOK_SECRET
+openclaw-concierge-webhook,false,KEEP_FALSE,Bearer token constant-time compare,openclaw,2026-05-08,Fixed this session (2026-05-08); OPENCLAW_WEBHOOK_SECRET
+whatsapp-webhook,false,NEEDS_REVIEW,unknown — source not in local repo,whatsapp,PENDING,Source was deployed without local .ts file; must recover source and add Twilio/Infobip HMAC
+p1-crm,true,OK,Supabase JWT verification,crm,2026-05-08,
+listing-create,true,OK,Supabase JWT verification,listings,2026-05-08,
+event-staff-link-generator,true,OK,Supabase JWT verification,events,2026-05-08,
+ticket-checkout,true,OK,Supabase JWT verification,events,2026-05-08,
+ticket-payment-webhook,true,OK,Supabase JWT verification,stripe,2026-05-08,Note: Stripe webhooks should be false+Stripe-sig; flagged as low risk since Stripe also signs
+ticket-validate,true,OK,Supabase JWT verification,events,2026-05-08,
+contestant-social-enrich,true,OK,Supabase JWT verification,vote,2026-05-08,
+moderate-asset,true,OK,Supabase JWT verification,vote,2026-05-08,
+sponsor-contract-sign,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-optimize,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-audience-match,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-moderate,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-roi-explain,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-creative-gen,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-checkout,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-application-create,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+sponsor-cancel,true,OK,Supabase JWT verification,sponsor,2026-05-08,
+event-photo-moderate,true,OK,Supabase JWT verification,events,2026-05-08,
+postiz-approval-webhook,true,OK,BRIDGE_SECRET HMAC (verify_jwt=true for double protection),postiz,2026-05-08,Deployed this session
