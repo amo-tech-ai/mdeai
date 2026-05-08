@@ -1,6 +1,8 @@
 # Task Writing Convention
 
 > Every task — whether a row added to [tasks/todo.md](../../tasks/todo.md), a prompt file in [tasks/prompts/](../../tasks/prompts/), a `mdeai-planner` plan, or a PR description — must follow this template. Plain English, non-engineer readable.
+>
+> **A task is not done until §9 Definition of Done is fully checked.** Continuous testing is mandatory — see [CLAUDE.md → Definition of Done](../../CLAUDE.md). Tasks without a completed §9 do **not** move from `tasks/todo.md` to `changelog`.
 
 ## Required sections (in this order)
 
@@ -72,6 +74,20 @@ External services and internal modules touched. Name each, link to the docs, and
 ## 8. Summary
 
 3 sentences max. (1) what we're building, (2) who it helps, (3) how we'll know it worked. This is the version you'd paste in a Slack update.
+
+## 9. Definition of Done (continuous testing — mandatory)
+
+A task is **not** done until every applicable row below is checked. "Code merged" is not the finish line — **tested + verified live** is.
+
+- [ ] `npm run lint` clean
+- [ ] `npm run build` clean
+- [ ] `npm run test` clean and **count did not regress** (new logic = new tests; bugs = regression test that fails without the fix)
+- [ ] `npm run verify:edge` clean *(only if `supabase/` was touched — else write "N/A — no edge-fn change")*
+- [ ] E2E covered *(Playwright spec OR documented manual run with screenshot — only if user-facing flow touched; else "N/A")*
+- [ ] Live verification on https://www.mdeai.co after Vercel deploy *(only if UI shipped to prod; HTTP 200 + visual check)*
+- [ ] PR body lists what was tested + result for each layer
+
+If a layer is N/A, **say so explicitly** in §9 of the task / PR. Silence ≠ exemption. Skill: [`mde-testing`](../../.claude/skills/mde-testing/), [`test-driven-development`](../../.claude/skills/test-driven-development/).
 ```
 
 ## Style rules
