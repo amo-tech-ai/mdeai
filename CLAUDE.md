@@ -335,3 +335,58 @@ Commerce integration (IN PROGRESS):
 - Run `npm run lint && npm run build` before pushing
 - Repo: github.com/amo-tech-ai/medell-n-connect
 - Vercel auto-deploys on push to main
+
+## How shipping to production actually works (plain English)
+
+There are **two copies** of the project that can drift apart:
+
+| Where | What it is |
+|-------|-----------|
+| **Your computer** (local `main`) | The code on this machine. Only you see it. |
+| **GitHub** (`origin/main`) | The shared truth. Vercel watches this branch and auto-deploys it to https://www.mdeai.co. |
+
+A change is **only live** after it lands on GitHub's `main`. Code sitting on your computer — even if it's committed locally — is invisible to users.
+
+### The path from "I wrote code" → "users see it"
+
+```
+1. Write code locally
+2. git commit            → saved on your computer only
+3. git push              → uploaded to GitHub (a branch)
+4. Open a Pull Request   → ask GitHub to merge your branch into main
+5. Merge the PR          → code lands on GitHub's main
+6. Vercel auto-deploys   → live on www.mdeai.co (~1-2 min)
+```
+
+Skip any step and **it's not live**.
+
+### When local and GitHub disagree ("diverged")
+
+If you commit locally without pushing, and someone else pushes to GitHub, the two timelines split:
+
+- "12 commits ahead, 46 behind" means **your computer has 12 commits GitHub doesn't have**, and **GitHub has 46 commits you don't have**.
+- You cannot just push — Git refuses, because it would erase the 46 commits on GitHub.
+
+**Safest fix when diverged:**
+1. Make a fresh branch from GitHub's current `main` (not your local one)
+2. Cherry-pick only the commits you want to ship onto that branch
+3. Push the branch and open a PR
+4. Resolve any merge conflicts (your local code touched files GitHub's code also touched)
+5. Merge the PR
+
+This is what we did for PR #10 — the C11+C12+C13 sidebar work was 1 commit on local main; we put just that 1 commit onto a clean branch from GitHub and shipped it.
+
+### Why test counts can look weird
+
+`npm run test` runs the tests **that exist in the code on your current branch**. Different branches have different tests:
+
+- If `main` has 41 test files, you'll see "41 passed".
+- If your local branch has extra tests not on `main`, you'll see more.
+- **A lower number doesn't mean tests broke** — it means the test files for those features aren't on this branch yet.
+
+To get those tests onto `main`, the commits that contain them need their own PR.
+
+### Rule of thumb
+
+> If it's not on GitHub's `main`, it's not on production.
+> "I committed it" ≠ "it's deployed."
