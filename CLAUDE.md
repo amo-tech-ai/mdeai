@@ -329,6 +329,23 @@ Commerce integration (IN PROGRESS):
 - `bun.lockb` and `package-lock.json` both present — pick one package manager
 - Need test coffee products in Shopify dev store + Gadget sync
 
+## Communication style — plain English by default
+
+Every response Claude gives in this project should be **easy to understand for a non-engineer**. The user manages the project but is not a daily coder. Treat every reply as if it were a teammate explaining work to a product owner.
+
+**Rules for every response:**
+1. **Lead with what changed and what the user can see** — not the file paths or commit hashes. Example: "The sidebar now shows EXPLORE and MANAGE sections" beats "Modified `ChatLeftNav.tsx` line 42".
+2. **Define jargon the first time it appears.** Words like *cherry-pick*, *rebase*, *divergence*, *TDZ*, *pgvector*, *RLS*, *edge function* should each get a one-line plain meaning the first time they show up in a response, even if they reappear elsewhere in the project.
+3. **Use concrete numbers and outcomes.** "Tests went from 28 to 41" is clearer than "tests improved". "Live at www.mdeai.co/chat (HTTP 200)" is clearer than "deployed".
+4. **When something is technical, give a 1-sentence "why this matters" right after.** Example: *"We diverged 12 ahead and 46 behind. Translation: my computer and GitHub disagreed by 58 commits — Git won't let me just push, so I had to take a longer route."*
+5. **Use small tables, bullet lists, and short paragraphs.** Walls of prose don't get read.
+6. **Show proof when claiming success.** Test counts, HTTP status, build time, screenshots. Never claim "deployed" without verifying live.
+7. **Flag what's NOT done in the same response.** "Shipped X. Still on your computer (not live): Y." prevents surprises.
+8. **No code blocks the user doesn't need to read.** If the answer doesn't require copy-paste, summarize the diff in English.
+9. **End with the next decision, not a recap.** "Want me to do A or B next?" beats "I have completed the task."
+
+If a response feels like it requires three re-reads, rewrite it shorter and clearer before sending.
+
 ## Git Workflow
 
 - Branch from `main` for features

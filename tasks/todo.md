@@ -1,10 +1,67 @@
 # Next Steps — mdeai.co
 
-> **Last updated:** 2026-04-28 — Day 2 / 3 / 4 sprint shipped on `fix/chat-production-hardening` (PR #6). Sentry + PostHog live in prod, mobile fullscreen map drawer + SEO handoff + InfoWindow peek + booking-dialog polish + affiliate attribution + outbound-click logging + audit § 6 (10 surgical cleanups + new Vitest) + **route-level code-splitting (entry chunk 597 KB → 118 KB gzip)** all merged to the branch. **Production readiness 98/100** pending PR #6 merge + post-merge migration push.
+> **Last updated:** 2026-05-08 — C11+C12+C13 (workspace nav + context chips + page integration) shipped to production via [PR #10](https://github.com/amo-tech-ai/mdeai/pull/10). [PR #12](https://github.com/amo-tech-ai/mdeai/pull/12) added the plain-English shipping explainer to CLAUDE.md.
 > Priority order. Work top-to-bottom.
-> **Phase:** CORE → Chat-central MVP (Weeks 1-2 of `tasks/CHAT-CENTRAL-PLAN.md`)
-> **Prompts:** `tasks/prompts/core/` (20 files), `tasks/prompts/INDEX.md`
+> **Phase:** CORE → Chat tasks (`tasks/prompts/chat/`, 12 prompts). C01 + C11/C12/C13 done. **Next: C02 (reasoning trace UX) + C03 (lead capture) + C14 (pgvector RAG) — all P0.**
 > **Testing:** Run Gates 1-2 after every PR. See `tasks/progress.md` §10b.
+
+## DONE 2026-05-08 — Chat workspace nav + page integration (PR #10, PR #12)
+
+### Live on `https://www.mdeai.co/chat`
+
+**C11 — Workspace config singleton**
+- [x] `src/config/workspaces.ts` — 8 verticals (real-estate, events, restaurants, tours, nightlife, organizers, landlords, sponsors) with `id / label / icon / href / chatPrompt / quickFilters / mapCategory / agentHint / group`
+- [x] `src/hooks/useWorkspace.ts` — URL-based detection via `pathname.startsWith`, longest-href match, skips `/chat`
+
+**C12 — ChatLeftNav multi-vertical sidebar**
+- [x] `ChatLeftNav` — collapsible EXPLORE + MANAGE sections; localStorage-persisted state; click activates workspace and fires `sendMessage(workspace.chatPrompt)`
+- [x] `ChatContextChips` — quick-filter chip row above the existing Neighborhood/Dates/Travelers/Budget bar
+- [x] `ChatCanvas` — `activeWorkspace` state; `handleWorkspaceActivate` placed AFTER `useChat` destructuring (TDZ fix)
+
+**C13 — Page integration map**
+- [x] `BackToChatBar` on `/apartments/:id` + `/events/:id` when `location.state.from === 'chat'`
+- [x] `RentalCardInline` Link state threads `{ from: 'chat', conversationId }`
+- [x] `Explore` "Ask AI" form → `/chat?q=…` → `ChatCanvas` auto-fires
+- [x] `FloatingChatWidget` — workspace-aware welcome + auto-fires `workspace.chatPrompt` on first open
+
+### Verification
+- [x] `npm run build` — clean 4.31s, 1765 modules
+- [x] `npm run test` — 41/41 passing on `main`
+- [x] PR #10 Vercel preview deploy: SUCCESS
+- [x] Production `https://www.mdeai.co/chat` returns HTTP 200 with new bundle hash `index-BHDG50xm.js`
+
+### Path taken
+Cherry-picked the work onto a fresh branch from `origin/main` (local `main` was 12 ahead / 46 behind). Resolved 2 conflicts (ChatMessageList + ApartmentDetail) preserving the more advanced HEAD versions while threading `conversationId` and adding `BackToChatBar`.
+
+---
+
+## NEXT — Chat task track (`tasks/prompts/chat/`)
+
+> Original `tasks/todo.md` Phase-1 items were maps/booking work, almost all closed. The active work stream is `tasks/prompts/chat/C*` — chat is the product surface that drives every revenue path. Continue here.
+
+### P0 — Ship next (revenue-critical, no blockers)
+- [ ] **C02 — Reasoning Trace UX** (2 days) — "Thought for Ns" collapsible panel; +15% trust → +20% conversion. Depends on existing ai-chat SSE phase events
+- [ ] **C03 — Lead Capture Tool** (1 day) — every chat session becomes a lead; $20–50/qualified lead. Uses existing `leads` table + `lead-from-form` edge fn
+- [ ] **C14 — pgvector RAG Semantic Search** (2 days) — unlocks vibe-based queries ("quiet place for remote work"). Depends on 25L embedding_cache table
+- [ ] **C04 — Host Listing Intake via Chat** (3 days) — host SaaS funnel ($99–299/mo). Depends on C03
+
+### P0 — Vertical expansion
+- [ ] **C05 — Events Chat Flows** (4 days) — discovery + ticket purchase + creation; 5–8% commission. Depends on events table + ticket-checkout
+
+### P1 — Retention + reach
+- [ ] **C06 — Chat Memory + Personalization** (3 days) — returning users 3x conversion. Depends on user_preferences + Hermes
+- [ ] **C07 — Multilingual EN/ES + Personas** (2 days) — 60% addressable-market lift. Standalone
+- [ ] **C08 — WhatsApp Continuity** (2 days) — LATAM 5x retention. Depends on openclaw-concierge-webhook
+- [ ] **C15 — Booking Confirmation Flow** (2 days) — closes booking revenue loop. Depends on existing create_booking_preview tool
+- [ ] **C16 — Multi-Vertical Inline Cards** (2 days) — restaurants/events/cars parity with rentals. Depends on C01
+
+### P2 — Multi-sided
+- [ ] **C09 — CRM + Sponsor + Buyer/Seller Flows** (5 days) — sponsor deals $500–5K each. Depends on C03 + C06
+
+### Recommendation
+Start with **C02 + C03 in parallel** — both P0, both ~2 days, no overlap (C02 is UX-only, C03 is server-side). They unblock C04 and improve every existing flow.
+
+---
 
 ## DONE 2026-04-28 — Day 2 / 3 / 4 sprint + audit § 6 + code-split (PR #6, 7 commits)
 
