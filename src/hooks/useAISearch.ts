@@ -17,8 +17,8 @@ export interface AISearchResult {
 
 interface AISearchResponse {
   results: AISearchResult[];
-  message?: string;
-  intent?: string;
+  summary?: string;
+  mode?: string;
 }
 
 export function useAISearch() {
@@ -26,150 +26,99 @@ export function useAISearch() {
   const [results, setResults] = useState<AISearchResult[]>([]);
   const [lastQuery, setLastQuery] = useState<string>("");
 
-  const search = useCallback(async (query: string, filters?: {
-    types?: string[];
-    neighborhood?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    maxPrice?: number;
-  }): Promise<AISearchResponse> => {
-    if (!query.trim()) {
-      setResults([]);
-      return { results: [] };
-    }
-
-    setIsSearching(true);
-    setLastQuery(query);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: {
-          messages: [
-            {
-              role: "user",
-              content: query,
-            },
-          ],
-          tab: "explore",
-          context: {
-            searchMode: true,
-            filters,
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      // Parse results from AI response
-      const searchResults: AISearchResult[] = [];
-      
-      // Extract structured results from AI tool calls if available
-      if (data?.toolResults) {
-        for (const toolResult of data.toolResults) {
-          if (Array.isArray(toolResult.data)) {
-            for (const item of toolResult.data) {
-              const type = getTypeFromToolName(toolResult.toolName);
-              searchResults.push(mapToSearchResult(item, type));
-            }
-          }
-        }
+  const search = useCallback(
+    async (
+      query: string,
+      options?: {
+        semantic?: boolean;
+        domain?: "all" | "apartments" | "cars" | "restaurants" | "events";
+        neighborhood?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        maxPrice?: number;
+      }
+    ): Promise<AISearchResponse> => {
+      if (!query.trim()) {
+        setResults([]);
+        return { results: [] };
       }
 
-      setResults(searchResults);
-      return {
-        results: searchResults,
-        message: data?.content,
-        intent: data?.intent,
-      };
-    } catch (error) {
-      console.error("AI search error:", error);
-      toast.error("Search failed. Please try again.");
-      return { results: [] };
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
+      setIsSearching(true);
+      setLastQuery(query);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("ai-search", {
+          body: {
+            query,
+            semantic: options?.semantic ?? true,
+            domain: options?.domain ?? "all",
+            filters: {
+              neighborhood: options?.neighborhood,
+              dateFrom: options?.dateFrom,
+              dateTo: options?.dateTo,
+              priceMax: options?.maxPrice,
+            },
+            limit: 12,
+          },
+        });
+
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || "Search failed");
+
+        const searchResults: AISearchResult[] = (data.results || []).map(
+          (r: Record<string, unknown>) => mapSearchResult(r)
+        );
+
+        setResults(searchResults);
+        return {
+          results: searchResults,
+          summary: data.summary,
+          mode: data.meta?.mode,
+        };
+      } catch (error) {
+        console.error("AI search error:", error);
+        toast.error("Search failed. Please try again.");
+        return { results: [] };
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    []
+  );
 
   const clearResults = useCallback(() => {
     setResults([]);
     setLastQuery("");
   }, []);
 
-  return {
-    isSearching,
-    results,
-    lastQuery,
-    search,
-    clearResults,
-  };
+  return { isSearching, results, lastQuery, search, clearResults };
 }
 
-function getTypeFromToolName(toolName: string): AISearchResult["type"] {
-  if (toolName.includes("restaurant")) return "restaurant";
-  if (toolName.includes("apartment")) return "apartment";
-  if (toolName.includes("car")) return "car";
-  if (toolName.includes("event")) return "event";
-  return "restaurant";
-}
+function mapSearchResult(r: Record<string, unknown>): AISearchResult {
+  const type = r.type as AISearchResult["type"];
+  const price = r.price as number | undefined;
 
-function mapToSearchResult(item: Record<string, unknown>, type: AISearchResult["type"]): AISearchResult {
-  const id = (item.id as string) || crypto.randomUUID();
-  
-  // Determine title based on type
-  let title = "";
-  if (type === "restaurant") {
-    title = (item.name as string) || "Unknown Restaurant";
-  } else if (type === "apartment") {
-    title = (item.title as string) || "Unknown Apartment";
-  } else if (type === "car") {
-    title = `${item.make || ""} ${item.model || ""}`.trim() || "Unknown Car";
-  } else if (type === "event") {
-    title = (item.name as string) || "Unknown Event";
-  }
-
-  // Determine price label
   let priceLabel = "";
-  let price: number | undefined;
-  if (type === "restaurant") {
-    const level = item.price_level as number;
-    priceLabel = level ? "$".repeat(level) : "";
-  } else if (type === "apartment") {
-    price = (item.price_monthly as number) || (item.price_daily as number);
-    priceLabel = price ? `$${price}/mo` : "";
-  } else if (type === "car") {
-    price = item.price_daily as number;
-    priceLabel = price ? `$${price}/day` : "";
+  if (type === "restaurant" && price) {
+    priceLabel = "$".repeat(Math.min(price, 4));
+  } else if (type === "apartment" && price) {
+    priceLabel = `$${price}/mo`;
+  } else if (type === "car" && price) {
+    priceLabel = `$${price}/day`;
   } else if (type === "event") {
-    const minPrice = item.ticket_price_min as number;
-    priceLabel = minPrice ? `From $${minPrice}` : "Free";
-  }
-
-  // Determine location
-  let location = "";
-  if (type === "apartment") {
-    location = (item.neighborhood as string) || "";
-  } else {
-    location = (item.address as string) || (item.city as string) || "";
-  }
-
-  // Determine image
-  let imageUrl = "";
-  if (item.primary_image_url) {
-    imageUrl = item.primary_image_url as string;
-  } else if (Array.isArray(item.images) && item.images.length > 0) {
-    imageUrl = item.images[0] as string;
+    priceLabel = price ? `From $${price}` : "Free";
   }
 
   return {
-    id,
+    id: r.id as string,
     type,
-    title,
-    description: (item.description as string) || undefined,
-    price,
+    title: r.title as string,
+    description: (r.description as string) || undefined,
+    price: price || undefined,
     priceLabel,
-    rating: (item.rating as number) || undefined,
-    location,
-    imageUrl,
-    metadata: item,
+    rating: (r.rating as number) || undefined,
+    location: (r.location as string) || undefined,
+    imageUrl: (r.imageUrl as string) || undefined,
+    metadata: (r.metadata as Record<string, unknown>) || undefined,
   };
 }

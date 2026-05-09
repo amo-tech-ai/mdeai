@@ -35,3 +35,7 @@ verify_jwt = false
 [functions.rentals]
 enabled = true
 verify_jwt = false
+
+[functions.ai-embed]
+enabled = true
+verify_jwt = false
