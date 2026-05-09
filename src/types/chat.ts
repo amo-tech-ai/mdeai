@@ -56,7 +56,15 @@ export interface OpenRentalsResultsAction {
   };
 }
 
-export type ChatAction = OpenRentalsResultsAction;
+export interface LeadCapturedAction {
+  type: 'OPEN_LEAD_CAPTURED';
+  payload: {
+    lead_id: string;
+    message: string;
+  };
+}
+
+export type ChatAction = OpenRentalsResultsAction | LeadCapturedAction;
 
 export interface ChatMessage {
   id: string;

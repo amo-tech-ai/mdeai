@@ -45,13 +45,16 @@ Deno.serve(async (req) => {
 
 - Log every AI call to `ai_runs` table: agent_name, input_tokens, output_tokens, duration_ms, status
 - Rate limit: 10 AI calls/min/user, 30 search calls/min/user
-- Timeout: 30s for Claude API, 10s for DB queries
+- Timeout: 30s for Gemini API, 10s for DB queries
 - Stream responses for chat (SSE)
-- Never return raw Claude output — always validate and structure
+- Never return raw model output — always validate and structure
+- Production AI is **Gemini-only**. No `@anthropic-ai/*` SDK calls in `supabase/functions/`.
 
 ## Secrets
 
-Edge function secrets configured in Supabase dashboard:
-- `ANTHROPIC_API_KEY` — Claude API
+Edge function secrets are loaded from Infisical → Supabase (see [.claude/skills/mde-infisical/](../skills/mde-infisical/)). Never hardcoded, never in `.env`.
+- `GEMINI_API_KEY` — Google Gemini API (all edge AI calls)
 - `SUPABASE_SERVICE_ROLE_KEY` — admin DB access
 - `GOOGLE_MAPS_API_KEY` — directions API
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` — payments (`mde-stripe`)
+- `STAFF_LINK_SECRET`, `QR_SIGNING_SECRET` — ticket / staff links
