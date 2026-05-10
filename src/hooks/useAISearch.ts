@@ -17,8 +17,8 @@ export interface AISearchResult {
 
 interface AISearchResponse {
   results: AISearchResult[];
-  summary?: string;
-  mode?: string;
+  message?: string;
+  intent?: string;
 }
 
 export function useAISearch() {
@@ -26,99 +26,98 @@ export function useAISearch() {
   const [results, setResults] = useState<AISearchResult[]>([]);
   const [lastQuery, setLastQuery] = useState<string>("");
 
-  const search = useCallback(
-    async (
-      query: string,
-      options?: {
-        semantic?: boolean;
-        domain?: "all" | "apartments" | "cars" | "restaurants" | "events";
-        neighborhood?: string;
-        dateFrom?: string;
-        dateTo?: string;
-        maxPrice?: number;
-      }
-    ): Promise<AISearchResponse> => {
-      if (!query.trim()) {
-        setResults([]);
-        return { results: [] };
-      }
+  const search = useCallback(async (query: string, filters?: {
+    types?: string[];
+    neighborhood?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    maxPrice?: number;
+  }): Promise<AISearchResponse> => {
+    if (!query.trim()) {
+      setResults([]);
+      return { results: [] };
+    }
 
-      setIsSearching(true);
-      setLastQuery(query);
+    setIsSearching(true);
+    setLastQuery(query);
 
-      try {
-        const { data, error } = await supabase.functions.invoke("ai-search", {
-          body: {
-            query,
-            semantic: options?.semantic ?? true,
-            domain: options?.domain ?? "all",
-            filters: {
-              neighborhood: options?.neighborhood,
-              dateFrom: options?.dateFrom,
-              dateTo: options?.dateTo,
-              priceMax: options?.maxPrice,
-            },
-            limit: 12,
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-search", {
+        body: {
+          query,
+          domain: filters?.types?.[0] ?? "all",
+          semantic: true,
+          filters: {
+            neighborhood: filters?.neighborhood,
+            priceMax: filters?.maxPrice,
+            dateFrom: filters?.dateFrom,
+            dateTo: filters?.dateTo,
           },
-        });
+          limit: 10,
+        },
+      });
 
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || "Search failed");
+      if (error) throw error;
 
-        const searchResults: AISearchResult[] = (data.results || []).map(
-          (r: Record<string, unknown>) => mapSearchResult(r)
-        );
+      const raw: Array<{
+        id: string;
+        type: AISearchResult["type"];
+        title: string;
+        description: string | null;
+        price: number | null;
+        rating: number | null;
+        imageUrl: string | null;
+        location: string | null;
+        relevanceScore: number;
+        metadata: Record<string, unknown>;
+      }> = data?.results ?? [];
 
-        setResults(searchResults);
-        return {
-          results: searchResults,
-          summary: data.summary,
-          mode: data.meta?.mode,
-        };
-      } catch (error) {
-        console.error("AI search error:", error);
-        toast.error("Search failed. Please try again.");
-        return { results: [] };
-      } finally {
-        setIsSearching(false);
-      }
-    },
-    []
-  );
+      const searchResults: AISearchResult[] = raw.map((r) => ({
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        description: r.description ?? undefined,
+        price: r.price ?? undefined,
+        priceLabel: buildPriceLabel(r.type, r.price),
+        rating: r.rating ?? undefined,
+        location: r.location ?? undefined,
+        imageUrl: r.imageUrl ?? undefined,
+        metadata: r.metadata,
+      }));
+
+      setResults(searchResults);
+      return {
+        results: searchResults,
+        message: data?.summary,
+      };
+    } catch (error) {
+      console.error("AI search error:", error);
+      toast.error("Search failed. Please try again.");
+      return { results: [] };
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
 
   const clearResults = useCallback(() => {
     setResults([]);
     setLastQuery("");
   }, []);
 
-  return { isSearching, results, lastQuery, search, clearResults };
+  return {
+    isSearching,
+    results,
+    lastQuery,
+    search,
+    clearResults,
+  };
 }
 
-function mapSearchResult(r: Record<string, unknown>): AISearchResult {
-  const type = r.type as AISearchResult["type"];
-  const price = r.price as number | undefined;
-
-  let priceLabel = "";
-  if (type === "restaurant" && price) {
-    priceLabel = "$".repeat(Math.min(price, 4));
-  } else if (type === "apartment" && price) {
-    priceLabel = `$${price}/mo`;
-  } else if (type === "car" && price) {
-    priceLabel = `$${price}/day`;
-  } else if (type === "event") {
-    priceLabel = price ? `From $${price}` : "Free";
-  }
-
-  return {
-    id: r.id as string,
-    type,
-    title: r.title as string,
-    description: (r.description as string) || undefined,
-    price: price || undefined,
-    priceLabel,
-    rating: (r.rating as number) || undefined,
-    location: (r.location as string) || undefined,
-    imageUrl: (r.imageUrl as string) || undefined,
-    metadata: (r.metadata as Record<string, unknown>) || undefined,
-  };
+function buildPriceLabel(type: AISearchResult["type"], price: number | null): string {
+  if (price == null) return "";
+  if (type === "restaurant") return "$".repeat(Math.min(Math.max(Math.round(price), 1), 4));
+  if (type === "apartment") return `$${price}/mo`;
+  if (type === "car") return `$${price}/day`;
+  if (type === "event") return price === 0 ? "Free" : `From $${price}`;
+  return `$${price}`;
 }

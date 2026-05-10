@@ -8,7 +8,11 @@
 > - Source of truth for *why* each task matters: [prd.md](../prd.md) v5.1.
 > - Floor before any PR: `npm run lint && npm run build && npm run test`.
 
-**Last updated:** 2026-05-09 · 259/259 tests · build clean · live at https://www.mdeai.co
+**Last updated:** 2026-05-10 · 41/41 tests (`main`) · build clean · `supabase db reset` green · live at https://www.mdeai.co · hybrid search v47 verified
+
+> **Migration chain fixed 2026-05-10** — `supabase db reset` now exits 0 on a clean clone. Removed 5 out-of-order `202601*` files, renamed restaurant seed to run after `remote_schema`, added missing `event_phase1` base migration, guarded `vote.entity_tally` trigger, changed pgvector operator to `operator(extensions.<=>)` for local compatibility.
+>
+> **VDB-01 shipped 2026-05-10** — Hybrid FTS + semantic search live in production (`ai-search` v47). `fts_content` generated columns on apartments/events/restaurants, GIN indexes, 3 `hybrid_search_*` RPCs (RRF). Verified: `mode: hybrid`, El Poblado FTS boost score=1.000, 5/5 acceptance tests pass.
 
 ---
 
@@ -39,7 +43,6 @@ Build is 100% done per [prd.md §5.2](../prd.md). These five gate items are **th
 
 **Open — implement in order:**
 
-- [ ] **C14 — pgvector RAG semantic search** (2d) — see §2A below for full explanation. Depends on `vector` extension + `25L_embedding_cache` table. Prompt: [C14-pgvector-rag-semantic-search.md](./prompts/chat/C14-pgvector-rag-semantic-search.md). Skill: `pgvector`, `pgvector-semantic-search`.
 - [ ] **C04 — Host Listing Intake via Chat** (3d) — host describes their property in chat; AI extracts structured listing data. Unblocks the host SaaS funnel ($99–299/mo). Depends on **C03**. Prompt: [C04-host-listing-intake.md](./prompts/chat/C04-host-listing-intake.md).
 - [ ] **C05 — Events Chat Flows** (4d) — discovery + ticket purchase + event creation all happen inside chat. 5–8% commission per ticket. Depends on `events` table + `ticket-checkout` edge fn. Prompt: [C05-events-chat-flows.md](./prompts/chat/C05-events-chat-flows.md).
 
@@ -51,7 +54,6 @@ Build is 100% done per [prd.md §5.2](../prd.md). These five gate items are **th
 >
 > **Why it matters:** Right now a user who types "quiet apartment good for remote work" gets zero results — no column in the database says "quiet" or "remote work". After this track, the search understands *meaning*, not just keywords. Users who search by vibe convert at 2–3× the rate of keyword searchers.
 
-- [ ] **VDB-01 — Hybrid FTS search** (1d) — adds full-text search columns to `apartments`, `events`, `restaurants` so queries like "El Poblado pet-friendly" mix keyword + semantic. Depends on **C14**. Prompt: [VDB-01-hybrid-fts-search.md](./prompts/vector/VDB-01-hybrid-fts-search.md).
 - [ ] **VDB-02 — User memory pipeline** (3d) — remembers what each user told the concierge across sessions. "Camila said pet-friendly under $800 in Laureles" persists. Depends on **C14, VDB-01**. Prompt: [VDB-02-user-memory-pipeline.md](./prompts/vector/VDB-02-user-memory-pipeline.md).
 - [ ] **VDB-03 — Semantic query cache** (1d) — "apartamento Laureles" and "apartamento en Laureles" are the same query; cache the embedding so we don't call Gemini twice. Saves ~150ms latency per cached hit. Depends on **C14, VDB-01**. Prompt: [VDB-03-query-semantic-cache.md](./prompts/vector/VDB-03-query-semantic-cache.md).
 - [ ] **VDB-04 — Personalization** (2d) — "For You" section in chat surfaces listings based on the user's browsing + preference history. Depends on **VDB-02**. Prompt: [VDB-04-personalization-recommendations.md](./prompts/vector/VDB-04-personalization-recommendations.md).
@@ -118,6 +120,7 @@ After C04–C05 land. These compound the chat surface.
 
 ## ⬜ 7. Tech-debt cleanup (anytime, low priority)
 
+- [ ] **Merge `chore/claude-audit-tools` → `main`** — contains C14 fixes, VDB-01 hybrid search, deps (qrcode, jsqr, @testing-library/dom, fake-indexeddb). Before merging: update `20260509230000_fix_embedding_indexes_and_rpcs.sql` to use `operator(extensions.<=>)` (local schema) to match the `20260509205216` fix already on `main`. Otherwise `supabase db reset` will fail on the merged chain.
 - [ ] Add proper admin auth guards on `/admin/*` routes (`useAdminAuth` hook audit).
 - [ ] Write Playwright e2e suite (config exists, suite empty). Skill: `mde-testing`.
 - [ ] Pick one package manager — drop either `bun.lockb` or `package-lock.json`.
