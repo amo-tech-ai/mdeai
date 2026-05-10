@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 8080
+    },
+    {
+      "name": "mastra-studio",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /home/sk/mde/my-mastra-app && MASTRA_SMOKE_KEEP_RUNNING=1 bash scripts/mastra-smoke.sh && tail -f /dev/null"],
+      "port": 4111
     }
   ]
 }
