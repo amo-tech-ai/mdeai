@@ -65,7 +65,10 @@ function pickNeighborhood(text: string): string | undefined {
 }
 
 function pickPrice(text: string): number | undefined {
-  const m = text.match(/\$?\s*(\d{1,5})(?:\s*(?:usd|dollars?))?/i);
+  const m =
+    text.match(/\$\s*(\d{1,5})/) ||
+    text.match(/(\d{1,5})\s*(?:usd|dollars?)/i) ||
+    text.match(/(?:under|below|less than|max|up to|budget(?: of)?)\s*\$?\s*(\d{1,5})/i);
   if (!m) return undefined;
   const n = Number(m[1]);
   if (!Number.isFinite(n) || n <= 0) return undefined;
@@ -86,7 +89,7 @@ function classifyDeterministic(message: string): Classification {
   const neighborhood = pickNeighborhood(message);
   if (neighborhood) filters.neighborhood = neighborhood;
 
-  const rentalSignals = /(rental|apartment|stay|airbnb|sleep|month|long.?term|bedroom|\bbr\b|host|wifi)/i;
+  const rentalSignals = /(rental|apartment|apt\b|stay|airbnb|sleep|month|long.?term|bedroom|\d+\s*br\b|\bbr\b|studio|host|wifi|find me a (?:place|home|spot)|where can i (?:stay|sleep))/i;
   const eventSignals = /(event|concert|salsa|club|nightlife|ticket|f[uú]tbol|game|festival|show|tonight|this weekend)/i;
   const restaurantSignals = /(restaurant|dinner|lunch|brunch|food|coffee|caf[eé]|eat|breakfast|cuisine)/i;
   const attractionSignals = /(tour|attraction|museum|viewpoint|park|day.?trip|hike|comuna 13|guatap[eé]|things to do|sightseeing)/i;
