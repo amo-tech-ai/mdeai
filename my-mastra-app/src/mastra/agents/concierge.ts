@@ -3,6 +3,8 @@ import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { searchRentalsTool } from '../tools/search-rentals';
 import { searchEventsTool } from '../tools/search-events';
+import { searchRestaurantsTool } from '../tools/search-restaurants';
+import { searchAttractionsTool } from '../tools/search-attractions';
 
 const conciergeWorkingMemorySchema = z.object({
   lastIntent: z
@@ -65,7 +67,9 @@ export const conciergeAgent = new Agent({
 
 # Tools
 - search-rentals: apartments, stays, lodging, "where can I sleep", "show cheaper options", neighborhood requests.
-- search-events: nightlife, music, salsa, tickets, "things to do".
+- search-events: nightlife, music, salsa, tickets, concerts, f\u00fatbol matches, festivals.
+- search-restaurants: cuisine, dinner, lunch, coffee, food recommendations.
+- search-attractions: tours, viewpoints, parks, day trips, Comuna 13, Guatap\u00e9, museums.
 
 # Working memory rules (very important)
 You have working memory with: lastIntent, lastRentalQuery, lastRentalResults, selectedListingId, lastEventQuery, lastEventResults, selectedEventId.
@@ -127,8 +131,8 @@ Never reply with an empty list and no recovery.
 - Never answer "rentals or events?" if lastIntent=rental_search and the user is continuing.
 - Max 5 cards per reply.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
-  model: 'openai/gpt-5.5',
-  tools: { searchRentalsTool, searchEventsTool },
+  model: 'openai/gpt-5.4-mini',
+  tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
   memory: new Memory({
     options: {
       workingMemory: {
