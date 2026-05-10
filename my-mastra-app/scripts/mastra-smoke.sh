@@ -105,22 +105,28 @@ for key in OPENAI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY DATABASE_URL; do
   log "${key}=present (source=${src})"
 done
 
+SMOKE_ENV_FILE="$(mktemp /tmp/mdeai-mastra-smoke-env.XXXXXX)"
+chmod 600 "$SMOKE_ENV_FILE"
+
 if command -v pg_isready >/dev/null 2>&1 && pg_isready -d "$SMOKE_DATABASE_URL" >/dev/null 2>&1; then
   export DATABASE_URL="$SMOKE_DATABASE_URL"
-  SMOKE_ENV_FILE="$(mktemp /tmp/mdeai-mastra-smoke-env.XXXXXX)"
-  chmod 600 "$SMOKE_ENV_FILE"
-  for key in OPENAI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY MODEL; do
-    val="$(env_value "$key" || true)"
-    if [ -n "$val" ]; then
-      printf '%s=%s\n' "$key" "$val" >> "$SMOKE_ENV_FILE"
-    fi
-  done
   printf 'DATABASE_URL=%s\n' "$SMOKE_DATABASE_URL" >> "$SMOKE_ENV_FILE"
   log "DATABASE_URL=using-local-smoke-db"
 else
-  SMOKE_ENV_FILE=".env"
-  log "DATABASE_URL=using-dotenv-value"
+  db_url="$(env_value DATABASE_URL || true)"
+  if [ -n "$db_url" ]; then
+    printf 'DATABASE_URL=%s\n' "$db_url" >> "$SMOKE_ENV_FILE"
+    log "DATABASE_URL=using-dotenv-value (source=$(env_source DATABASE_URL))"
+  fi
 fi
+
+for key in OPENAI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY MODEL; do
+  val="$(env_value "$key" || true)"
+  if [ -n "$val" ]; then
+    printf '%s=%s\n' "$key" "$val" >> "$SMOKE_ENV_FILE"
+    log "${key}=written-to-tmp (source=$(env_source "$key"))"
+  fi
+done
 
 log "typecheck"
 npm run typecheck
