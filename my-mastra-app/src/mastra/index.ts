@@ -1,6 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
-import { DuckDBStore } from '@mastra/duckdb';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { createPostgresStore } from './storage/config';
 import { weatherWorkflow } from './workflows/weather-workflow';
