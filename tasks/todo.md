@@ -8,7 +8,7 @@
 > - Source of truth for *why* each task matters: [prd.md](../prd.md) v5.1.
 > - Floor before any PR: `npm run lint && npm run build && npm run test`.
 
-**Last updated:** 2026-05-09 · 259/259 tests · build clean · live at https://www.mdeai.co
+**Last updated:** 2026-05-10 · 41/41 tests (`main`) · build clean · `supabase db reset` green · PRs #17 #18 #19 #24 merged · PR #9 closed · PR #22 open (Gemini models + Supabase live search + clarification gate fix) · Mastra dev server live at `localhost:4111` · 7 agents · source=supabase confirmed · 19 Mastra task prompts created
 
 ---
 
@@ -39,20 +39,56 @@ Build is 100% done per [prd.md §5.2](../prd.md). These five gate items are **th
 
 **Open — implement in order:**
 
-- [ ] **C14 — pgvector RAG semantic search** (2d) — see §2A below for full explanation. Depends on `vector` extension + `25L_embedding_cache` table. Prompt: [C14-pgvector-rag-semantic-search.md](./prompts/chat/C14-pgvector-rag-semantic-search.md). Skill: `pgvector`, `pgvector-semantic-search`.
-- [ ] **C04 — Host Listing Intake via Chat** (3d) — host describes their property in chat; AI extracts structured listing data. Unblocks the host SaaS funnel ($99–299/mo). Depends on **C03**. Prompt: [C04-host-listing-intake.md](./prompts/chat/C04-host-listing-intake.md).
-- [ ] **C05 — Events Chat Flows** (4d) — discovery + ticket purchase + event creation all happen inside chat. 5–8% commission per ticket. Depends on `events` table + `ticket-checkout` edge fn. Prompt: [C05-events-chat-flows.md](./prompts/chat/C05-events-chat-flows.md).
+- [ ] **C04 — Host Listing Intake via Chat** (3d) — host describes their property in chat; AI extracts structured listing data. Unblocks the host SaaS funnel ($99–299/mo). Depends on **C03** + **MASTRA-005** (Mastra concierge). Prompt: [C04-host-listing-intake.md](./prompts/chat/C04-host-listing-intake.md).
+- [ ] **C05 — Events Chat Flows** (4d) — discovery + ticket purchase + event creation all happen inside chat. 5–8% commission per ticket. Depends on `events` table + `ticket-checkout` edge fn + **MASTRA-005**. Prompt: [C05-events-chat-flows.md](./prompts/chat/C05-events-chat-flows.md).
 
 ---
 
-## 🟧 2A. Vector track — semantic intelligence (P0, all depend on C14)
+## 🟧 2B. Mastra orchestration runtime (P0 / P1, parallel-ready)
 
-> **What this is:** A five-step pipeline that turns the database into a "meaning-aware" search engine. Each step builds on the last. C14 is the foundation; VDB-01 through VDB-05 compound the value. All five prompt files are in [tasks/prompts/vector/](./prompts/vector/).
->
-> **Why it matters:** Right now a user who types "quiet apartment good for remote work" gets zero results — no column in the database says "quiet" or "remote work". After this track, the search understands *meaning*, not just keywords. Users who search by vibe convert at 2–3× the rate of keyword searchers.
+> **Status 2026-05-10:** MASTRA-001 ✅ (source inventory at `tasks/mastra/mastra-source-inventory.md`). MASTRA-002 ✅ (`@mastra/pg` + `@mastra/client-js` installed, PostgresStore wired, folder structure created, health endpoint + runbook). MASTRA-003 is the immediate next action.
 
-- [ ] **VDB-01 — Hybrid FTS search** (1d) — adds full-text search columns to `apartments`, `events`, `restaurants` so queries like "El Poblado pet-friendly" mix keyword + semantic. Depends on **C14**. Prompt: [VDB-01-hybrid-fts-search.md](./prompts/vector/VDB-01-hybrid-fts-search.md).
-- [ ] **VDB-02 — User memory pipeline** (3d) — remembers what each user told the concierge across sessions. "Camila said pet-friendly under $800 in Laureles" persists. Depends on **C14, VDB-01**. Prompt: [VDB-02-user-memory-pipeline.md](./prompts/vector/VDB-02-user-memory-pipeline.md).
+Mastra is the AI application runtime — typed tool registry, agent orchestration, multi-step workflows, memory/RAG, and observability. It orchestrates the Supabase edge functions; it does not replace them.
+
+- **Skills:** **`mastra`** (always check embedded docs first), **`mde-task-lifecycle`** (plan → ship), **`mde-supabase`**.
+- **Canonical ship order / DAG:** [`tasks/prompts/mastra/000-index.md`](prompts/mastra/tasks/000-index.md).
+- **Source plans:** `tasks/mastra/mastra-prd.md` · `tasks/mastra/mastra-roadmap.md`.
+- **Dev server:** `cd /home/sk/mde/my-mastra-app && npx bgproc list` · Studio at http://localhost:4111.
+
+**P0 ladder (canonical order — implement in sequence)**
+
+- [x] **MASTRA-001** ✅ — Source inventory + safety baseline. Report: `tasks/mastra/mastra-source-inventory.md`. P0 blockers documented.
+- [x] **MASTRA-002** ✅ — Core runtime scaffold. `@mastra/pg` + `@mastra/client-js` installed; LibSQL replaced with PostgresStore; full folder structure + types + audit-wrapper; health endpoint; runbook at `tasks/mastra/mastra-runtime-runbook.md`.
+- [ ] **MASTRA-003** — Tool audit + control events (1d). Every tool logs to `ai_tool_audit_events`; control plane writes to `ai_control_events`. Depends on 001, 002. Prompt: [003](003-mastra-tool-audit-control-events.md).
+- [ ] **MASTRA-012** — Workflow state runtime (1d). `workflow_runs`, `workflow_steps` in Supabase mirror Mastra state for replay/recovery. Depends on 002, 003. Prompt: [012](prompts/mastra/tasks/012-mastra-workflow-state-runtime.md).
+- [ ] **MASTRA-013** — Tenant isolation (1d). Every tool/workflow is org-scoped; RLS enforced at tool call time. Depends on 002, 012, 003. Prompt: [013](prompts/mastra/tasks/013-mastra-tenant-isolation.md).
+- [ ] **MASTRA-014** — AI rate limits + cost controls (1d). Token budget per org/user, cost tracking, circuit breakers. Depends on 003, 013. Prompt: [014](prompts/mastra/tasks/014-mastra-ai-rate-limits.md).
+- [ ] **MASTRA-015** — Shared tool registry (1d). Typed wrappers for all Supabase RPCs/edge fns; enforced schema contracts. Depends on 003, 013, 014. Prompt: [015](prompts/mastra/tasks/015-mastra-tool-registry-system.md).
+- [ ] **MASTRA-004** — Hybrid search tools (1d). Wraps `hybrid_search_*` RPCs as Mastra tools (**VDB-01 ✅**). Depends on 001–003, 012–015. Prompt: [004](004-mastra-hybrid-search-tools.md).
+- [ ] **MASTRA-005** — Chat router + concierge MVP (2d). Mastra agent replaces/wraps `ai-router` + `ai-chat` for intent classification + tool dispatch. Depends on 002–004, 012–015. Prompt: [005](005-mastra-chat-router-concierge.md). **Unblocks C04, C05, S1.**
+- [ ] **MASTRA-019** — `@mastra/client-js` SDK wrapper (1d). Typed browser integration — replaces raw `fetch` to Mastra server. Depends on 002, 005, 013. Prompt: [019](prompts/mastra/tasks/019-mastra-client-sdk-integration.md).
+- [ ] **MASTRA-011** — Observability + evals + guardrails (2d). Trace every agent call, run scorers, enforce safety guardrails before vertical agents ship. Depends on 002, 003, 005, 015, 019. Prompt: [011](011-mastra-observability-evals-guardrails.md). **Must land before MASTRA-006/007.**
+- [ ] **MASTRA-009** — UI Dojo frontend decision (1d). Evaluate `@mastra/ui-dojo` vs current chat UI. Depends on 002, 005, 019, 011. Prompt: [009](009-mastra-ui-dojo-chat-frontend.md).
+- [ ] **MASTRA-018** — Human handoff runtime (1d). Escalation tables, operator queue, WhatsApp handoff signal. **Must land before MASTRA-006/007.** Prompt: [018](prompts/mastra/tasks/018-mastra-human-handoff-runtime.md).
+- [ ] **MASTRA-006** — Real estate MVP agents (3d). Full rental concierge via Mastra — replaces ai-chat for rentals path. Depends on 004, 005, 011, 018, 012, 013, 015, 019. Prompt: [006](006-mastra-real-estate-mvp-agents.md).
+- [ ] **MASTRA-007** — Events MVP runtime (3d). Ticket purchase + event creation via Mastra agents. Depends on 006 + ticketing backlog. Prompt: [007](007-mastra-events-mvp-runtime.md).
+- [ ] **MASTRA-008** — Restaurants MVP discovery (2d, P1). Depends on 007 pattern. Prompt: [008](008-mastra-restaurants-mvp-discovery.md).
+
+**P1 follow-ons**
+
+- [ ] **MASTRA-016** — Streaming UI state contracts (1d). Tighten stream shape once real tools exist. Depends on 005, 009, 019, 011, 018. Prompt: [016](prompts/mastra/tasks/016-mastra-streaming-ui-state.md).
+- [ ] **MASTRA-017** — Workflow recovery + DLQ (1d). Manual resume, dead-letter queue, ops dashboard. Depends on 003, 012, 014. Prompt: [017](prompts/mastra/tasks/017-mastra-workflow-recovery.md).
+- [ ] **MASTRA-010** — Memory + RAG MVP (2d). Cross-session user preference persistence. Depends on 003–005, 013 + **VDB-02** (not yet done). Prompt: [010](010-mastra-memory-rag-mvp.md).
+
+---
+
+## 🟧 2A. Vector track — semantic intelligence (P0)
+
+> **Status 2026-05-10:** C14 ✅ (PR #16) · VDB-01 ✅ (ai-search v47, PRs #17 #18) — hybrid FTS+semantic live in production.
+
+> **What this is:** A five-step pipeline that turns the database into a "meaning-aware" search engine. Remaining steps build on VDB-01 (done). All prompt files in [tasks/prompts/vector/](./prompts/vector/).
+
+- [ ] **VDB-02 — User memory pipeline** (3d) — remembers what each user told the concierge across sessions. "Camila said pet-friendly under $800 in Laureles" persists. Depends on **VDB-01 ✅** + **MASTRA-010** (memory/RAG runtime). Prompt: [VDB-02-user-memory-pipeline.md](./prompts/vector/VDB-02-user-memory-pipeline.md).
 - [ ] **VDB-03 — Semantic query cache** (1d) — "apartamento Laureles" and "apartamento en Laureles" are the same query; cache the embedding so we don't call Gemini twice. Saves ~150ms latency per cached hit. Depends on **C14, VDB-01**. Prompt: [VDB-03-query-semantic-cache.md](./prompts/vector/VDB-03-query-semantic-cache.md).
 - [ ] **VDB-04 — Personalization** (2d) — "For You" section in chat surfaces listings based on the user's browsing + preference history. Depends on **VDB-02**. Prompt: [VDB-04-personalization-recommendations.md](./prompts/vector/VDB-04-personalization-recommendations.md).
 - [ ] **VDB-05 — Gemini Embedding 2 upgrade** (1d) — swap `gemini-embedding-001` → `gemini-embedding-2-002` across all embedding calls. Better multilingual quality, lower latency. Depends on **VDB-01–04** (run last). Prompt: [VDB-05-gemini-embedding-2-upgrade.md](./prompts/vector/VDB-05-gemini-embedding-2-upgrade.md).

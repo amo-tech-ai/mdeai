@@ -1,5 +1,82 @@
 # Changelog — mdeai.co
 
+## 2026-05-10 — Mastra: Gemini models + Supabase live search + clarification gate ([PR #24](https://github.com/amo-tech-ai/mdeai/pull/24) merged · [PR #22](https://github.com/amo-tech-ai/mdeai/pull/22) open)
+
+### PR #24 — fix(concierge): clarification confidence gate (merged to `main`, commit `1cbeda26`)
+
+Replaced the vague "don't over-ask" comment in `concierge.ts` with a 25-line scored confidence gate. Gate scores `{ hasBudget, hasBedrooms, hasVibeOrUseCase }`, computes a confidence float (0–1), and asks one clarifying question if confidence < 0.6. Threshold-based with explicit examples including sub-neighborhoods like "laureles provenza" (confidence 0.4 → ask).
+
+**Before:** agent asked for clarification inconsistently — sometimes searching immediately on partial queries, sometimes not asking on vague ones.
+**After:** deterministic gate — "show me apartments" → ask · "1BR in laureles under $70" → search immediately. Verified with 7 live test scenarios against Mastra Studio.
+
+**Verification:** 41/41 Vitest tests · build clean · live on mdeai.co via Vercel auto-deploy.
+
+---
+
+### PR #22 — fix(mastra): Gemini models + Supabase live search + CodeRabbit fixes (open, awaiting review)
+
+Branch: `fix/mastra-pr21-coderabbit-findings` · Worktree: `.claude/worktrees/recursing-edison-27a691` · Key commit: `c009a4b`
+
+**All 7 Mastra agents switched from OpenAI → Google Gemini:**
+
+| Agent | Model |
+|-------|-------|
+| concierge-agent | `google/gemini-3.1-flash-lite` |
+| rental-agent | `google/gemini-3.1-pro-preview` |
+| event-agent | `google/gemini-3-flash-preview` |
+| router-agent | `google/gemini-3.1-flash-lite` |
+| evaluation-agent | `google/gemini-3.1-flash-lite` |
+| weather-agent | `google/gemini-3.1-flash-lite` |
+| ping-agent | `google/gemini-3.1-flash-lite` |
+
+**`search-rentals` tool wired to live Supabase `apartments` table** (replaces hardcoded mock array). Uses `pg` Pool + `DATABASE_URL`; falls back to mock if `DATABASE_URL` absent. `source: "supabase"` confirmed in 19 response fields across live tests.
+
+**Clarification gate miss fixed:** "top rentals in laureles provenza" (sub-neighborhood only) now correctly asks for budget/bedrooms before searching. Same gate applied to `rental-agent.ts`.
+
+**CodeRabbit fixes:** `verify-clean.sh` regex tightened (`\.env($|/)` prevents false matches on `.env.backup`); `git-worktree-cheatsheet.md` layout block now uses ` ```text ` fence.
+
+**M22-02 weather timeout:** Both `fetch()` calls in `weather-tool.ts` now have `AbortSignal.timeout(5000)` to prevent hanging requests.
+
+**Test report:** `.claude/docs/test-report-mastra-2026-05-10.md` — 8 live scenarios, all pass, source=supabase confirmed.
+
+**Still open on PR #22:** M22-08 (`source_url` → `sourceUrl`), M22-03 (missing intents in lastIntent enum), M22-09 (bedrooms in cardSchema), M22-05 (`.positive()` on price fields).
+
+---
+
+## 2026-05-10 — Branch cleanup + search hardening ([PR #17](https://github.com/amo-tech-ai/mdeai/pull/17), [PR #18](https://github.com/amo-tech-ai/mdeai/pull/18), [PR #19](https://github.com/amo-tech-ai/mdeai/pull/19))
+
+**Context:** `chore/claude-audit-tools` (PR #9) accumulated 30 commits over several sessions — migration fixes, C14 semantic search iterations, VDB-01 hybrid search, security hotfixes, plus unrelated Phase 3 infrastructure. It was too broad to merge safely (298 files, merge conflicts, failed Vercel deploy). Closed PR #9 and split into three focused PRs.
+
+### PR #17 — fix(db+search): migration chain repair + pgvector operator + search hardening
+
+Merge commit: `e8910db`. 15 files.
+
+**Migration chain.** Removed 5 out-of-order `202601*` migrations that ran before `remote_schema.sql` created the tables they referenced — caused `supabase db reset` to fail on fresh clones. Added `20260503011925_event_phase1.sql` (was missing from `supabase/migrations/`). Fixed `20260509205216` operator: `operator(public.<=>)` → `operator(extensions.<=>)` for local pgvector compatibility. Added `20260509240000_fix_embedding_rls_allow_anon_select.sql` — extends SELECT on all three embedding tables to the `anon` role so `security invoker` RPCs called with the anon key return results.
+
+**Search hardening.** `supabase/functions/ai-embed/index.ts`: SHA-256 content-hash idempotency gate, Gemini `gemini-embedding-001` 768-dim pipeline, inline `withRetry`, top-level error catch. `supabase/functions/ai-search/index.ts`: hybrid score cap (RRF scaled to [0.6..1.0] so hybrid always outranks keyword fallback ≤0.55), event time filter, neighborhood filter (cars no longer leak into apartment results). `src/hooks/useAISearch.ts`: wired to semantic search endpoint with anon key auth.
+
+**Verification.** `npm run build` clean · `npm run test` 41/41 · `supabase db reset` exits 0.
+
+### PR #18 — docs(db): VDB-01 hybrid FTS+semantic search audit migration
+
+Merge commit: `acc9f69`. 1 file: `supabase/migrations/20260510000000_vdb01_hybrid_fts_search.sql`.
+
+Audit record for the 4 MCP-applied sub-migrations from VDB-01 day: `public.fts_spanish()` + `public.fts_array_to_text()` immutable wrappers, `fts_content` GENERATED tsvector columns + GIN indexes on `apartments`/`events`/`restaurants`, 3 `hybrid_search_*` RPCs (RRF). SQL was applied directly to production via Supabase MCP on 2026-05-10; this file makes the migration chain reproducible locally.
+
+### PR #19 — fix(security+tests): ResizeObserver polyfill + 25U payments RLS
+
+Merge commit: `cf85eb5`. 2 files.
+
+**Tests.** `src/test/setup.ts`: added `ResizeObserver` polyfill for jsdom — fixes failures in Radix UI tests (ContractSign, Step1Basics, Apply pages that use `ResizeObserver` internally).
+
+**Security (25U).** `supabase/migrations/20260508002300_25u_payments_rls_fix.sql`: narrowed `payments_event_order_select` from `public` → `authenticated` role. The USING clause (`auth.uid() = user_id`) was correct but the public role meant anon callers matched the policy entry — now anon sees no policy at all.
+
+**Final state after all three merges.** `npm run build` clean · `npm run test` 41/41 · `supabase db reset` exits 0 on clean clone · live at https://www.mdeai.co.
+
+**Still deferred (separate PRs when those features are scheduled).** Phase 3 schemas (paperclip/hermes/openclaw/postiz), OpenClaw + Postiz edge functions, Paperclip bridge container, observability schemas.
+
+---
+
 ## 2026-05-08 — Chat workspace nav + page integration ([PR #10](https://github.com/amo-tech-ai/mdeai/pull/10), [PR #12](https://github.com/amo-tech-ai/mdeai/pull/12))
 
 Two PRs landed on `main` and auto-deployed to https://www.mdeai.co.
