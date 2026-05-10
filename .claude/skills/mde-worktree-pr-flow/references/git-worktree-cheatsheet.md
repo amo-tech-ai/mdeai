@@ -2,7 +2,7 @@
 
 ## Layout convention
 
-```
+```text
 /home/sk/mde                                        ← canonical main checkout
 /home/sk/mde/.claude/worktrees/<name>/              ← Claude-managed worktrees (default)
 /home/sk/mde/.claude/worktrees/practical-carson/    ← example (auto-named)

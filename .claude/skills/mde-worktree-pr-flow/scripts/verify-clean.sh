@@ -52,7 +52,7 @@ if [ -n "$stashes" ]; then
 fi
 
 # Untracked .env files are OK locally but must never be staged.
-staged_env=$(git diff --cached --name-only | grep -E '(^|/)\.env' || true)
+staged_env=$(git diff --cached --name-only | grep -E '(^|/)\.env($|/)' || true)
 if [ -n "$staged_env" ]; then
   echo
   echo "${RED}✗ .env file is staged — unstage immediately:${RESET}"
