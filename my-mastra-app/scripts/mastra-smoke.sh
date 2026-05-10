@@ -216,6 +216,64 @@ console.log('status=' + status + ' traceId=' + traceId + ' steps=' + stepPath.jo
 " >/tmp/mastra-smoke-wf-status.txt || fail "weather-workflow runtime path not exercised (missing status/traceId/stepExecutionPath)"
 log "weather-workflow $(cat /tmp/mastra-smoke-wf-status.txt)"
 
+log "probe agent.generate (router-agent)"
+router_http_code="$(curl -sS -o /tmp/mastra-smoke-router.json -w '%{http_code}' \
+  -X POST "${BASE_URL}/api/agents/router-agent/generate" \
+  -H 'content-type: application/json' \
+  --data '{"messages":"I need a 2-bedroom apartment in El Poblado under 100 USD"}' || echo 000)"
+if [ "$router_http_code" != "200" ]; then
+  cat /tmp/mastra-smoke-router.json >&2 || true
+  fail "agent.generate router-agent returned HTTP ${router_http_code} (expected 200)"
+fi
+log "router-agent HTTP 200"
+
+log "probe agent.generate (concierge-agent)"
+concierge_http_code="$(curl -sS -o /tmp/mastra-smoke-concierge.json -w '%{http_code}' \
+  -X POST "${BASE_URL}/api/agents/concierge-agent/generate" \
+  -H 'content-type: application/json' \
+  --data '{"messages":"Find me a salsa night in Laureles under 20 USD"}' || echo 000)"
+if [ "$concierge_http_code" != "200" ]; then
+  cat /tmp/mastra-smoke-concierge.json >&2 || true
+  fail "agent.generate concierge-agent returned HTTP ${concierge_http_code} (expected 200)"
+fi
+log "concierge-agent HTTP 200"
+
+log "probe workflow.start-async (rental-search-workflow Poblado)"
+rental_http_code="$(curl -sS -o /tmp/mastra-smoke-rental.json -w '%{http_code}' \
+  -X POST "${BASE_URL}/api/workflows/rental-search-workflow/start-async" \
+  -H 'content-type: application/json' \
+  --data '{"inputData":{"neighborhood":"El Poblado","minBedrooms":2,"maxPricePerNight":150,"limit":5}}' || echo 000)"
+if [ "$rental_http_code" != "200" ]; then
+  cat /tmp/mastra-smoke-rental.json >&2 || true
+  fail "workflow.start-async rental-search-workflow returned HTTP ${rental_http_code} (expected 200)"
+fi
+node -e "
+const r = require('/tmp/mastra-smoke-rental.json');
+if (r.status !== 'success') { console.error('expected status=success got=' + JSON.stringify(r).slice(0,400)); process.exit(1); }
+const cards = r.result && r.result.cards;
+if (!Array.isArray(cards) || cards.length === 0) { console.error('rental-search-workflow returned no cards: ' + JSON.stringify(r).slice(0,400)); process.exit(1); }
+console.log('status=' + r.status + ' cards=' + cards.length + ' first=' + cards[0].headline);
+" >/tmp/mastra-smoke-rental-status.txt || fail "rental-search-workflow did not return cards"
+log "rental-search-workflow $(cat /tmp/mastra-smoke-rental-status.txt)"
+
+log "probe workflow.start-async (event-discovery-workflow nightlife)"
+event_http_code="$(curl -sS -o /tmp/mastra-smoke-event.json -w '%{http_code}' \
+  -X POST "${BASE_URL}/api/workflows/event-discovery-workflow/start-async" \
+  -H 'content-type: application/json' \
+  --data '{"inputData":{"category":"nightlife","limit":5}}' || echo 000)"
+if [ "$event_http_code" != "200" ]; then
+  cat /tmp/mastra-smoke-event.json >&2 || true
+  fail "workflow.start-async event-discovery-workflow returned HTTP ${event_http_code} (expected 200)"
+fi
+node -e "
+const r = require('/tmp/mastra-smoke-event.json');
+if (r.status !== 'success') { console.error('expected status=success got=' + JSON.stringify(r).slice(0,400)); process.exit(1); }
+const cards = r.result && r.result.cards;
+if (!Array.isArray(cards) || cards.length === 0) { console.error('event-discovery-workflow returned no cards: ' + JSON.stringify(r).slice(0,400)); process.exit(1); }
+console.log('status=' + r.status + ' cards=' + cards.length + ' first=' + cards[0].headline);
+" >/tmp/mastra-smoke-event-status.txt || fail "event-discovery-workflow did not return cards"
+log "event-discovery-workflow $(cat /tmp/mastra-smoke-event-status.txt)"
+
 log "listener proof"
 cat /tmp/mastra-smoke-listener.txt
 
