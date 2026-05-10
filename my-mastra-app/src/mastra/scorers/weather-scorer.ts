@@ -5,7 +5,7 @@ import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@m
 import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
-  expectedTool: 'weatherTool',
+  expectedTool: 'get-weather',
   strictMode: false,
 });
 

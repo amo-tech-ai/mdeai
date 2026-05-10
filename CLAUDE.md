@@ -233,3 +233,14 @@ See `.claude/rules/communication.md` — plain English, lead with what changed, 
 Branch from `main`. Run `npm run lint && npm run build && npm run test` before pushing. Vercel auto-deploys on push to `main`. Repo: github.com/amo-tech-ai/medell-n-connect.
 
 For how local/GitHub/production stay in sync and how to recover from divergence, see `.claude/rules/shipping-and-divergence.md`.
+
+## One worktree, one PR, one testing cycle (hard rule)
+
+Operate on **one worktree at a time** and **one focused PR at a time**. Finish, verify, and merge the current change before starting the next. Scattered worktrees with hidden uncommitted work are the single largest source of lost work and broken merges in this repo.
+
+Before any new worktree or PR, run the six-step cycle: **Locate → Preflight → Research → Code → Verify → Ship**. Type-check passing is *not* a feature working — always exercise the runtime path (curl the endpoint, click the UI, scan the QR) before declaring done.
+
+If a PR's diff grows beyond ~300 lines or mixes intents, **split before merging** (see the playbook). Never close a reviewed PR to "open a cleaner one" — push fixes to the existing PR instead.
+
+- Skill: [`.claude/skills/mde-worktree-pr-flow/`](./.claude/skills/mde-worktree-pr-flow/) — six-step cycle, splitting playbook, `verify-clean.sh`, `list-worktrees.sh`.
+- Rule: [`.claude/rules/worktree-discipline.md`](./.claude/rules/worktree-discipline.md) — short-form rule loaded into every conversation.

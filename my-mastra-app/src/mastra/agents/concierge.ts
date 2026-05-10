@@ -3,6 +3,8 @@ import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { searchRentalsTool } from '../tools/search-rentals';
 import { searchEventsTool } from '../tools/search-events';
+import { searchRestaurantsTool } from '../tools/search-restaurants';
+import { searchAttractionsTool } from '../tools/search-attractions';
 
 const conciergeWorkingMemorySchema = z.object({
   lastIntent: z
@@ -65,7 +67,9 @@ export const conciergeAgent = new Agent({
 
 # Tools
 - search-rentals: apartments, stays, lodging, "where can I sleep", "show cheaper options", neighborhood requests.
-- search-events: nightlife, music, salsa, tickets, "things to do".
+- search-events: nightlife, music, salsa, tickets, concerts, f\u00fatbol matches, festivals.
+- search-restaurants: cuisine, dinner, lunch, coffee, food recommendations.
+- search-attractions: tours, viewpoints, parks, day trips, Comuna 13, Guatap\u00e9, museums.
 
 # Working memory rules (very important)
 You have working memory with: lastIntent, lastRentalQuery, lastRentalResults, selectedListingId, lastEventQuery, lastEventResults, selectedEventId.
@@ -90,7 +94,7 @@ When the user gives a budget without context (e.g. "1000 CAD"), figure out and c
 - "for the trip", "total", "10 days" → total_trip → divide by trip length to get nightly
 If genuinely ambiguous, ask one short clarifying question, then save budgetType to memory.
 
-# Pre-search clarification gate
+# Pre-search clarification gate (rentals only — applies before every search-rentals call)
 BEFORE calling search-rentals, score the message against this schema:
 
   hasBudget        — user gave a price, range, or qualifier ("cheap", "luxury", "$80", "under 2M/month")
@@ -104,6 +108,7 @@ Confidence examples:
   "Laureles, 1BR, ~$1000/month"                         → hasBudget+hasBedrooms → confidence 0.85 → search now
   "quiet remote-work place in Laureles"                 → hasVibeOrUseCase+neighborhood → confidence 0.65 → search now
   "cheap studio anywhere"                               → hasBudget+hasBedrooms → confidence 0.7  → search now
+  "top rentals in laureles provenza"                    → sub-neighborhood only → confidence 0.4  → ask first
   "list top rentals laureles medellin"                  → neighborhood only     → confidence 0.35 → ask first
   "show me apartments"                                  → nothing specific      → confidence 0.2  → ask first
 
@@ -120,7 +125,7 @@ Hard rules for the gate:
 - Ask at most ONCE per fresh session. After one clarification answer, always search.
 - Never send "What's your budget?" and "How many bedrooms?" as separate turns.
 - Never ask if the user already gave 2 of (budget, bedrooms, vibe/use-case).
-- This gate applies ONLY to rental searches. Events search immediately.
+- This gate applies ONLY to rental searches. Events, restaurants, attractions search immediately.
 
 # Output formatting (rentals)
 Show at most 5 cards per reply. If more matches exist, end with "Show more options" as a follow-up.
@@ -156,8 +161,8 @@ Never reply with an empty list and no recovery.
 - Never answer "rentals or events?" if lastIntent=rental_search and the user is continuing.
 - Max 5 cards per reply.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
-  model: 'openai/gpt-5.5',
-  tools: { searchRentalsTool, searchEventsTool },
+  model: 'google/gemini-3.1-flash-lite',
+  tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
   memory: new Memory({
     options: {
       workingMemory: {

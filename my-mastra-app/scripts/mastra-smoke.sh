@@ -97,7 +97,7 @@ env_source() {
   fi
 }
 
-for key in OPENAI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY DATABASE_URL; do
+for key in OPENAI_API_KEY GOOGLE_GENERATIVE_AI_API_KEY; do
   src="$(env_source "$key")"
   if [ "$src" = "missing" ]; then
     fail "${key} not found in process env or .env (Infisical/agent-vault: run via \`infisical run -- npm run smoke:runtime\`)"
@@ -118,8 +118,12 @@ if command -v pg_isready >/dev/null 2>&1 && pg_isready -d "$SMOKE_DATABASE_URL" 
   printf 'DATABASE_URL=%s\n' "$SMOKE_DATABASE_URL" >> "$SMOKE_ENV_FILE"
   log "DATABASE_URL=using-local-smoke-db"
 else
+  src="$(env_source DATABASE_URL)"
+  if [ "$src" = "missing" ]; then
+    fail "DATABASE_URL not found in process env or .env, and local fallback (${SMOKE_DATABASE_URL}) is not reachable. Start local Postgres or run via \`infisical run -- npm run smoke:runtime\`."
+  fi
   SMOKE_ENV_FILE=".env"
-  log "DATABASE_URL=using-dotenv-value"
+  log "DATABASE_URL=using-dotenv-value (source=${src})"
 fi
 
 log "typecheck"
@@ -211,9 +215,13 @@ if (!status || !traceId || !Array.isArray(stepPath)) {
 const isExternalTimeout = status === 'failed'
   && r.error
   && (r.error.code === 'ETIMEDOUT' || (r.error.cause && r.error.cause.code === 'ETIMEDOUT'));
+if (status !== 'success' && !isExternalTimeout) {
+  console.error('weather-workflow status=' + status + ' (not success, not external-timeout): ' + JSON.stringify(r).slice(0, 400));
+  process.exit(1);
+}
 const note = isExternalTimeout ? ' (external-network-blocked, runtime path verified)' : '';
 console.log('status=' + status + ' traceId=' + traceId + ' steps=' + stepPath.join(',') + note);
-" >/tmp/mastra-smoke-wf-status.txt || fail "weather-workflow runtime path not exercised (missing status/traceId/stepExecutionPath)"
+" >/tmp/mastra-smoke-wf-status.txt || fail "weather-workflow runtime path failed (status not success and not an external timeout)"
 log "weather-workflow $(cat /tmp/mastra-smoke-wf-status.txt)"
 
 log "probe agent.generate (router-agent)"

@@ -29,5 +29,5 @@ A JSON-style ordered list of objects, each:
 - Never change ids, prices, or names.
 - Return at most 5 reranked items even if more are passed in.
 - Output JSON only — no prose.`,
-  model: 'google/gemini-2.5-flash-lite',
+  model: 'google/gemini-3.1-flash-lite',
 });
