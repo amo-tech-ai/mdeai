@@ -182,12 +182,12 @@ as $$
     a.pet_friendly,
     a.furnished,
     a.status,
-    (1 - (le.embedding <=> query_embedding))::float8 as similarity
+    (1 - (le.embedding operator(extensions.<=>) query_embedding))::float8 as similarity
   from public.apartments a
   inner join public.listing_embeddings le on le.listing_id = a.id
   where a.status = 'active'
-    and (1 - (le.embedding <=> query_embedding)) > similarity_threshold
-  order by le.embedding <=> query_embedding
+    and (1 - (le.embedding operator(extensions.<=>) query_embedding)) > similarity_threshold
+  order by le.embedding operator(extensions.<=>) query_embedding
   limit match_count;
 $$;
 
@@ -223,13 +223,13 @@ as $$
     e.rating,
     e.primary_image_url,
     e.tags,
-    (1 - (ee.embedding <=> query_embedding))::float8 as similarity
+    (1 - (ee.embedding operator(extensions.<=>) query_embedding))::float8 as similarity
   from public.events e
   inner join public.event_embeddings ee on ee.event_id = e.id
   where e.is_active = true
     and e.event_start_time > now()
-    and (1 - (ee.embedding <=> query_embedding)) > similarity_threshold
-  order by ee.embedding <=> query_embedding
+    and (1 - (ee.embedding operator(extensions.<=>) query_embedding)) > similarity_threshold
+  order by ee.embedding operator(extensions.<=>) query_embedding
   limit match_count;
 $$;
 
@@ -267,12 +267,12 @@ as $$
     r.primary_image_url,
     r.dietary_options,
     r.ambiance,
-    (1 - (re.embedding <=> query_embedding))::float8 as similarity
+    (1 - (re.embedding operator(extensions.<=>) query_embedding))::float8 as similarity
   from public.restaurants r
   inner join public.restaurant_embeddings re on re.restaurant_id = r.id
   where r.is_active = true
-    and (1 - (re.embedding <=> query_embedding)) > similarity_threshold
-  order by re.embedding <=> query_embedding
+    and (1 - (re.embedding operator(extensions.<=>) query_embedding)) > similarity_threshold
+  order by re.embedding operator(extensions.<=>) query_embedding
   limit match_count;
 $$;
 
