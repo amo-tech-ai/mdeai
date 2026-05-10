@@ -10,13 +10,14 @@ import { weatherAgent } from './agents/weather-agent';
 import { pingAgent } from './agents/ping';
 import { routerAgent } from './agents/router';
 import { conciergeAgent } from './agents/concierge';
+import { evaluationAgent } from './agents/evaluation';
 import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';
 
 const storage = createPostgresStore();
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow, rentalSearchWorkflow, eventDiscoveryWorkflow },
-  agents: { weatherAgent, pingAgent, routerAgent, conciergeAgent },
+  agents: { weatherAgent, pingAgent, routerAgent, conciergeAgent, evaluationAgent },
   scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage,
   logger: new PinoLogger({
