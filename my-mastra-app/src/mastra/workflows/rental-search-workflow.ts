@@ -57,7 +57,7 @@ const searchStep = createStep({
     preference: queryInputSchema.shape.preference,
   }),
   execute: async ({ inputData }) => {
-    const out = searchRentals({
+    const out = await searchRentals({
       neighborhood: inputData.neighborhood,
       minBedrooms: inputData.minBedrooms,
       maxPricePerNight: inputData.maxPricePerNight,

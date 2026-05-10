@@ -84,7 +84,7 @@ If zero results: state plainly why, relax exactly ONE filter (price OR category 
 - Max 5 cards per reply.
 - Times are Medell\u00edn local (UTC\u22125). Render ISO times in plain English ("Fri May 15, 10:00 PM").
 - Plain English. No emoji unless the user uses one first.`,
-  model: 'openai/gpt-5.4-mini',
+  model: 'google/gemini-3-flash-preview',
   tools: { searchEventsTool },
   memory: new Memory({
     options: {

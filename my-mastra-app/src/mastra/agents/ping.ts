@@ -14,6 +14,6 @@ export const pingAgent = new Agent({
   id: 'ping-agent',
   name: 'Ping Agent',
   instructions: 'You are a health check agent. When asked to ping, call the ping tool and return its result.',
-  model: 'openai/gpt-5.4-mini',
+  model: 'google/gemini-3.1-flash-lite',
   tools: { pingTool },
 });

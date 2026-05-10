@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { Pool } from 'pg';
 
 const rentalSchema = z.object({
   id: z.string(),
@@ -20,6 +21,114 @@ const rentalSchema = z.object({
 
 export type Rental = z.infer<typeof rentalSchema>;
 
+export type RentalQuery = {
+  neighborhood?: string;
+  minBedrooms?: number;
+  maxPricePerNight?: number;
+  limit?: number;
+};
+
+// Lazy singleton pool — created on first real query
+let _pool: Pool | null = null;
+function getPool(): Pool {
+  if (!_pool) {
+    _pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 3,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 10000,
+    });
+  }
+  return _pool;
+}
+
+function formatAvailability(from: string | null, to: string | null): string {
+  if (!from && !to) return 'Available now';
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (from && to) return `Available ${fmt(from)} – ${fmt(to)}`;
+  if (from) return `Available from ${fmt(from)}`;
+  return 'Available now';
+}
+
+function deriveTags(row: {
+  amenities: string[];
+  pet_friendly: boolean;
+  parking_included: boolean;
+  minimum_stay_days: number;
+  wifi_speed: number | null;
+  price_daily: number;
+}): string[] {
+  const tags: string[] = [];
+  const am = (row.amenities ?? []).map((a) => a.toLowerCase());
+  if (am.some((a) => a.includes('workspace') || a.includes('desk') || a.includes('cowork')))
+    tags.push('remote-work');
+  if (row.pet_friendly) tags.push('pet-friendly');
+  if (row.parking_included) tags.push('parking');
+  if (row.minimum_stay_days >= 28) tags.push('long-stay');
+  if (row.price_daily && row.price_daily <= 50) tags.push('budget');
+  if (am.some((a) => a.includes('pool') || a.includes('gym'))) tags.push('gym');
+  if (am.some((a) => a.includes('nightlife') || a.includes('bar'))) tags.push('nightlife');
+  if (am.some((a) => a.includes('family') || a.includes('kid'))) tags.push('family');
+  return tags.length ? tags : ['walkable'];
+}
+
+async function searchRentalsFromDB(query: RentalQuery): Promise<{ results: Rental[]; total: number; source: 'supabase' }> {
+  const pool = getPool();
+  const params: (string | number)[] = [];
+  const conditions: string[] = ["status = 'active'", 'price_daily IS NOT NULL'];
+
+  if (query.neighborhood) {
+    params.push(`%${query.neighborhood}%`);
+    conditions.push(`neighborhood ILIKE $${params.length}`);
+  }
+  if (typeof query.minBedrooms === 'number') {
+    params.push(query.minBedrooms);
+    conditions.push(`bedrooms >= $${params.length}`);
+  }
+  if (typeof query.maxPricePerNight === 'number') {
+    params.push(query.maxPricePerNight);
+    conditions.push(`price_daily <= $${params.length}`);
+  }
+
+  const limit = query.limit ?? 8;
+  params.push(limit);
+
+  const sql = `
+    SELECT id, title, neighborhood, bedrooms, price_daily, currency,
+           wifi_speed, amenities, images, host_name, source_url,
+           available_from, available_to, pet_friendly, parking_included,
+           minimum_stay_days, slug
+    FROM apartments
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY price_daily ASC
+    LIMIT $${params.length}
+  `;
+
+  const { rows } = await pool.query(sql, params);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results: Rental[] = rows.map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    neighborhood: r.neighborhood,
+    nightly_price: Number(r.price_daily),
+    currency: 'USD' as const,
+    bedrooms: r.bedrooms ?? 0,
+    wifi: (r.wifi_speed ?? 0) > 0,
+    amenities: r.amenities ?? [],
+    image: (r.images ?? [])[0] ?? '',
+    source_url: r.source_url ?? `https://mdeai.co/rentals/${r.slug ?? r.id}`,
+    schedule_viewing_url: `https://mdeai.co/rentals/${r.slug ?? r.id}/schedule-viewing`,
+    host_name: r.host_name ?? 'Host',
+    availability: formatAvailability(r.available_from, r.available_to),
+    tags: deriveTags(r),
+  }));
+
+  return { results, total: results.length, source: 'supabase' };
+}
+
+// Fallback mock kept for offline/test environments
 const MOCK_RENTALS: Rental[] = [
   {
     id: 'rnt_lau_001',
@@ -70,38 +179,6 @@ const MOCK_RENTALS: Rental[] = [
     tags: ['budget', 'long-stay', 'quiet'],
   },
   {
-    id: 'rnt_lau_004',
-    title: 'Family 3BR near Segundo Parque',
-    neighborhood: 'Laureles',
-    nightly_price: 118,
-    currency: 'USD',
-    bedrooms: 3,
-    wifi: true,
-    amenities: ['wifi', 'kitchen', 'parking', 'washer', 'kid-friendly'],
-    image: 'https://images.unsplash.com/photo-rental-lau-004',
-    source_url: 'https://mdeai.co/rentals/rnt_lau_004',
-    schedule_viewing_url: 'https://mdeai.co/rentals/rnt_lau_004/schedule-viewing',
-    host_name: 'Roberto Gómez',
-    availability: 'Available May 20 – Sep 30, 2026',
-    tags: ['family', 'long-stay', 'parking'],
-  },
-  {
-    id: 'rnt_lau_005',
-    title: 'Co-living Room near La 70',
-    neighborhood: 'Laureles',
-    nightly_price: 35,
-    currency: 'USD',
-    bedrooms: 1,
-    wifi: true,
-    amenities: ['wifi', 'shared-kitchen', 'coworking', 'cleaning'],
-    image: 'https://images.unsplash.com/photo-rental-lau-005',
-    source_url: 'https://mdeai.co/rentals/rnt_lau_005',
-    schedule_viewing_url: 'https://mdeai.co/rentals/rnt_lau_005/schedule-viewing',
-    host_name: 'Miguel Hoyos',
-    availability: 'Available now – Oct 30, 2026',
-    tags: ['co-living', 'budget', 'social', 'remote-work'],
-  },
-  {
     id: 'rnt_pob_001',
     title: 'Sunny 2BR in El Poblado',
     neighborhood: 'El Poblado',
@@ -116,22 +193,6 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Patricia Lopera',
     availability: 'Available Jun 1 – Aug 31, 2026',
     tags: ['nightlife', 'walkable', 'gym'],
-  },
-  {
-    id: 'rnt_pob_002',
-    title: 'Family 3BR near Parque Lleras',
-    neighborhood: 'El Poblado',
-    nightly_price: 140,
-    currency: 'USD',
-    bedrooms: 3,
-    wifi: true,
-    amenities: ['wifi', 'pool', 'parking', 'kitchen', 'washer'],
-    image: 'https://images.unsplash.com/photo-rental-pob-002',
-    source_url: 'https://mdeai.co/rentals/rnt_pob_002',
-    schedule_viewing_url: 'https://mdeai.co/rentals/rnt_pob_002/schedule-viewing',
-    host_name: 'Daniela Arango',
-    availability: 'Available Jul 1 – Nov 30, 2026',
-    tags: ['family', 'nightlife', 'parking'],
   },
   {
     id: 'rnt_env_001',
@@ -151,16 +212,7 @@ const MOCK_RENTALS: Rental[] = [
   },
 ];
 
-export type RentalQuery = {
-  neighborhood?: string;
-  minBedrooms?: number;
-  maxPricePerNight?: number;
-  limit?: number;
-};
-
-export function searchRentals(
-  query: RentalQuery,
-): { results: Rental[]; total: number; source: 'mock' } {
+function searchRentalsFromMock(query: RentalQuery): { results: Rental[]; total: number; source: 'mock' } {
   let results = MOCK_RENTALS.slice();
   if (query.neighborhood) {
     const q = query.neighborhood.toLowerCase();
@@ -176,20 +228,44 @@ export function searchRentals(
   return { results: results.slice(0, query.limit ?? 8), total, source: 'mock' };
 }
 
+// Named export for direct workflow calls (sync signature kept for compatibility;
+// internally async — callers that need real DB data should await searchRentals())
+export async function searchRentals(
+  query: RentalQuery,
+): Promise<{ results: Rental[]; total: number; source: 'supabase' | 'mock' }> {
+  if (process.env.DATABASE_URL) {
+    try {
+      return await searchRentalsFromDB(query);
+    } catch (err) {
+      console.warn('[search-rentals] DB query failed, falling back to mock:', (err as Error).message);
+    }
+  }
+  return searchRentalsFromMock(query);
+}
+
 export const searchRentalsTool = createTool({
   id: 'search-rentals',
   description:
-    'Search Medellín rentals by neighborhood, bedrooms, and price. Returns rich cards with source_url and schedule_viewing_url. Mock data — does not hit Supabase yet.',
+    'Search Medellín rentals by neighborhood, bedrooms, and price. Returns rich cards with source_url and schedule_viewing_url. Queries live Supabase apartments table; falls back to demo data if DB is unavailable.',
   inputSchema: z.object({
     neighborhood: z.string().optional().describe('e.g. Laureles, El Poblado, Envigado'),
     minBedrooms: z.number().int().min(0).optional(),
-    maxPricePerNight: z.number().positive().optional().describe('USD'),
+    maxPricePerNight: z.number().positive().optional().describe('USD per night'),
     limit: z.number().int().min(1).max(20).default(8),
   }),
   outputSchema: z.object({
     results: z.array(rentalSchema),
     total: z.number(),
-    source: z.literal('mock'),
+    source: z.enum(['supabase', 'mock']),
   }),
-  execute: async (inputData: RentalQuery) => searchRentals(inputData),
+  execute: async (inputData: RentalQuery) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        return await searchRentalsFromDB(inputData);
+      } catch (err) {
+        console.warn('[search-rentals] DB query failed, falling back to mock:', (err as Error).message);
+      }
+    }
+    return searchRentalsFromMock(inputData);
+  },
 });

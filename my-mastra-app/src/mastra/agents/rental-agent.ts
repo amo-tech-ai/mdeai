@@ -72,6 +72,7 @@ Confidence examples:
   "Laureles, 1BR, ~$1000/month"                         → hasBudget+hasBedrooms → confidence 0.85 → search now
   "quiet remote-work place in Laureles"                 → hasVibeOrUseCase+neighborhood → confidence 0.65 → search now
   "cheap studio anywhere"                               → hasBudget+hasBedrooms → confidence 0.7  → search now
+  "top rentals in laureles provenza"                    → sub-neighborhood only → confidence 0.4  → ask first
   "list top rentals laureles medellin"                  → neighborhood only     → confidence 0.35 → ask first
   "show me apartments"                                  → nothing specific      → confidence 0.2  → ask first
 
@@ -116,7 +117,7 @@ If zero results: state plainly why, relax exactly ONE filter (price OR bedrooms 
 - Never claim to book or charge. You only propose options and surface viewing URLs.
 - Max 5 cards per reply.
 - Plain English. No emoji unless the user uses one first.`,
-  model: 'openai/gpt-5.4-mini',
+  model: 'google/gemini-3.1-pro-preview',
   tools: { searchRentalsTool },
   memory: new Memory({
     options: {

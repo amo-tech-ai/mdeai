@@ -194,13 +194,14 @@ const dispatchStep = createStep({
     const limit = filters.limit ?? 5;
 
     if (intent === 'rental_search') {
-      const out = searchRentals({
+      const out = await searchRentals({
         neighborhood: filters.neighborhood,
         minBedrooms: filters.minBedrooms,
         maxPricePerNight: filters.maxPricePerNight,
         limit,
       });
-      const cards = out.results.map((r) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cards = out.results.map((r: any) => ({
         id: r.id,
         headline: r.title,
         subline: `${r.neighborhood} \u00b7 ${r.bedrooms === 0 ? 'studio' : `${r.bedrooms}BR`} \u00b7 host ${r.host_name}`,

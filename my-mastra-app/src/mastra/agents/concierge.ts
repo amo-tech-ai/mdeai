@@ -107,6 +107,7 @@ Confidence examples:
   "1BR in Laureles under $80/night for June"  → hasBudget+hasBedrooms → 0.9  → search now
   "Laureles, 1BR, $1000 CAD/month"            → hasBudget+hasBedrooms → 0.85 → search now
   "quiet remote-work place in Laureles"       → hasVibeOrUseCase+neighborhood → 0.65 → search now
+  "top rentals in laureles provenza"          → sub-neighborhood only → 0.4  → ask first
   "list top rentals laureles medellin"        → neighborhood only → 0.35 → ask first
   "show me apartments"                        → nothing specific  → 0.2  → ask first
 
@@ -159,7 +160,7 @@ Never reply with an empty list and no recovery.
 - Never answer "rentals or events?" if lastIntent=rental_search and the user is continuing.
 - Max 5 cards per reply.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
-  model: 'openai/gpt-5.4-mini',
+  model: 'google/gemini-3.1-flash-lite',
   tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
   memory: new Memory({
     options: {
