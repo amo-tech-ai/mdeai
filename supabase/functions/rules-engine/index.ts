@@ -1,5 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { timingSafeEqual } from "../_shared/crypto.ts";
+import { extractRulesEngineSecretCandidate } from "../_shared/rules-engine-secret.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,9 +17,69 @@ interface RuleResult {
   priority?: number;
 }
 
-serve(async (req) => {
+function rulesEngineJsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+/** True if caller sent a non-empty rules-engine credential (header or Bearer token). */
+function hasRulesEngineCredentialAttempt(headers: Headers): boolean {
+  const x = headers.get("x-rules-engine-secret");
+  if (x != null && x.trim().length > 0) return true;
+  const auth = headers.get("Authorization");
+  const m = auth?.match(/^Bearer\s*(.*)$/i);
+  return m !== null && String(m[1] ?? "").trim().length > 0;
+}
+
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  /** Prefer RULES_ENGINE_SECRET; legacy alias RULES_ENGINE_CRON_SECRET (01-plan / pg_cron patterns). */
+  const rulesSecret = Deno.env.get("RULES_ENGINE_SECRET") ??
+    Deno.env.get("RULES_ENGINE_CRON_SECRET");
+
+  if (rulesSecret) {
+    const provided = extractRulesEngineSecretCandidate(req.headers);
+    if (!hasRulesEngineCredentialAttempt(req.headers)) {
+      return rulesEngineJsonResponse(
+        {
+          error: "Unauthorized",
+          message: "Missing rules engine credentials (x-rules-engine-secret or Bearer)",
+        },
+        401,
+      );
+    }
+    if (!timingSafeEqual(provided, rulesSecret)) {
+      return rulesEngineJsonResponse(
+        { error: "Forbidden", message: "Invalid rules engine credentials" },
+        403,
+      );
+    }
+  } else {
+    console.warn(
+      "[rules-engine] RULES_ENGINE_SECRET (or RULES_ENGINE_CRON_SECRET) not set — calls are not authenticated",
+    );
+  }
+
+  if (req.method === "POST") {
+    const ct = req.headers.get("content-type") ?? "";
+    if (ct.includes("application/json")) {
+      const raw = await req.text();
+      if (raw.trim() !== "") {
+        try {
+          JSON.parse(raw) as unknown;
+        } catch {
+          return rulesEngineJsonResponse(
+            { error: "Bad Request", message: "Invalid JSON body" },
+            400,
+          );
+        }
+      }
+    }
   }
 
   try {

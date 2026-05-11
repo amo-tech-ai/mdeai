@@ -2,6 +2,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@3.23.8";
 import { createHash } from "node:crypto";
 
+import { insertAiRun } from "../_shared/ai-runs.ts";
+import { timingSafeEqual } from "../_shared/crypto.ts";
+import { withRetry } from "../_shared/gemini.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -64,28 +68,6 @@ function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  const aBytes = new TextEncoder().encode(a);
-  const bBytes = new TextEncoder().encode(b);
-  let diff = 0;
-  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i];
-  return diff === 0;
-}
-
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 500): Promise<T> {
-  let lastError: unknown;
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      if (i < retries - 1) await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
-    }
-  }
-  throw lastError;
-}
-
 async function getEmbedding(text: string, apiKey: string): Promise<number[]> {
   return withRetry(async () => {
     const resp = await fetch(
@@ -112,7 +94,7 @@ async function getEmbedding(text: string, apiKey: string): Promise<number[]> {
     if (!Array.isArray(values) || values.length !== 768)
       throw new Error(`Unexpected embedding shape: ${values?.length}`);
     return values;
-  });
+  }, { retries: 3, baseDelayMs: 500 });
 }
 
 Deno.serve(async (req: Request) => {
@@ -204,6 +186,20 @@ Deno.serve(async (req: Request) => {
 
     const contentHash = sha256Hex(entityText);
     if (existingHash === contentHash) {
+      const durationMs = Date.now() - startMs;
+      const logUid = Deno.env.get("AI_EMBED_RUN_LOG_USER_ID");
+      if (logUid && entityType && entityId) {
+        await insertAiRun(supabase, {
+          user_id: logUid,
+          agent_name: "ai-embed",
+          agent_type: "general_concierge",
+          input_data: { entity_type: entityType, entity_id: entityId },
+          output_data: { skipped: true, reason: "content_unchanged" },
+          duration_ms: durationMs,
+          status: "success",
+          model_name: "gemini-embedding-001",
+        });
+      }
       return new Response(
         JSON.stringify({ success: true, skipped: true, reason: "content_unchanged" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -234,13 +230,20 @@ Deno.serve(async (req: Request) => {
     }
 
     const durationMs = Date.now() - startMs;
-    await supabase.from("ai_runs").insert({
-      agent_name: "ai-embed",
-      input_tokens: Math.ceil(entityText.length / 4),
-      output_tokens: 768,
-      duration_ms: durationMs,
-      status: "success",
-    }).then(() => {}, () => {});
+    const logUid = Deno.env.get("AI_EMBED_RUN_LOG_USER_ID");
+    if (logUid && entityType && entityId) {
+      await insertAiRun(supabase, {
+        user_id: logUid,
+        agent_name: "ai-embed",
+        agent_type: "general_concierge",
+        input_data: { entity_type: entityType, entity_id: entityId },
+        output_data: { skipped: false },
+        duration_ms: durationMs,
+        status: "success",
+        model_name: "gemini-embedding-001",
+        input_tokens: Math.ceil(entityText.length / 4),
+      });
+    }
 
     return new Response(
       JSON.stringify({ success: true, skipped: false, entity_type: entityType, entity_id: entityId, durationMs }),
@@ -249,13 +252,22 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     const durationMs = Date.now() - startMs;
     console.error("ai-embed error:", err);
-    await supabase.from("ai_runs").insert({
-      agent_name: "ai-embed",
-      input_tokens: 0,
-      output_tokens: 0,
-      duration_ms: durationMs,
-      status: "error",
-    }).then(() => {}, () => {});
+    const logUidErr = Deno.env.get("AI_EMBED_RUN_LOG_USER_ID");
+    if (logUidErr) {
+      await insertAiRun(supabase, {
+        user_id: logUidErr,
+        agent_name: "ai-embed",
+        agent_type: "general_concierge",
+        input_data: {
+          entity_type: entityType ?? "unknown",
+          entity_id: entityId ?? null,
+        },
+        output_data: { error: err instanceof Error ? err.message : String(err) },
+        duration_ms: durationMs,
+        status: "error",
+        model_name: "gemini-embedding-001",
+      });
+    }
     return new Response(
       JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
