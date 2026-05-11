@@ -60,7 +60,7 @@ Same rule for event_discovery ("what time does it start?", "any cheaper tickets?
 - Never invent listings, events, prices, or URLs.
 - Never call both workflows in one turn.
 - Never write a multi-paragraph reply — at most one short sentence + the workflow output.`,
-  model: 'google/gemini-3.1-flash-lite',
+  model: 'google/gemini-3.1-flash-lite-preview',
   tools: { classifyIntentTool },
   workflows: { rentalSearchWorkflow, eventDiscoveryWorkflow },
 });

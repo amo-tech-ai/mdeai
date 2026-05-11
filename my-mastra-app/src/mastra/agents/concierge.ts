@@ -161,7 +161,7 @@ Never reply with an empty list and no recovery.
 - Never answer "rentals or events?" if lastIntent=rental_search and the user is continuing.
 - Max 5 cards per reply.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
-  model: 'google/gemini-3.1-flash-lite',
+  model: 'google/gemini-3.1-flash-lite-preview',
   tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
   memory: new Memory({
     options: {

@@ -25,7 +25,8 @@
 | Routing | react-router-dom v6 |
 | Backend | Supabase PostgreSQL + pgvector + 9 Edge Functions |
 | Auth | Supabase Auth (email/password + Google OAuth) |
-| AI | Google Gemini via Supabase Edge Functions |
+| AI (edge) | Google Gemini via Supabase Edge Functions |
+| AI (runtime) | **Mastra** — agent orchestration, workflows, memory, tool registry (`my-mastra-app/`) |
 | Forms | react-hook-form + Zod validation |
 | Design | "Paisa" theme — DM Sans + Playfair Display, emerald/cream/charcoal |
 | Testing | Vitest (unit) + Playwright (e2e) |
@@ -38,9 +39,31 @@ npm run build        # Production build
 npm run lint         # ESLint
 npm run test         # Vitest (run once)
 npm run test:watch   # Vitest (watch mode)
+npm run test:edge    # Deno: shared tests only (HTTP audit off)
+npm run test:edge:audit                  # Health gate + HTTP audit (69 pass if no sponsor JWT)
+npm run test:edge:audit:with-acl         # Auth + sponsor seed — 74 pass, 2 ignores (opt-in integration)
 ```
 
 Floor before shipping any change: `npm run lint && npm run build && npm run test`.
+
+### Mastra Studio (`my-mastra-app/`)
+
+```bash
+# Start (reads GOOGLE_GENERATIVE_AI_API_KEY + DATABASE_URL from .env.local automatically)
+cd /home/sk/mde/my-mastra-app && bash scripts/mastra-start.sh
+
+# Status
+npx bgproc list
+
+# Studio UI  →  http://localhost:4111
+# Stop
+npx bgproc stop my-mastra-app
+
+# Full smoke test (typecheck → build → health → 8 agent/workflow probes)
+cd /home/sk/mde/my-mastra-app && bash scripts/mastra-smoke.sh
+```
+
+See `.claude/skills/mastra/` for development patterns. Always check embedded docs in `my-mastra-app/node_modules/@mastra/` before writing Mastra code — APIs change fast.
 
 ## Project Structure
 
@@ -112,6 +135,10 @@ See `.claude/rules/edge-function-patterns.md`.
 
 ## AI Integration
 
+Two AI layers — edge functions for current production, Mastra for orchestration (being built):
+
+### Supabase Edge Functions (current production)
+
 All AI runs on **Google Gemini** via the OpenAI-compatible endpoint
 `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
 There is **no Anthropic / Claude API in production** — Claude is only used in dev tooling (Claude Code).
@@ -120,7 +147,8 @@ There is **no Anthropic / Claude API in production** — Claude is only used in 
 |--------------|-------|---------|
 | ai-router | `gemini-3.1-flash-lite-preview` | Intent classification |
 | ai-chat | `gemini-3-flash-preview` | Conversational AI + tool-calling |
-| ai-search | `gemini-3-flash-preview` | Semantic search (pgvector) |
+| ai-search | `gemini-3-flash-preview` | Semantic/hybrid search (pgvector) |
+| ai-embed | `gemini-embedding-001` | 768-dim embeddings for pgvector |
 | ai-trip-planner | `gemini-3.1-pro-preview` | Multi-day itinerary generation |
 | ai-optimize-route | `gemini-3-flash-preview` | Route optimization |
 | rentals | `gemini-3.1-pro-preview` | Rental intake conversation |
@@ -129,6 +157,28 @@ There is **no Anthropic / Claude API in production** — Claude is only used in 
 | ai-audience-match (P3) | `gemini-3.1-pro-preview` | Brand ↔ contest fit scoring |
 
 Auth: `GEMINI_API_KEY` secret in Supabase dashboard.
+
+### Mastra Runtime (`my-mastra-app/`) — being built
+
+Mastra is the **AI application runtime** for mdeAI — typed tool registry, agent orchestration, multi-step workflows, memory/RAG, and observability. It sits between the Vite frontend and Supabase; it never writes to the DB directly and never mutates Stripe.
+
+```
+Vite frontend → @mastra/client-js → Mastra server (port 4111)
+                                          ↓
+                            typed tools → Supabase RPCs / edge fns
+                            workflows  → Supabase workflow_* tables
+                            memory     → pgvector (via VDB-01 RPCs)
+```
+
+**Architecture boundaries (never violate):**
+- Agents use typed tools only — no raw SQL, no direct `supabase.from()` writes
+- OpenClaw = execution-only (approved jobs); Hermes = advisory reasoning
+- Paperclip = approvals / budgets / governance
+- AI rate limits enforced at Mastra layer, not edge functions
+- All traces go to `ai_runs` + Mastra observability (DuckDB store)
+
+Mastra tasks: `tasks/prompts/mastra/` (MASTRA-001 through MASTRA-019).
+Skill: `.claude/skills/mastra/`.
 
 ## Environment Variables
 
@@ -196,6 +246,7 @@ Domain owner skills for active phases:
 | `mde-testing` | Vitest + Playwright + Chrome DevTools MCP |
 | `systematic-debugging` | Debugging workflows |
 | `mde-task-lifecycle` | Task template + Definition of Done |
+| `mastra` | Mastra framework — agents, workflows, tools, memory, Studio |
 
 > Removed (do not reference): any `shopify-*`, `gadget-best-practices`, `mdeai-freshness`, `mdeai-commerce`. Commerce is out of scope.
 
