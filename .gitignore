@@ -11,6 +11,7 @@ node_modules
 .venv-img
 dist
 dist-ssr
+**/.mastra/
 *.local
 
 # Environment files
@@ -18,12 +19,15 @@ dist-ssr
 .env.*
 # …but DO track .env.example (placeholder template, no secrets)
 !.env.example
+!supabase/functions/.env.example
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+.obsidian/
+**/.obsidian/
 *.suo
 *.ntvs*
 *.njsproj

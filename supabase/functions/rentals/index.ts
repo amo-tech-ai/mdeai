@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { allowRateDurable, clientIp } from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -510,8 +511,6 @@ Deno.serve(async (req) => {
 
     console.log(`Rentals action: ${action}`);
 
-    console.log(`Rentals action: ${action}`);
-
     switch (action) {
       // ====== INTAKE ======
       case "intake": {
@@ -532,6 +531,23 @@ Deno.serve(async (req) => {
         const filterJson: FilterJson = body.filter_json || {};
         const limit = body.limit || 50;
         const userId = authHeader ? await getUserId(authHeader) : null;
+
+        const rateSvc = getServiceClient();
+        const rateKey = userId ? `rentals-search:${userId}` : `rentals-search:${clientIp(req)}`;
+        const rl = await allowRateDurable(rateSvc, rateKey, 30, 60);
+        if (!rl.allowed) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: "Too many searches — slow down.",
+              retry_after_seconds: rl.retry_after_seconds,
+            }),
+            {
+              status: 429,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
 
         const searchResult = await executeSearch(filterJson, limit);
         const resultIds = searchResult.listings.map((l: any) => l.id);

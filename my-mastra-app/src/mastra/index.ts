@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
 import { createPostgresStore } from './storage/config';
@@ -20,7 +21,8 @@ const storage = createPostgresStore();
 export const mastra = new Mastra({
   workflows: { weatherWorkflow, rentalSearchWorkflow, eventDiscoveryWorkflow, conciergeRoutingWorkflow },
   agents: { weatherAgent, pingAgent, routerAgent, conciergeAgent, rentalAgent, eventAgent, evaluationAgent },
-  scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
+  editor: new MastraEditor(), 
+ scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage,
   logger: new PinoLogger({
     name: 'Mastra',

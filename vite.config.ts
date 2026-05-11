@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => {
       mode === "development" && componentTagger(),
       {
         name: "html-og-site-url",
-        transformIndexHtml(html) {
+        transformIndexHtml(html: string) {
           return html.replaceAll("%SITE_URL%", siteUrl);
         },
       },
