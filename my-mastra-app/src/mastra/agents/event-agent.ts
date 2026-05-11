@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { searchEventsTool } from '../tools/search-events';
+import { eventDiscoveryWorkflow } from '../workflows/event-discovery-workflow';
 
 const eventWorkingMemorySchema = z.object({
   lastQuery: z
@@ -86,6 +87,7 @@ If zero results: state plainly why, relax exactly ONE filter (price OR category 
 - Plain English. No emoji unless the user uses one first.`,
   model: 'google/gemini-3-flash-preview',
   tools: { searchEventsTool },
+  workflows: { eventDiscoveryWorkflow },
   memory: new Memory({
     options: {
       workingMemory: {

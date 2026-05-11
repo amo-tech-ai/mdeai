@@ -1,26 +1,7 @@
 import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import { rentalSearchWorkflow } from '../workflows/rental-search-workflow';
 import { eventDiscoveryWorkflow } from '../workflows/event-discovery-workflow';
-
-const intentSchema = z.enum(['rental_search', 'event_discovery', 'chitchat', 'unknown']);
-
-const classifyIntentTool = createTool({
-  id: 'classify-intent',
-  description: 'Pick exactly one intent label that matches the user message. Always call this first.',
-  inputSchema: z.object({
-    intent: intentSchema,
-    confidence: z.number().min(0).max(1),
-    reason: z.string().describe('one short sentence'),
-  }),
-  outputSchema: z.object({
-    intent: intentSchema,
-    confidence: z.number().min(0).max(1),
-    reason: z.string(),
-  }),
-  execute: async (input: { intent: z.infer<typeof intentSchema>; confidence: number; reason: string }) => input,
-});
+import { classifyIntentTool } from '../tools/classify-intent';
 
 export const routerAgent = new Agent({
   id: 'router-agent',
@@ -60,7 +41,7 @@ Same rule for event_discovery ("what time does it start?", "any cheaper tickets?
 - Never invent listings, events, prices, or URLs.
 - Never call both workflows in one turn.
 - Never write a multi-paragraph reply — at most one short sentence + the workflow output.`,
-  model: 'google/gemini-3.1-flash-lite',
+  model: 'google/gemini-3.1-flash-lite-preview',
   tools: { classifyIntentTool },
   workflows: { rentalSearchWorkflow, eventDiscoveryWorkflow },
 });
