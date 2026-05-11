@@ -42,3 +42,4 @@ mastra.db*
 my-mastra-app/.env
 my-mastra-app/.env.*
 my-mastra-app/node_modules/
+.vercel

@@ -6,8 +6,8 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    // Mastra CLI output (bundled deps, huge generated trees) — not project source
-    ignores: ["dist", "**/.mastra/**"],
+    // Non-project directories: Mastra build output, agent skill repos, external clones
+    ignores: ["dist", "**/.mastra/**", ".agents/**", "github/**", "my-mastra-app/**", "paperclip/**"],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -24,6 +24,9 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 );

@@ -8,7 +8,7 @@
 > - Source of truth for *why* each task matters: [prd.md](../prd.md) v5.1.
 > - Floor before any PR: `npm run lint && npm run build && npm run test`.
 
-**Last updated:** 2026-05-11 · 41/41 tests · build clean · `supabase db reset` green · PRs #17 #18 #19 #22 #24 merged · hybrid search v47 live · Mastra 7 agents on `main` · source=supabase confirmed · one worktree only
+**Last updated:** 2026-05-11 · 41/41 tests · build clean · `supabase db reset` green · PRs #17 #18 #19 #22 #24 merged · hybrid search v47 live · Mastra 7 agents on `main` · source=supabase confirmed · `@mastra/client-js@1.17.1` in frontend · bridge file `src/lib/mastra-client.ts` created · 20 archived Mastra tasks confirmed done · one worktree only
 
 ---
 
@@ -53,24 +53,32 @@ Mastra is the AI application runtime — typed tool registry, agent orchestratio
 - **Skills:** **`mastra`** (always check embedded docs first), **`mde-task-lifecycle`** (plan → ship), **`mde-supabase`**.
 - **Dev server:** `cd /home/sk/mde/my-mastra-app && npx bgproc list` · Studio at http://localhost:4111.
 
-**Live on main (PR #22 merged 2026-05-10):** 7 agents · 5 tools · 4 workflows · source=supabase confirmed.
+**Live on main (PR #22 merged 2026-05-10):** 7 agents · 6 tools · 4 workflows · source=supabase confirmed · `@mastra/client-js@1.17.1` in frontend · bridge file ready.
+
+**Full progress:** [progress-mastra.md](./prompts/mastra/progress-mastra.md) — 20 archived tasks done · 36% overall complete · 1/10 production gates passing.
 
 **P0 ladder (canonical order — implement in sequence)**
 
 - [x] **MASTRA-001** ✅ — Source inventory + safety baseline.
 - [x] **MASTRA-002** ✅ — Core runtime scaffold. 7 agents live, Studio running.
-- [ ] **MASTRA-003** — Tool audit + control events (1d). Every tool logs to `ai_tool_audit_events`. Prompt: [003](003-mastra-tool-audit-control-events.md).
+- [x] **MASTRA-022** ✅ — Runtime smoke script. 8/8 probes passing.
+- [x] **MASTRA-023** ✅ — Replace weather demo with mdeAI ping + router.
+- [x] **MASTRA-026–030** ✅ — All 5 agents registered in Studio (router, concierge, rental, event, evaluation).
+- [x] **MASTRA-019** ✅ (partial) — `@mastra/client-js@1.17.1` installed in frontend · `VITE_MASTRA_SERVER_URL` set · `src/lib/mastra-client.ts` bridge file created. **Remaining:** wire `useChat.ts` line 364 to use bridge + JWT auth on Mastra server.
+- [ ] **WIRE useChat.ts → Mastra** (2h) — Replace `fetch(${SUPABASE_URL}/functions/v1/ai-chat)` on line 364 of `src/hooks/useChat.ts` with `streamConcierge()` from the bridge file. Pass `threadId` = conversationId, `resourceId` = userId. **P0 — this is the integration gap.**
+- [ ] **JWT auth on Mastra server** (2h) — Add middleware to validate Supabase JWT before any agent runs. Required for Vercel deploy security.
+- [ ] **MASTRA-003** — Tool audit + control events (1d). Every tool logs to `ai_tool_audit_events`. Prompt: [003](prompts/mastra/tasks/003-mastra-tool-audit-control-events.md).
+- [ ] **M22 bug fixes** (2h) — Fix scorer tool ID (M22-01 done), `source_url`→`sourceUrl` (M22-08), bedrooms in cardSchema (M22-09), lastIntent enum extension (M22-03).
+- [ ] **MASTRA-004** — Hybrid search tools (1d). Wraps `hybrid_search_*` RPCs. Prompt: [004](prompts/mastra/tasks/004-mastra-hybrid-search-tools.md).
+- [ ] **MASTRA-005** — Chat router + concierge MVP (2d). **Unblocks C04, C05.** Prompt: [005](prompts/mastra/tasks/005-mastra-chat-router-concierge.md).
 - [ ] **MASTRA-012** — Workflow state runtime (1d). Prompt: [012](prompts/mastra/tasks/012-mastra-workflow-state-runtime.md).
 - [ ] **MASTRA-013** — Tenant isolation (1d). Prompt: [013](prompts/mastra/tasks/013-mastra-tenant-isolation.md).
 - [ ] **MASTRA-014** — AI rate limits + cost controls (1d). Prompt: [014](prompts/mastra/tasks/014-mastra-ai-rate-limits.md).
 - [ ] **MASTRA-015** — Shared tool registry (1d). Prompt: [015](prompts/mastra/tasks/015-mastra-tool-registry-system.md).
-- [ ] **MASTRA-004** — Hybrid search tools (1d). Wraps `hybrid_search_*` RPCs. Prompt: [004](004-mastra-hybrid-search-tools.md).
-- [ ] **MASTRA-005** — Chat router + concierge MVP (2d). **Unblocks C04, C05.** Prompt: [005](005-mastra-chat-router-concierge.md).
-- [ ] **MASTRA-019** — `@mastra/client-js` SDK wrapper (1d). Prompt: [019](prompts/mastra/tasks/019-mastra-client-sdk-integration.md).
-- [ ] **MASTRA-011** — Observability + evals + guardrails (2d). Prompt: [011](011-mastra-observability-evals-guardrails.md).
-- [ ] **MASTRA-006** — Real estate MVP agents (3d). Prompt: [006](006-mastra-real-estate-mvp-agents.md).
-- [ ] **MASTRA-007** — Events MVP runtime (3d). Prompt: [007](007-mastra-events-mvp-runtime.md).
-- [ ] **MASTRA-008** — Restaurants MVP discovery (2d, P1). Prompt: [008](008-mastra-restaurants-mvp-discovery.md).
+- [ ] **MASTRA-011** — Observability + evals + guardrails (2d). Prompt: [011](prompts/mastra/tasks/011-mastra-observability-evals-guardrails.md).
+- [ ] **MASTRA-006** — Real estate MVP agents (3d). Prompt: [006](prompts/mastra/tasks/006-mastra-real-estate-mvp-agents.md).
+- [ ] **MASTRA-007** — Events MVP runtime (3d). Prompt: [007](prompts/mastra/tasks/007-mastra-events-mvp-runtime.md).
+- [ ] **MASTRA-008** — Restaurants MVP discovery (2d, P1). Prompt: [008](prompts/mastra/tasks/008-mastra-restaurants-mvp-discovery.md).
 
 ---
 

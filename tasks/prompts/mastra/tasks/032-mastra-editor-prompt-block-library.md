@@ -143,7 +143,7 @@ Required variables:
 {{memory.lastNeighborhood}}
 ```
 
-### `mde-safe-tool-usage`
+###  
 
 Must define:
 

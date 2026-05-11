@@ -86,6 +86,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+      dedupe: ["react", "react-dom"],
     },
     build: {
       // After vendor splitting, the entry chunk should comfortably sit

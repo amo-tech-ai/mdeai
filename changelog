@@ -1,5 +1,34 @@
 # Changelog — mdeai.co
 
+## 2026-05-11 — Mastra frontend integration + progress audit + ai-chat review
+
+### Mastra ↔ Frontend Integration (3 blockers resolved)
+
+Three items that were preventing the Vite frontend from talking to the Mastra server are now done:
+
+1. **`@mastra/client-js@1.17.1` installed** in `/home/sk/mde/package.json` — the frontend package, not just the Mastra server package.
+2. **`VITE_MASTRA_SERVER_URL=http://localhost:4111`** added to `/home/sk/mde/.env`.
+3. **`src/lib/mastra-client.ts` bridge file created** — exposes `streamConcierge()` (uses the confirmed `processDataStream({ onTextPart })` streaming API from official `@mastra/client-js` docs) and `generateConcierge()` (one-shot). Lint-clean, tsc-clean.
+
+The frontend's `useChat.ts` still calls the Supabase `ai-chat` edge function at line 364. Swapping that call to use the bridge is the next action (see todo.md §2B).
+
+### Mastra infrastructure (this session)
+
+- **`classify-intent` tool** extracted from `router.ts` inline const → `tools/classify-intent.ts` own file; re-exported via `tools/index.ts`. Agents import from named module.
+- **`MastraEditor`** (`@mastra/editor@0.7.23`) registered in `index.ts`; Studio now shows Editor tab per agent; Draft → Published → Archived versioning active.
+- **`my-mastra-app/.env`** created (gitignored) with `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `DATABASE_URL` — bare `npx mastra dev` now works without `--env` flag.
+- **`.nvmrc`** created in `my-mastra-app/` pinning Node 22.22.2; `nvm use` auto-switches.
+
+### Analysis documents
+
+- **`tasks/prompts/mastra/progress-mastra.md`** — master progress tracker: 20 archived tasks confirmed complete, 82 active tasks tracked, ai-chat edge function audit (85% production-ready), production readiness checklist (1/10 gates passing).
+- **`tasks/prompts/mastra/mastra-best-practices.md`** — 10-section living guide covering agents, workflows, tools, memory, storage, evaluation, processors, MCP, observability, startup/env.
+- **`tasks/prompts/mastra/mastra-mdeai-integration.md`** — 17-section integration plan: executive recommendation, architecture diagram, missing items, bridge file code, streaming plan, memory strategy, Vercel deployment, security, red flags, production checklist.
+
+**Verification:** 41/41 Vitest tests · build clean (4.26s) · smoke suite 8/8 · `tsc --noEmit` clean · bridge file ESLint-clean
+
+---
+
 ## 2026-05-10 — Mastra: Gemini models + Supabase live search + clarification gate ([PR #24](https://github.com/amo-tech-ai/mdeai/pull/24) merged · [PR #22](https://github.com/amo-tech-ai/mdeai/pull/22) open)
 
 ### PR #24 — fix(concierge): clarification confidence gate (merged to `main`, commit `1cbeda26`)

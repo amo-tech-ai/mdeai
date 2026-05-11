@@ -40,6 +40,7 @@ const auth =
         url: process.env.SUPABASE_URL,
         anonKey: process.env.SUPABASE_ANON_KEY,
         authorizeUser: async (user) => !!user?.id,
+        mapUserToResourceId: (user) => user.id,
       })
     : undefined;
 
@@ -57,6 +58,7 @@ export const mastra = new Mastra({
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'],
       credentials: true,
     },
+    mcpOptions: { serverless: true },
   },
   // VercelDeployer: used by `mastra build` only — no effect on local `mastra dev`.
   deployer: new VercelDeployer({
