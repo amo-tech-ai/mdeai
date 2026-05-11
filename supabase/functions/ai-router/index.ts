@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
@@ -262,33 +261,35 @@ async function getUserIdFromAuth(authHeader: string | null, supabase: ReturnType
   }
 }
 
-// Log AI run to database
+// Log AI run to database (valid `agent_type` / `status` enums for public.ai_runs)
 async function logAIRun(
   supabase: ReturnType<typeof getSupabaseClient>,
   userId: string | null,
   input: RouterInput,
   output: RouterOutput,
-  durationMs: number
+  durationMs: number,
+  routingMethod: "pattern" | "ai",
 ) {
   if (!userId) return; // Only log for authenticated users
-  
+
   try {
     await supabase.from("ai_runs").insert({
       user_id: userId,
       agent_name: "intent_router",
-      agent_type: "router",
+      agent_type: "general_concierge",
       input_data: input,
       output_data: output,
       duration_ms: durationMs,
-      status: "completed",
-      model_name: output.confidence > 0.8 ? "pattern_match" : "claude-sonnet",
+      status: "success",
+      model_name: routingMethod === "pattern"
+        ? "intent_pattern_lexicon_v1"
+        : "gemini-3.1-flash-lite-preview",
     });
   } catch (error) {
     console.error("Failed to log AI run:", error);
   }
 }
-
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -348,8 +349,11 @@ serve(async (req) => {
 
     const durationMs = Date.now() - startTime;
 
+    const routingMethod: "pattern" | "ai" =
+      quickMatch && quickMatch.confidence >= 0.85 ? "pattern" : "ai";
+
     // Log the AI run
-    await logAIRun(supabase, userId, body, result, durationMs);
+    await logAIRun(supabase, userId, body, result, durationMs, routingMethod);
 
     return new Response(
       JSON.stringify({

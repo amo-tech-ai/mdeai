@@ -1,5 +1,6 @@
 import { getCorsHeaders, errorBody, jsonResponse } from "../_shared/http.ts";
 import { getServiceClient, getUserId } from "../_shared/supabase-clients.ts";
+import { allowRateDurable, clientIp } from "../_shared/rate-limit.ts";
 
 const VALID_INTENTS = ["rental", "host", "buyer", "event_organizer", "sponsor"] as const;
 const VALID_SOURCES = ["chat_auto", "chat_explicit", "form"] as const;
@@ -17,6 +18,13 @@ Deno.serve(async (req: Request) => {
   const serviceClient = getServiceClient();
   const authHeader = req.headers.get("Authorization");
   const userId = await getUserId(authHeader);
+
+  if (!userId) {
+    const rl = await allowRateDurable(serviceClient, `chat-lead:${clientIp(req)}`, 20, 3600);
+    if (!rl.allowed) {
+      return jr(errorBody("RATE_LIMIT", "Too many submissions — try again later"), 429, req);
+    }
+  }
 
   let body: Record<string, unknown>;
   try {
