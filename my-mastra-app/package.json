@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
-    "build": "mastra build",
+    "build": "mastra build && node scripts/fix-vercel-build.cjs",
     "start": "mastra start",
     "typecheck": "tsc --noEmit",
     "health": "node --experimental-strip-types -e \"import('./src/mastra/public/health.ts').then(m => console.log(JSON.stringify(m.getHealth())))\"",
@@ -22,8 +22,11 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@mastra/ai-sdk": "^1.4.1",
+    "@mastra/auth-supabase": "^1.0.0",
     "@mastra/client-js": "^1.17.1",
     "@mastra/core": "^1.32.1",
+    "@mastra/deployer-vercel": "^1.1.26",
     "@mastra/duckdb": "^1.3.0",
     "@mastra/editor": "^0.7.23",
     "@mastra/evals": "^1.2.2",
