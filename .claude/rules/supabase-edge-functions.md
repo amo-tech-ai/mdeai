@@ -22,7 +22,10 @@ You're an expert in writing TypeScript and Deno JavaScript runtime. Generate **h
    - SUPABASE_SECRET_KEYS
    - SUPABASE_DB_URL
 
-   You then need to use `JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')!)` or `JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')!)` to access the actual keys in the code. For example, `Deno.env.get(SUPABASE_SECRET_KEYS['default'])` to access the default service key.
+   Access key maps by parsing JSON from the env string (see [Supabase secrets](https://supabase.com/docs/guides/functions/secrets)):
+   `const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')!)` then use `secretKeys['default']` for the service-role key. Same pattern for `SUPABASE_PUBLISHABLE_KEYS` and `publishableKeys['default']` with the anon/publishable client.
+
+   Legacy (still supported): `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` as plain strings — no `JSON.parse`.
 9. To set other environment variables (ie. secrets) users can put them in a env file and run the `supabase secrets set --env-file path/to/env-file`
 10. A single Edge Function can handle multiple routes. It is recommended to use a library like Express or Hono to handle the routes as it's easier for developer to understand and maintain. Each route must be prefixed with `/function-name` so they are routed correctly.
 11. File write operations are ONLY permitted on `/tmp` directory. You can use either Deno or Node File APIs.

@@ -1,5 +1,5 @@
 /**
- * Shared Gemini API helper with built-in timeout.
+ * Shared Gemini API helpers: OpenAI-compat chat (with timeout) and retry.
  *
  * Centralizes the fetch call to Gemini's OpenAI-compatible endpoint
  * so every edge function gets consistent timeout, auth, and error handling.
@@ -8,14 +8,27 @@
 const GEMINI_ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
-/**
- * Fetch from Gemini API with AbortController timeout.
- *
- * @param body - The request body (model, messages, etc.)
- * @param timeoutMs - Timeout in milliseconds (default 30s)
- * @returns The fetch Response
- * @throws DOMException with name "AbortError" on timeout
- */
+/** Retry transient failures / rate limits */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts?: { retries?: number; baseDelayMs?: number },
+): Promise<T> {
+  const retries = opts?.retries ?? 3;
+  const baseDelayMs = opts?.baseDelayMs ?? 400;
+  let last: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (i < retries - 1) {
+        await new Promise((r) => setTimeout(r, baseDelayMs * (i + 1)));
+      }
+    }
+  }
+  throw last;
+}
+
 export async function fetchGemini(
   body: Record<string, unknown>,
   timeoutMs = 30_000,
@@ -41,10 +54,6 @@ export async function fetchGemini(
   }
 }
 
-/**
- * Fetch from Gemini API with streaming enabled + timeout.
- * Returns the raw Response for SSE streaming to client.
- */
 export async function fetchGeminiStream(
   body: Record<string, unknown>,
   timeoutMs = 30_000,

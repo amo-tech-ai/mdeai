@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
@@ -250,7 +249,7 @@ Include 3-5 activities per day. Use REAL restaurant names from the list when sug
   };
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -287,12 +286,12 @@ serve(async (req) => {
       await supabase.from("ai_runs").insert({
         user_id: userId,
         agent_name: "trip_planner",
-        agent_type: "planner",
+        agent_type: "itinerary_optimizer",
         input_data: body,
         output_data: { itemCount: plan.itinerary.length, totalCost: plan.totalEstimatedCost },
         duration_ms: Date.now() - startTime,
-        status: "completed",
-        model_name: "gemini-3-pro-preview",
+        status: "success",
+        model_name: "gemini-3.1-pro-preview",
       });
     }
 
