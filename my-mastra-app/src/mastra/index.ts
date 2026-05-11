@@ -21,8 +21,8 @@ const storage = createPostgresStore();
 export const mastra = new Mastra({
   workflows: { weatherWorkflow, rentalSearchWorkflow, eventDiscoveryWorkflow, conciergeRoutingWorkflow },
   agents: { weatherAgent, pingAgent, routerAgent, conciergeAgent, rentalAgent, eventAgent, evaluationAgent },
-  editor: new MastraEditor(), 
- scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
+  editor: new MastraEditor(),
+  scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage,
   logger: new PinoLogger({
     name: 'Mastra',
