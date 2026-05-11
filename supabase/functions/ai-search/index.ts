@@ -33,9 +33,13 @@ interface SearchResult {
 }
 
 function getSupabaseClient(authHeader: string | null) {
+  // Use anon key so RLS applies to all queries. When the user's JWT is forwarded
+  // in the Authorization header, the client authenticates as that user;
+  // otherwise it authenticates as the anon role. Either way, service_role is
+  // never granted and inactive/draft records stay hidden.
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
     {
       auth: { autoRefreshToken: false, persistSession: false },
       global: { headers: authHeader ? { Authorization: authHeader } : {} },
@@ -43,32 +47,30 @@ function getSupabaseClient(authHeader: string | null) {
   );
 }
 
-// Embed a query string via Gemini embedding-001 REST API
 async function embedQuery(query: string): Promise<number[] | null> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) return null;
   try {
-    const resp = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
-      {
-        method: "POST",
-        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "models/gemini-embedding-001",
-          content: { parts: [{ text: query }] },
-        }),
-      }
-    );
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "models/gemini-embedding-001",
+        content: { parts: [{ text: query }] },
+        outputDimensionality: 768,
+      }),
+    });
     if (!resp.ok) return null;
     const data = await resp.json();
     const values: number[] = data?.embedding?.values;
-    return Array.isArray(values) && values.length === 768 ? values : null;
+    if (!Array.isArray(values) || values.length !== 768) return null;
+    return values;
   } catch {
     return null;
   }
 }
 
-// AI parameter extraction for keyword mode
 async function extractSearchParams(query: string): Promise<{
   keywords: string[];
   domain: string | null;
@@ -136,8 +138,6 @@ Respond with JSON only:
   };
 }
 
-// --- Semantic search functions (use pgvector RPCs) ---
-
 async function semanticSearchListings(
   supabase: ReturnType<typeof getSupabaseClient>,
   embedding: number[],
@@ -146,7 +146,6 @@ async function semanticSearchListings(
 ): Promise<SearchResult[]> {
   const { data, error } = await supabase.rpc("semantic_search_listings", {
     query_embedding: `[${embedding.join(",")}]`,
-    similarity_threshold: 0.5,
     match_count: limit,
   });
   if (error) { console.error("Semantic listing search error:", error); return []; }
@@ -187,7 +186,6 @@ async function semanticSearchEvents(
 ): Promise<SearchResult[]> {
   const { data, error } = await supabase.rpc("semantic_search_events", {
     query_embedding: `[${embedding.join(",")}]`,
-    similarity_threshold: 0.5,
     match_count: limit,
   });
   if (error) { console.error("Semantic event search error:", error); return []; }
@@ -213,7 +211,6 @@ async function semanticSearchRestaurants(
 ): Promise<SearchResult[]> {
   const { data, error } = await supabase.rpc("semantic_search_restaurants", {
     query_embedding: `[${embedding.join(",")}]`,
-    similarity_threshold: 0.5,
     match_count: limit,
   });
   if (error) { console.error("Semantic restaurant search error:", error); return []; }
@@ -231,8 +228,6 @@ async function semanticSearchRestaurants(
     metadata: { cuisineTypes: r.cuisine_types, priceLevel: r.price_level, similarity: r.similarity },
   }));
 }
-
-// --- Keyword search functions (fallback / non-semantic mode) ---
 
 async function searchApartments(
   supabase: ReturnType<typeof getSupabaseClient>,
@@ -264,7 +259,7 @@ async function searchApartments(
     rating: apt.rating,
     imageUrl: apt.images?.[0] || null,
     location: apt.neighborhood,
-    relevanceScore: 1 - idx * 0.05,
+    relevanceScore: Math.min(0.55, 1 - idx * 0.05),
     metadata: { amenities: apt.amenities },
   }));
 }
@@ -295,7 +290,7 @@ async function searchRestaurants(
     rating: rest.rating,
     imageUrl: rest.primary_image_url,
     location: rest.address || rest.city,
-    relevanceScore: 1 - idx * 0.05,
+    relevanceScore: Math.min(0.55, 1 - idx * 0.05),
     metadata: { cuisineTypes: rest.cuisine_types, priceLevel: rest.price_level },
   }));
 }
@@ -328,7 +323,7 @@ async function searchCars(
     rating: car.rating,
     imageUrl: car.images?.[0] || null,
     location: "Medellín pickup available",
-    relevanceScore: 1 - idx * 0.05,
+    relevanceScore: Math.min(0.55, 1 - idx * 0.05),
     metadata: { vehicleType: car.vehicle_type, features: car.features },
   }));
 }
@@ -339,12 +334,12 @@ async function searchEvents(
   filters: SearchRequest["filters"],
   limit: number
 ): Promise<SearchResult[]> {
-  const now = new Date().toISOString();
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   let query = supabase
     .from("events")
     .select("id, name, description, event_type, event_start_time, ticket_price_min, rating, primary_image_url, address")
     .eq("is_active", true)
-    .gte("event_start_time", now);
+    .gte("event_start_time", oneHourAgo);
 
   if (eventType) query = query.ilike("event_type", `%${eventType}%`);
   if (filters?.dateFrom) query = query.gte("event_start_time", filters.dateFrom);
@@ -362,7 +357,7 @@ async function searchEvents(
     rating: evt.rating,
     imageUrl: evt.primary_image_url,
     location: evt.address,
-    relevanceScore: 1 - idx * 0.05,
+    relevanceScore: Math.min(0.55, 1 - idx * 0.05),
     metadata: { eventType: evt.event_type, startTime: evt.event_start_time },
   }));
 }
@@ -437,11 +432,13 @@ Deno.serve(async (req: Request) => {
     const resultsPerDomain = Math.ceil(limit / (domain !== "all" ? 1 : 4));
 
     if (semantic) {
-      // Semantic path: embed query, call pgvector RPCs
       const embedding = await embedQuery(query);
 
       if (embedding) {
         const searchPromises: Promise<SearchResult[]>[] = [];
+        // When a neighborhood filter is set and domain=all, skip cars —
+        // cars have no neighborhood and would pollute location-specific results.
+        const neighborhoodActive = !!filters?.neighborhood;
 
         if (domain === "all" || domain === "apartments")
           searchPromises.push(semanticSearchListings(supabase, embedding, filters, resultsPerDomain));
@@ -449,12 +446,19 @@ Deno.serve(async (req: Request) => {
           searchPromises.push(semanticSearchEvents(supabase, embedding, filters, resultsPerDomain));
         if (domain === "all" || domain === "restaurants")
           searchPromises.push(semanticSearchRestaurants(supabase, embedding, resultsPerDomain));
-        // Cars have no embeddings — fall back to keyword for car domain
-        if (domain === "all" || domain === "cars")
+        // Cars have no embeddings — keyword fallback; skip when neighborhood filter active
+        if ((domain === "all" && !neighborhoodActive) || domain === "cars")
           searchPromises.push(searchCars(supabase, null, filters, resultsPerDomain));
 
         const settled = await Promise.all(searchPromises);
         settled.forEach((r) => results.push(...r));
+
+        // If neighborhood filter is active but semantic returned 0 matching apartments,
+        // add keyword apartment results as fallback so the user isn't left with nothing.
+        if (neighborhoodActive && domain === "all" && !results.some((r) => r.type === "apartment")) {
+          const kwApts = await searchApartments(supabase, filters, filters.neighborhood!, resultsPerDomain);
+          results.push(...kwApts);
+        }
 
         results.sort((a, b) => b.relevanceScore - a.relevanceScore);
         const finalResults = results.slice(0, limit);
@@ -479,7 +483,6 @@ Deno.serve(async (req: Request) => {
       // Fall through to keyword if embedding failed
     }
 
-    // Keyword path
     const params = await extractSearchParams(query);
     const effectiveDomain = domain !== "all" ? domain : params.domain;
     const kLimit = Math.ceil(limit / (effectiveDomain ? 1 : 4));

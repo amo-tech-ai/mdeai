@@ -77,6 +77,33 @@ Merge commit: `cf85eb5`. 2 files.
 
 ---
 
+## 2026-05-09 — C14: pgvector semantic search (branch `chore/claude-audit-tools`, commit `b32b215`)
+
+Semantic search is live in production. Users searching "cozy apartment El Poblado with pool" now get apartments ranked by meaning (similarity 0.74), not just keyword matching.
+
+### What shipped
+
+**`ai-embed` edge function (new, v10).** Embeds apartments/events/restaurants via Gemini `gemini-embedding-001` with SHA-256 idempotency (skips unchanged entities), timing-safe `x-ai-embed-secret` auth, and 3× retry with backoff. Stores 768-dim vectors in `listing_embeddings`, `event_embeddings`, `restaurant_embeddings`. 116 entities embedded in production.
+
+**`ai-search` edge function (rewrite, v42).** Full rewrite from deno.land/std imports to `npm:` specifiers + `Deno.serve`. Adds semantic mode: embeds the user's query with `outputDimensionality: 768` (Matryoshka truncation) then calls pgvector RPCs for cosine similarity ranking. Falls back to keyword extraction + SQL on any embedding failure.
+
+**`outputDimensionality: 768` fix.** `gemini-embedding-001` now defaults to 3072 dims. Added `outputDimensionality: 768` to all Gemini embedding calls so query vectors match the stored 768-dim embeddings.
+
+**Semantic search RPCs corrected.** `semantic_search_listings`, `semantic_search_events`, `semantic_search_restaurants` had wrong parameter names (`result_limit` / no `similarity_threshold`) and a hard-coded `distance < 0.40` that blocked all results. Replaced with `match_count`, `similarity_threshold` (default 0.3), and full column sets including `description`, `rating`, `primary_image_url`, `event_type`, `city`.
+
+**DB audit findings (not yet migrated).** 22 foreign key columns missing indexes (performance risk). 28 tables missing comments. 3 minor naming violations. Migration ready; blocked by hook pending `MDEAI_ALLOW_MIGRATION_EDIT=1`.
+
+### Verification
+
+```
+mode: semantic
+[apartment] Poblado Cozy 2BR  similarity=0.747
+[apartment] Modern 2BR El Poblado  similarity=0.737
+[restaurant] Dos Santos Cantina  similarity=0.656
+```
+
+---
+
 ## 2026-05-08 — Chat workspace nav + page integration ([PR #10](https://github.com/amo-tech-ai/mdeai/pull/10), [PR #12](https://github.com/amo-tech-ai/mdeai/pull/12))
 
 Two PRs landed on `main` and auto-deployed to https://www.mdeai.co.

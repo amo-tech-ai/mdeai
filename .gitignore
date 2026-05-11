@@ -29,3 +29,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Mastra local runtime
+*.duckdb
+*.duckdb.wal
+mastra.db*
+.mastra/
+my-mastra-app/.env
+my-mastra-app/.env.*
+my-mastra-app/node_modules/
