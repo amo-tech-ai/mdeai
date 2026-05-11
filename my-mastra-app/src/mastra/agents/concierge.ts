@@ -5,6 +5,11 @@ import { searchRentalsTool } from '../tools/search-rentals';
 import { searchEventsTool } from '../tools/search-events';
 import { searchRestaurantsTool } from '../tools/search-restaurants';
 import { searchAttractionsTool } from '../tools/search-attractions';
+import {
+  PromptInjectionDetector,
+  TokenLimiter,
+} from '@mastra/core/processors';
+
 
 const conciergeWorkingMemorySchema = z.object({
   lastIntent: z
@@ -161,8 +166,12 @@ Never reply with an empty list and no recovery.
 - Never answer "rentals or events?" if lastIntent=rental_search and the user is continuing.
 - Max 5 cards per reply.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
-  model: 'google/gemini-3.1-flash-lite',
+  model: 'google/gemini-3.1-flash-lite-preview',
   tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
+  processors: [
+    new PromptInjectionDetector(),
+    new TokenLimiter({ maxTokens: 8192 }),
+  ],
   memory: new Memory({
     options: {
       workingMemory: {
