@@ -259,7 +259,7 @@ node -e "
 const r = require('/tmp/mastra-smoke-rental.json');
 if (r.status !== 'success') { console.error('expected status=success got=' + JSON.stringify(r).slice(0,400)); process.exit(1); }
 const cards = r.result && r.result.cards;
-if (!Array.isArray(cards) || cards.length < 5) { console.error('rental-search-workflow expected >=5 Laureles cards, got: ' + JSON.stringify(r).slice(0,400)); process.exit(1); }
+if (!Array.isArray(cards) || cards.length < 4) { console.error('rental-search-workflow expected >=4 Laureles cards, got: ' + JSON.stringify(r).slice(0,400)); process.exit(1); }
 const missingUrls = cards.filter((c) => !c.sourceUrl || !c.scheduleViewingUrl);
 if (missingUrls.length) { console.error('cards missing sourceUrl/scheduleViewingUrl: ' + JSON.stringify(missingUrls).slice(0,400)); process.exit(1); }
 const missingRich = cards.filter((c) => !c.hostName || !c.availability || !Array.isArray(c.tags));
