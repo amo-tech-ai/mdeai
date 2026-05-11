@@ -14,9 +14,9 @@
 | `ping-agent` | gemini-3.1-flash-lite-preview | none | none | Health / latency probe |
 | `weather-agent` | gemini-3.1-flash-lite-preview | get-weather | none | Weather lookups |
 | `router-agent` | gemini-3.1-flash-lite-preview | classify-intent | none | Intent dispatch |
-| `concierge-agent` | gemini-3.1-flash-lite-preview | 4 search tools | workingMemory (schema-typed) | Main user-facing agent |
-| `rental-agent` | gemini-3.1-flash-lite-preview | search-rentals | none | Rental search |
-| `event-agent` | gemini-3.1-flash-lite-preview | search-events | none | Event discovery |
+| `concierge-agent` | gemini-3.1-flash-lite-preview | 4 search tools | workingMemory (schema-typed, thread-scoped) | Main user-facing agent |
+| `rental-agent` | gemini-3.1-pro-preview | search-rentals | workingMemory (schema-typed, thread-scoped) | Rental specialist |
+| `event-agent` | gemini-3-flash-preview | search-events | workingMemory (schema-typed, thread-scoped) | Events specialist |
 | `evaluation-agent` | gemini-3.1-flash-lite-preview | none | none | Evals / scoring |
 
 ### What's done right
@@ -30,7 +30,7 @@
 
 | Gap | Impact | Fix |
 |---|---|---|
-| `rental-agent` and `event-agent` have no memory | Context lost on follow-up questions | Add `Memory` with `lastMessages: 10` + `workingMemory` schema matching their domain |
+| No semantic recall configured | Agent can't retrieve past threads by meaning | Requires pgvector + embedder — VDB-02 task |
 | All agents use the same model | Router needs only lite; concierge benefits from a stronger model on complex queries | Router stays on `gemini-3.1-flash-lite-preview`; concierge upgrades to `google/gemini-2.0-flash` for nuance |
 | No `maxTokens` / `temperature` set on any agent | Responses can vary in length unpredictably | Set per-agent defaults in the `model` config object |
 | `evaluation-agent` has no tools | Can't fetch live data for scoring | Add `searchRentalsTool` if used for grounding evaluations |
@@ -129,9 +129,8 @@ Storage backend: `PostgresStore` (shared with main Mastra storage) — thread hi
 
 | Gap | Impact | Fix |
 |---|---|---|
-| `rental-agent` and `event-agent` have no memory | Each call is stateless | Add `Memory({ options: { lastMessages: 10 } })` to both |
-| No semantic recall configured | Agent can't retrieve past threads by meaning | Add `semanticRecall: { topK: 5, messageRange: 50 }` to concierge memory options |
-| Memory storage not namespaced | All agents share same table prefix | Set `storage` option on each `Memory` instance pointing at `createPostgresStore()` to ensure proper namespacing |
+| No semantic recall configured | Agents can't retrieve past threads by meaning | Requires pgvector + embedder — VDB-02 task |
+| Memory storage not namespaced | All agents share same table prefix | Set `storage` option on each `Memory` instance pointing at `createPostgresStore()` |
 | No memory on router-agent | Router can't track conversation history across turns | Low priority — router is stateless by design; acceptable gap |
 
 ---
@@ -362,11 +361,10 @@ observability: new Observability({
 
 ### Backlog: do these in order
 
-1. **Add memory to `rental-agent` and `event-agent`** — 30 min, high impact on follow-up quality
-2. **Move `classify-intent` tool to its own file** — 10 min, code hygiene
-3. **Add semantic recall to concierge memory** — 1 hour, enables cross-session context
-4. **Add PII sanitizer processor to concierge** — 1 hour, compliance + safety
-5. **Wire Google Maps MCP client** — 2 hours, adds directions/distance to concierge
-6. **Add `semantic-search` tool using pgvector** — 4 hours, VDB-02 task
-7. **Add rental-relevance scorer** — 2 hours, closes the eval gap for the core use case
-8. **OTLP exporter for production traces** — 1 hour, needed before prod launch
+1. ~~**Add memory to `rental-agent` and `event-agent`**~~ — Done. Both have schema-typed working memory.
+2. ~~**Move `classify-intent` tool to its own file**~~ — Done. `tools/classify-intent.ts`, exported via `tools/index.ts`.
+3. **Add PII sanitizer processor to concierge** — 1 hour, compliance + safety
+4. **Wire Google Maps MCP client** — 2 hours, adds directions/distance to concierge
+5. **Add `semantic-search` tool + semantic recall** — 4 hours, VDB-02 task (requires pgvector embedder)
+6. **Add rental-relevance scorer** — 2 hours, closes the eval gap for the core use case
+7. **OTLP exporter for production traces** — 1 hour, needed before prod launch
