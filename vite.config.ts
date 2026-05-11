@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => {
       mode === "development" && componentTagger(),
       {
         name: "html-og-site-url",
-        transformIndexHtml(html: string) {
+        transformIndexHtml(html) {
           return html.replaceAll("%SITE_URL%", siteUrl);
         },
       },
@@ -86,7 +86,6 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
-      dedupe: ["react", "react-dom"],
     },
     build: {
       // After vendor splitting, the entry chunk should comfortably sit
