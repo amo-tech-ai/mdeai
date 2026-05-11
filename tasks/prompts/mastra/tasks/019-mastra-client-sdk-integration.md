@@ -3,8 +3,8 @@ task_id: MASTRA-019
 title: Mastra Client SDK Integration Layer
 phase: MVP
 priority: P0
-status: Not Started
-estimated_effort: 3 days
+status: In Progress — 019A ✅ done, 019B ✅ done, 019C ✅ done (production deployed)
+estimated_effort: 1 day (019C remaining)
 area: mastra-frontend-gateway
 skill: [mde-task-lifecycle, mastra, mde-supabase]
 subagents: [frontend, backend, security-auditor]
@@ -13,6 +13,37 @@ schema_tables: []
 depends_on: [MASTRA-002, MASTRA-005, MASTRA-013]
 blocks: []
 ---
+
+<!-- verified: 2026-05-11 against official Mastra docs -->
+<!-- official integration path confirmed: chatRoute() + @ai-sdk/react useChat (not raw @mastra/client-js) -->
+<!-- auth confirmed: @mastra/auth-supabase with MastraAuthSupabase({ url, anonKey }) -->
+<!-- split into 019A (bridge MVP ✅ done), 019B (secure gateway ✅ done), 019C (full useChat hook migration) -->
+<!--
+019A STATUS: ✅ DONE
+  - @mastra/client-js installed, VITE_MASTRA_SERVER_URL set, bridge file (src/lib/mastra-client.ts) created
+  - @ai-sdk/react + ai installed in frontend
+
+019B STATUS: ✅ DONE (2026-05-11 session 2)
+  - MastraAuthSupabase wired production-only in my-mastra-app/src/mastra/index.ts
+    authorizeUser: async (user) => !!user?.id  (overrides default isAdmin check)
+    conditional: only active when NODE_ENV=production + SUPABASE_URL + SUPABASE_ANON_KEY present
+  - VITE_USE_MASTRA_CHAT=false feature flag added to .env
+  - useChat.ts Mastra branch: parses AI SDK SSE {type:"text-delta", delta}
+    passes memory: { thread: conversation.id, resource: user.id }
+    legacy ai-chat path intact as fallback
+
+019C STATUS: ✅ DONE (2026-05-11 session 3)
+  - Mastra backend deployed to Vercel production: https://my-mastra-app-beta.vercel.app
+  - VercelDeployer: mastra build → .vercel/output + fix-vercel-build.cjs postbuild patch
+    (nodejs25→22 runtime, /chat → function route added to Vercel config.json)
+  - CORS: origin mdeai.co + localhost:8080, credentials: true, Authorization header allowed
+  - Production env vars set in Vercel: DATABASE_URL (pooler), GOOGLE_GENERATIVE_AI_API_KEY,
+    SUPABASE_URL, SUPABASE_ANON_KEY, NODE_ENV=production
+  - Frontend Vercel project: VITE_MASTRA_SERVER_URL + VITE_USE_MASTRA_CHAT=true → live on www.mdeai.co
+  - Verified: /health ✅ /chat POST → 401 MastraAuthSupabase ✅ CORS preflight ✅
+  - Vercel CLI scope fix: added currentTeam: team_TeHIwY6B3VCdOC8Q5Z5x4ddU to ~/.local/share/com.vercel.cli/config.json
+-->
+
 
 <!-- task-summary -->
 > **What:** Add a typed browser-facing integration layer around Mastra for `mdeai-co` (`src/lib/mastra/client.ts`), using official `@mastra/client-js` semantics where applicable.
