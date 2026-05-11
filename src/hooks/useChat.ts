@@ -349,11 +349,11 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
       const accessToken = session?.access_token;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      if (USE_MASTRA_CHAT) {
+      if (USE_MASTRA_CHAT && accessToken) {
         // ── Mastra /chat ──────────────────────────────────────────────────────
+        // Auth required: Mastra enforces 401 on every request. Anon visitors
+        // fall through to the legacy ai-chat path below.
         // AI SDK SSE format (x-vercel-ai-ui-message-stream: v1).
-        // Sends latest message + thread memory so Mastra loads history from
-        // storage rather than the client re-sending the full conversation.
         const mastraHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
         if (accessToken) mastraHeaders['Authorization'] = `Bearer ${accessToken}`;
 
@@ -398,8 +398,9 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
             if (payload === '[DONE]') break outer;
             try {
               const ev = JSON.parse(payload);
-              if (ev.type === 'text-delta' && typeof ev.delta === 'string') {
-                assistantContent += ev.delta;
+              const textChunk: string = ev.delta ?? ev.text ?? ev.textDelta ?? '';
+              if (ev.type === 'text-delta' && textChunk) {
+                assistantContent += textChunk;
                 setMessages(prev =>
                   prev.map(m => m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)
                 );
