@@ -47,7 +47,9 @@ const auth =
 export const mastra = new Mastra({
   workflows: { weatherWorkflow, rentalSearchWorkflow, eventDiscoveryWorkflow, conciergeRoutingWorkflow },
   agents: { weatherAgent, pingAgent, routerAgent, conciergeAgent, rentalAgent, eventAgent, evaluationAgent },
-  editor: new MastraEditor(),
+  // MastraEditor provides Studio prompt/agent editing features.
+  // Excluded from the production Vercel bundle to avoid cold-start overhead.
+  ...(process.env.NODE_ENV !== 'production' ? { editor: new MastraEditor() } : {}),
   scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage,
   server: {
