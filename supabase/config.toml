@@ -44,18 +44,3 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
-[functions.sponsor-audience-match]
-enabled = true
-verify_jwt = false
-
-[functions.sponsor-creative-gen]
-enabled = true
-verify_jwt = false
-
-[functions.sponsor-moderate]
-enabled = true
-verify_jwt = false
-
-[functions.sponsor-optimize]
-enabled = true
-verify_jwt = false

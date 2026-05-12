@@ -121,6 +121,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(errorBody("NOT_FOUND", "Application not found"), 404, req);
   }
 
+  if (roiResult.error) {
+    return jsonResponse(errorBody("ROI_EXPLAIN_ERROR", roiResult.error.message), 500, req);
+  }
+
   const roiRows = roiResult.data ?? [];
   const totalImpressions = roiRows.reduce((s, r) => s + (r.impressions ?? 0), 0);
   const totalClicks = roiRows.reduce((s, r) => s + (r.clicks ?? 0), 0);
@@ -178,7 +182,7 @@ Write in ENGLISH. Be concise, specific, and actionable. Maximum 3 sentences of i
 
     // Persist to campaign_goals->ai_insight
     const existingGoals = (appResult.data.campaign_goals as Record<string, unknown>) ?? {};
-    await svc
+    const { error: updateError } = await svc
       .schema("sponsor")
       .from("applications")
       .update({
@@ -188,6 +192,10 @@ Write in ENGLISH. Be concise, specific, and actionable. Maximum 3 sentences of i
         },
       })
       .eq("id", application_id);
+
+    if (updateError) {
+      console.error("[sponsor-roi-explain] ai_insight persist failed:", updateError.message);
+    }
 
     if (logUserId) {
       await insertAiRun(svc, {
