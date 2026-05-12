@@ -3,7 +3,7 @@ task_id: MASTRA-037
 title: Wire `verify:edge` into the floor — fail PRs on edge-function type errors
 phase: Floor / CI hardening
 priority: P1
-status: Not Started
+status: In Review
 estimated_effort: 0.5 day
 area: ci / edge-functions
 skill: [mde-task-lifecycle, mde-supabase, mde-github, create-github-action-workflow-specification]
