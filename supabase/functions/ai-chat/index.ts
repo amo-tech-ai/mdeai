@@ -25,6 +25,9 @@ const AGENT_LABELS: Record<string, string> = {
   get_user_bookings: "Booking Assistant",
   create_booking_preview: "Booking Assistant",
   capture_lead: "Lead Capture",
+  search_events: "Events Guide",
+  search_restaurants: "Restaurant Scout",
+  search_attractions: "Attractions Guide",
 };
 
 /**
@@ -272,6 +275,59 @@ const TOOLS: Record<string, ToolExecutor> = {
     },
     execute: (ctx) => executeCaptureLead(ctx.params, ctx.userId, ctx.authHeader),
   },
+  search_events: {
+    definition: {
+      name: "search_events",
+      description: "Search for events, concerts, festivals, and nightlife in Medellín. Use when users ask about things to do, events this weekend, concerts, festivals, parties, or local activities.",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: { type: "string", description: "Search term (e.g., 'salsa', 'jazz', 'festival', 'art show')" },
+          date_from: { type: "string", description: "Start date filter (YYYY-MM-DD)" },
+          date_to: { type: "string", description: "End date filter (YYYY-MM-DD)" },
+          event_type: { type: "string", description: "Type of event (e.g., 'concert', 'festival', 'sports', 'nightlife')" },
+          limit: { type: "integer", description: "Max results to return (default: 6)" },
+        },
+        required: [],
+      },
+    },
+    execute: (ctx) => executeSearchEvents(ctx.params, ctx.supabase),
+  },
+  search_restaurants: {
+    definition: {
+      name: "search_restaurants",
+      description: "Search for restaurants, cafés, and dining in Medellín. Use when users ask about places to eat, restaurants in a neighborhood, food recommendations, brunch, dinner, or coffee spots.",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: { type: "string", description: "Search term (e.g., 'Colombian', 'seafood', 'brunch', 'rooftop')" },
+          neighborhood: { type: "string", description: "Neighborhood filter (e.g., 'El Poblado', 'Laureles', 'Provenza', 'Envigado')" },
+          cuisine: { type: "string", description: "Cuisine type (e.g., 'Colombian', 'Italian', 'Japanese', 'vegetarian')" },
+          price_level: { type: "integer", description: "Price level 1–4 (1=budget, 4=fine dining)" },
+          limit: { type: "integer", description: "Max results to return (default: 6)" },
+        },
+        required: [],
+      },
+    },
+    execute: (ctx) => executeSearchRestaurants(ctx.params, ctx.supabase),
+  },
+  search_attractions: {
+    definition: {
+      name: "search_attractions",
+      description: "Search for tourist attractions, activities, museums, tours, and things to do in Medellín. Use when users ask about sightseeing, museums, cable cars, parks, day trips, or activities.",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: { type: "string", description: "Search term (e.g., 'museum', 'metro cable', 'nature', 'Pablo Escobar tour')" },
+          category: { type: "string", description: "Category filter (e.g., 'museum', 'outdoor', 'cultural', 'tour', 'park')" },
+          neighborhood: { type: "string", description: "Neighborhood or area filter" },
+          limit: { type: "integer", description: "Max results to return (default: 6)" },
+        },
+        required: [],
+      },
+    },
+    execute: (ctx) => executeSearchAttractions(ctx.params, ctx.supabase),
+  },
 };
 
 // Gemini request format derived from the registry — single source of truth.
@@ -295,16 +351,25 @@ When adding items to trips, use this trip ID: ${tripContext.id}`
     : '';
 
   const basePrompts: Record<string, string> = {
-    concierge: `You are the mdeai.co AI Concierge — a friendly, knowledgeable local guide for Medellín rentals.
+    concierge: `You are the mdeai.co AI Concierge — a friendly, knowledgeable local guide for Medellín.
 
-Primary job: help people find an apartment to rent in Medellín. Use tools:
-- rentals_search / rentals_intake — find verified apartment rentals with filters, freshness, map pins
-- search_apartments — quick direct lookup by neighborhood, price, bedrooms, amenities
+⚠️ MANDATORY TOOL USE — You MUST call the appropriate tool before responding when the user asks about:
+- Events, concerts, festivals, parties, nightlife, things to do → call search_events FIRST
+- Restaurants, food, dining, cafés, brunch, coffee → call search_restaurants FIRST
+- Tourist attractions, museums, tours, parks, sightseeing, day trips → call search_attractions FIRST
+- Apartments, rentals, housing → call rentals_search or search_apartments FIRST
+
+Do NOT answer events/restaurants/attractions/rentals questions from your own knowledge. Always search the database and show real listings.
+
+Available tools:
+- rentals_search / rentals_intake — apartment/housing search with filters, freshness, map pins
+- search_apartments — quick apartment lookup by neighborhood, price, bedrooms, amenities
+- search_events — concerts, festivals, nightlife, and local events
+- search_restaurants — restaurants, cafés, dining
+- search_attractions — museums, tours, parks, activities, sightseeing
 - get_user_trips / get_user_bookings — recall the user's existing trips/bookings when they ask
 - create_booking_preview — propose a booking for user approval (never auto-confirm)
-- capture_lead — save user contact details when they want to be contacted (see rules below)
-
-When users ask for recommendations, USE THE TOOLS to search the database and give real results.
+- capture_lead — save user contact details when they want to be contacted (rentals only — see rules below)
 
 LEAD CAPTURE RULES (important):
 - Call capture_lead when: user says "contact me", "send me details", "I want to apply", or provides their email/phone number.
@@ -732,6 +797,172 @@ async function executeCaptureLead(
   };
 }
 
+async function executeSearchEvents(params: Record<string, unknown>, supabase: SupabaseClientType) {
+  let query = supabase
+    .from("events")
+    .select("id, name, event_type, subcategory, address, city, event_start_time, ticket_price_min, currency, primary_image_url, ticket_url, latitude, longitude, event_venues(name)")
+    .eq("is_active", true)
+    .gte("event_start_time", new Date().toISOString());
+
+  if (params.keyword) {
+    query = query.ilike("name", `%${params.keyword}%`);
+  }
+  if (params.date_from) {
+    query = query.gte("event_start_time", `${params.date_from}T00:00:00Z`);
+  }
+  if (params.date_to) {
+    query = query.lte("event_start_time", `${params.date_to}T23:59:59Z`);
+  }
+  if (params.event_type) {
+    query = query.ilike("event_type", `%${params.event_type}%`);
+  }
+
+  const limit = (params.limit as number) || 6;
+  query = query.order("event_start_time", { ascending: true }).limit(limit);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const events = data ?? [];
+  const inlineListings = events.map((e) => ({
+    id: e.id,
+    title: e.name,
+    category: (e.event_type || e.subcategory || "Event") as string,
+    venue: ((e.event_venues as { name: string } | null)?.name || e.address || "Medellín") as string,
+    neighborhood: (e.city || "Medellín") as string,
+    startsAt: e.event_start_time as string,
+    pricePerTicket: e.ticket_price_min != null ? Number(e.ticket_price_min) : null,
+    currency: (e.currency || "USD") as string,
+    imageUrl: e.primary_image_url ?? null,
+    sourceUrl: e.ticket_url ?? null,
+    latitude: e.latitude != null ? Number(e.latitude) : null,
+    longitude: e.longitude != null ? Number(e.longitude) : null,
+  }));
+
+  return {
+    success: true,
+    total_count: events.length,
+    actions: events.length > 0
+      ? [{ type: "OPEN_EVENT_RESULTS", payload: { filters: params, listings: inlineListings } }]
+      : [],
+    message: events.length > 0
+      ? `Found ${events.length} event${events.length === 1 ? "" : "s"}.`
+      : "No upcoming events found for those criteria. Try different dates or a broader keyword.",
+  };
+}
+
+async function executeSearchRestaurants(params: Record<string, unknown>, supabase: SupabaseClientType) {
+  let query = supabase
+    .from("restaurants")
+    .select("id, name, cuisine_types, city, price_level, ambiance, primary_image_url, website, rating, latitude, longitude")
+    .eq("is_active", true);
+
+  if (params.keyword) {
+    query = query.ilike("name", `%${params.keyword}%`);
+  }
+  if (params.neighborhood) {
+    query = query.ilike("city", `%${params.neighborhood}%`);
+  }
+  if (params.cuisine) {
+    query = query.contains("cuisine_types", [params.cuisine as string]);
+  }
+  if (params.price_level) {
+    query = query.eq("price_level", params.price_level as number);
+  }
+
+  const limit = (params.limit as number) || 6;
+  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const restaurants = data ?? [];
+  const priceTierMap: Record<number, string> = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" };
+
+  const inlineListings = restaurants.map((r) => ({
+    id: r.id,
+    name: r.name as string,
+    cuisine: Array.isArray(r.cuisine_types) && (r.cuisine_types as string[]).length > 0
+      ? (r.cuisine_types as string[]).join(", ")
+      : "Local",
+    neighborhood: (r.city || "Medellín") as string,
+    priceTier: priceTierMap[r.price_level as number] ?? null,
+    avgPricePerPerson: null,
+    rating: r.rating != null ? Number(r.rating) : null,
+    vibe: Array.isArray(r.ambiance) ? r.ambiance as string[] : null,
+    imageUrl: r.primary_image_url ?? null,
+    sourceUrl: r.website ?? null,
+    latitude: r.latitude != null ? Number(r.latitude) : null,
+    longitude: r.longitude != null ? Number(r.longitude) : null,
+  }));
+
+  return {
+    success: true,
+    total_count: restaurants.length,
+    actions: restaurants.length > 0
+      ? [{ type: "OPEN_RESTAURANT_RESULTS", payload: { filters: params, listings: inlineListings } }]
+      : [],
+    message: restaurants.length > 0
+      ? `Found ${restaurants.length} restaurant${restaurants.length === 1 ? "" : "s"}.`
+      : "No restaurants found for those criteria. Try a different neighborhood or cuisine type.",
+  };
+}
+
+async function executeSearchAttractions(params: Record<string, unknown>, supabase: SupabaseClientType) {
+  let query = supabase
+    .from("tourist_destinations")
+    .select("id, name, category, subcategory, city, entry_fee_amount, tags, best_for, primary_image_url, website, rating, latitude, longitude")
+    .eq("is_active", true);
+
+  if (params.keyword) {
+    query = query.ilike("name", `%${params.keyword}%`);
+  }
+  if (params.category) {
+    query = query.ilike("category", `%${params.category}%`);
+  }
+  if (params.neighborhood) {
+    // city is always "Medellín" — also search address so "El Poblado" etc. resolve
+    query = query.or(
+      `city.ilike.%${params.neighborhood}%,address.ilike.%${params.neighborhood}%`
+    );
+  }
+
+  const limit = (params.limit as number) || 6;
+  query = query.order("rating", { ascending: false, nullsFirst: false }).limit(limit);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const attractions = data ?? [];
+  const inlineListings = attractions.map((a) => ({
+    id: a.id,
+    name: a.name as string,
+    category: (a.category || a.subcategory || "Attraction") as string,
+    neighborhood: (a.city || "Medellín") as string,
+    priceUsd: a.entry_fee_amount != null ? Number(a.entry_fee_amount) : null,
+    durationMinutes: null,
+    rating: a.rating != null ? Number(a.rating) : null,
+    tags: Array.isArray(a.tags) && (a.tags as string[]).length > 0
+      ? a.tags as string[]
+      : Array.isArray(a.best_for) ? a.best_for as string[] : null,
+    imageUrl: a.primary_image_url ?? null,
+    sourceUrl: a.website ?? null,
+    latitude: a.latitude != null ? Number(a.latitude) : null,
+    longitude: a.longitude != null ? Number(a.longitude) : null,
+  }));
+
+  return {
+    success: true,
+    total_count: attractions.length,
+    actions: attractions.length > 0
+      ? [{ type: "OPEN_ATTRACTION_RESULTS", payload: { filters: params, listings: inlineListings } }]
+      : [],
+    message: attractions.length > 0
+      ? `Found ${attractions.length} attraction${attractions.length === 1 ? "" : "s"}.`
+      : "No attractions found for those criteria. Try a different keyword or category.",
+  };
+}
+
 // Execute a tool call via the registry. Adding a new tool = add an entry to
 // TOOLS above; no changes here. Errors are swallowed into a safe response so
 // Gemini's tool-response handling stays sane.
@@ -877,11 +1108,26 @@ Deno.serve(async (req) => {
       `AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || "anonymous"}`,
     );
 
+    // Force the right tool when the user's last message contains clear keywords.
+    // Gemini's "auto" mode consistently skips search_events / search_attractions
+    // even with strong system prompt instructions, so we override here.
+    const lastUserContent = (messages[messages.length - 1]?.content ?? "") as string;
+    let toolChoice: unknown = "auto";
+    if (/\b(event|events|concert|festival|nightlife|party|parties|things to do|what.*happen|show|gig|performance)\b/i.test(lastUserContent)) {
+      toolChoice = { type: "function", function: { name: "search_events" } };
+    } else if (/\b(restaurant|food|eat|eating|dining|lunch|dinner|brunch|cafe|café|coffee|where.*eat)\b/i.test(lastUserContent)) {
+      toolChoice = { type: "function", function: { name: "search_restaurants" } };
+    } else if (/\b(attraction|attractions|museum|tour|tours|park|sightseeing|cable car|things to see|tourist|activity|activities)\b/i.test(lastUserContent)) {
+      toolChoice = { type: "function", function: { name: "search_attractions" } };
+    } else if (/\b(apartment|rental|rent|housing|flat|place to stay|accommodation)\b/i.test(lastUserContent)) {
+      toolChoice = { type: "function", function: { name: "search_apartments" } };
+    }
+
     const initialResponse = await fetchGemini({
       model: "gemini-3-flash-preview",
       messages: aiMessages,
       tools: tools,
-      tool_choice: "auto",
+      tool_choice: toolChoice,
       temperature: 0.7,
       max_tokens: 2000,
     }, 30_000);
@@ -1030,7 +1276,17 @@ Deno.serve(async (req) => {
         ),
       );
 
-      const messagesWithTools = [...aiMessages, assistantMessage, ...toolResults];
+      const messagesWithTools = [
+        ...aiMessages,
+        assistantMessage,
+        ...toolResults,
+        // Explicit instruction prevents Gemini from hallucinating a second
+        // tool call in the streaming pass when tool results are sparse.
+        {
+          role: "user" as const,
+          content: "Based on the search results above, write a helpful conversational response for the user. Do not call any functions. Respond in plain text only.",
+        },
+      ];
 
       const finalResponse = await fetchGeminiStream({
         model: "gemini-3-flash-preview",
