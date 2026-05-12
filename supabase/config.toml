@@ -39,3 +39,8 @@ verify_jwt = false
 [functions.ai-embed]
 enabled = true
 verify_jwt = false
+
+[functions.sponsor-roi-explain]
+enabled = true
+verify_jwt = false
+
