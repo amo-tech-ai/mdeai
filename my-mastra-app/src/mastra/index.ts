@@ -24,6 +24,7 @@ const auth =
     ? new MastraAuthSupabase({
         url: process.env.SUPABASE_URL,
         anonKey: process.env.SUPABASE_ANON_KEY,
+        mapUserToResourceId: (user) => user.id,
       })
     : undefined;
 

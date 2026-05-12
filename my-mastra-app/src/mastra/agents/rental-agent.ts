@@ -2,7 +2,6 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { searchRentalsTool } from '../tools/search-rentals';
-import { rentalSearchWorkflow } from '../workflows/rental-search-workflow';
 
 const rentalWorkingMemorySchema = z.object({
   lastQuery: z
@@ -120,7 +119,6 @@ If zero results: state plainly why, relax exactly ONE filter (price OR bedrooms 
 - Plain English. No emoji unless the user uses one first.`,
   model: 'google/gemini-3.1-pro-preview',
   tools: { searchRentalsTool },
-  workflows: { rentalSearchWorkflow },
   memory: new Memory({
     options: {
       workingMemory: {
