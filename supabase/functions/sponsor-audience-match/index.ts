@@ -1,12 +1,12 @@
 /**
- * sponsor-audience-match — Gemini + Google Search audience alignment for sponsors.
+ * sponsor-audience-match  -  Gemini + Google Search audience alignment for sponsors.
  *
  * POST /functions/v1/sponsor-audience-match
  * Auth: Bearer JWT (admin or sponsor)
  * Body: { organization_id, brand_description, brand_keywords }
  * Returns: { success: true, data: { top_events, top_segments, estimated_reach } }
  *
- * Uses googleSearch grounding to anchor recommendations in real Medellín event data.
+ * Uses googleSearch grounding to anchor recommendations in real Medellin event data.
  */
 
 import { z } from "npm:zod@3.23.8";
@@ -38,7 +38,7 @@ const responseSchema = {
         properties: {
           event_id:    { type: "string" },
           event_name:  { type: "string" },
-          match_score: { type: "number", description: "0.0–1.0 audience fit score" },
+          match_score: { type: "number", description: "0.0-1.0 audience fit score" },
           rationale:   { type: "string", description: "Why this event matches, in English" },
         },
       },
@@ -51,7 +51,7 @@ const responseSchema = {
         required: ["segment", "size_estimate", "fit_rationale"],
         properties: {
           segment:       { type: "string", description: "Audience segment label" },
-          size_estimate: { type: "number", description: "Estimated reach in Medellín" },
+          size_estimate: { type: "number", description: "Estimated reach in Medellin" },
           fit_rationale: { type: "string", description: "Why this segment fits, in English" },
         },
       },
@@ -99,12 +99,12 @@ Deno.serve(async (req: Request) => {
     .limit(20);
 
   const eventList = (events ?? [])
-    .map((e) => `- ${e.name} (${e.event_type ?? "general"}, ${e.city ?? "Medellín"}, esperado: ${e.expected_attendance ?? "?"} asistentes)`)
+    .map((e) => `- ${e.name} (${e.event_type ?? "general"}, ${e.city ?? "Medellin"}, esperado: ${e.expected_attendance ?? "?"} asistentes)`)
     .join("\n");
 
-  const prompt = `You are an audience marketing specialist for mdeai.co, a premium events platform in Medellín, Colombia.
+  const prompt = `You are an audience marketing specialist for mdeai.co, a premium events platform in Medellin, Colombia.
 
-A brand wants to sponsor events in Medellín:
+A brand wants to sponsor events in Medellin:
 Description: ${brand_description}
 Keywords: ${brand_keywords.join(", ")}
 Organization ID: ${organization_id}
@@ -114,7 +114,7 @@ ${eventList || "No upcoming events in the database"}
 
 Use your knowledge of the Colombian market and Google Search results to:
 1. Identify which events have the best audience alignment for this brand
-2. Describe the most relevant audience segments in Medellín
+2. Describe the most relevant audience segments in Medellin
 3. Estimate a realistic total reach
 
 Respond in ENGLISH. Base recommendations on real Colombian market data.

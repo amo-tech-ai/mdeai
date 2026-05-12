@@ -1,5 +1,5 @@
 /**
- * sponsor-optimize — Gemini campaign optimizer for sponsor applications.
+ * sponsor-optimize  -  Gemini campaign optimizer for sponsor applications.
  *
  * POST /functions/v1/sponsor-optimize
  * Auth: Bearer JWT (admin or sponsor)
@@ -7,7 +7,7 @@
  * Returns: { success: true, data: { recommendations } }
  *
  * Analyzes 30-day roi_daily + placements + campaign goals.
- * Returns proposals only — never auto-applies changes.
+ * Returns proposals only  -  never auto-applies changes.
  */
 
 import { z } from "npm:zod@3.23.8";
@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
   const event = appResult.data.events as { name?: string; event_type?: string } | null;
   const goals = JSON.stringify(appResult.data.campaign_goals ?? {});
 
-  const prompt = `You are an expert in advertising campaign optimization for mdeai.co, a premium events platform in Medellín, Colombia.
+  const prompt = `You are an expert in advertising campaign optimization for mdeai.co, a premium events platform in Medellin, Colombia.
 
 Sponsor: ${appResult.data.tier} tier, ${appResult.data.activation_type ?? "digital"} activation
 Event: ${event?.name ?? "event"} (${event?.event_type ?? "general"})
@@ -166,7 +166,7 @@ Generate concrete optimization recommendations.
 - If there is insufficient data, recommend adding surfaces.
 - Reason in terms of CTR, placement weight, and sponsor objectives.
 - All recommendations in ENGLISH.
-- Proposals only — the system requires human approval before applying.`;
+- Proposals only  -  the system requires human approval before applying.`;
 
   const start = Date.now();
   try {

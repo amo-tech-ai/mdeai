@@ -1,12 +1,12 @@
 /**
- * sponsor-creative-gen — Gemini bilingual creative copy for sponsor campaigns.
+ * sponsor-creative-gen  -  Gemini bilingual creative copy for sponsor campaigns.
  *
  * POST /functions/v1/sponsor-creative-gen
  * Auth: Bearer JWT (sponsor org member)
  * Body: { application_id, creative_brief, tone? }
  * Returns: { success: true, data: { captions, ig_story_prompts, push_notif_copy, wa_broadcast_subtitle } }
  *
- * Never auto-publishes — returns content for human review.
+ * Never auto-publishes  -  returns content for human review.
  * Rate limit: 10/min/sponsor (enforced via ai_runs count check).
  */
 
@@ -40,8 +40,8 @@ const responseSchema = {
         type: "object",
         required: ["es", "en", "platform"],
         properties: {
-          es: { type: "string", description: "Caption in Spanish (≤ 200 chars)" },
-          en: { type: "string", description: "Caption in English (≤ 200 chars)" },
+          es: { type: "string", description: "Caption in Spanish (<= 200 chars)" },
+          en: { type: "string", description: "Caption in English (<= 200 chars)" },
           platform: {
             type: "string",
             enum: ["instagram", "whatsapp", "push", "email"],
@@ -60,11 +60,11 @@ const responseSchema = {
     },
     push_notif_copy: {
       type: "string",
-      description: "Push notification copy ≤ 80 characters",
+      description: "Push notification copy <= 80 characters",
     },
     wa_broadcast_subtitle: {
       type: "string",
-      description: "WhatsApp broadcast subtitle ≤ 120 characters",
+      description: "WhatsApp broadcast subtitle <= 120 characters",
     },
   },
 };
@@ -110,21 +110,21 @@ Deno.serve(async (req: Request) => {
 
   const event = appData.events as { name?: string; event_type?: string; city?: string } | null;
 
-  const prompt = `You are a creative copywriter for mdeai.co, a premium events platform in Medellín, Colombia.
+  const prompt = `You are a creative copywriter for mdeai.co, a premium events platform in Medellin, Colombia.
 
 Create bilingual (Spanish + English) marketing content for a ${appData.tier} sponsor.
 
-Event: ${event?.name ?? "Medellín Event"}
+Event: ${event?.name ?? "Medellin Event"}
 Event type: ${event?.event_type ?? "general"}
 Activation type: ${appData.activation_type ?? "digital"}
 Tone: ${tone}
 Creative brief: ${creative_brief}
 
 RULES:
-- Write Spanish first (native Medellín voice), then English translation
-- Do NOT invent URLs — use placeholder [BRAND_URL] if needed
-- Push notification copy MUST be ≤ 80 characters
-- WhatsApp subtitle MUST be ≤ 120 characters
+- Write Spanish first (native Medellin voice), then English translation
+- Do NOT invent URLs  -  use placeholder [BRAND_URL] if needed
+- Push notification copy MUST be <= 80 characters
+- WhatsApp subtitle MUST be <= 120 characters
 - IG Story prompts should describe visual scenes, not text
 - All copy must be culturally appropriate for Colombian audiences`;
 

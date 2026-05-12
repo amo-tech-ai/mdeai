@@ -1,5 +1,5 @@
 /**
- * sponsor-roi-explain — Gemini daily ROI narrative for sponsor applications.
+ * sponsor-roi-explain  -  Gemini daily ROI narrative for sponsor applications.
  *
  * POST /functions/v1/sponsor-roi-explain
  * Auth: Bearer JWT (scoped to application; resolved via `_shared/auth-request.requireAuthenticatedUser`)
@@ -27,7 +27,7 @@ const requestSchema = z.object({
   application_id: z.string().uuid(),
 });
 
-// Industry CTR benchmarks (surface → baseline %)
+// Industry CTR benchmarks (surface -> baseline %)
 const BENCHMARKS: Record<string, number> = {
   contest_header:     3.2,
   leaderboard_footer: 1.8,
@@ -43,7 +43,7 @@ const responseSchema = {
   properties: {
     insight: {
       type: "string",
-      description: "≤ 3 sentences explaining the performance trend in English",
+      description: "<= 3 sentences explaining the performance trend in English",
     },
     recommendation: {
       type: "string",
@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
   const eventJoin = appResult.data.events as unknown as { name?: string } | { name?: string }[] | null;
   const eventName = Array.isArray(eventJoin) ? eventJoin[0]?.name : eventJoin?.name;
 
-  const prompt = `You are a marketing analyst for mdeai.co, a premium events platform in Medellín, Colombia.
+  const prompt = `You are a marketing analyst for mdeai.co, a premium events platform in Medellin, Colombia.
 The sponsor for "${eventName ?? "this event"}" has the following results over the last 7 days:
 
 Total impressions: ${totalImpressions.toLocaleString()}

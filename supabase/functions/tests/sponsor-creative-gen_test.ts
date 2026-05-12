@@ -10,7 +10,7 @@ import {
 const SLUG = "sponsor-creative-gen";
 
 Deno.test({
-  name: `${SLUG} — OPTIONS`,
+  name: `${SLUG}  -  OPTIONS`,
   ignore: auditIgnore(),
   async fn() {
     assertEquals([200, 204, 503].includes(await gatewayOptions(SLUG)), true);
@@ -18,7 +18,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — POST anon → 401/403`,
+  name: `${SLUG}  -  POST anon -> 401/403`,
   ignore: auditIgnore(),
   async fn() {
     const { status } = await gatewayPost(
@@ -33,7 +33,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — POST EDGE_TEST_USER_JWT mismatch → 403`,
+  name: `${SLUG}  -  POST EDGE_TEST_USER_JWT mismatch -> 403`,
   ignore: auditIgnore() || !edgeTestJwt(),
   async fn() {
     const { status } = await gatewayPost(

@@ -19,7 +19,7 @@ function postBody(): string {
 }
 
 Deno.test({
-  name: `${SLUG} — OPTIONS`,
+  name: `${SLUG}  -  OPTIONS`,
   ignore: auditIgnore(),
   async fn() {
     assertEquals([200, 204, 503].includes(await gatewayOptions(SLUG)), true);
@@ -27,7 +27,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — apikey-only (no Bearer) → 401`,
+  name: `${SLUG}  -  apikey-only (no Bearer) -> 401`,
   ignore: auditIgnore(),
   async fn() {
     const { status, text } = await gatewayPost(SLUG, postBody(), apikeyOnlyHeaders());
@@ -48,7 +48,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — anon gateway JWT not a sponsor session → 401 UNAUTHORIZED`,
+  name: `${SLUG}  -  anon gateway JWT not a sponsor session -> 401 UNAUTHORIZED`,
   ignore: auditIgnore(),
   async fn() {
     const { status, text } = await gatewayPost(SLUG, postBody());
@@ -59,7 +59,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — garbage JWT segments → 401 (Kong or edge)`,
+  name: `${SLUG}  -  garbage JWT segments -> 401 (Kong or edge)`,
   ignore: auditIgnore(),
   async fn() {
     const h = gatewayAnonHeaders();
@@ -79,7 +79,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — lowercase bearer prefix (Kong requires 'Bearer')`,
+  name: `${SLUG}  -  lowercase bearer prefix (Kong requires 'Bearer')`,
   ignore: auditIgnore(),
   async fn() {
     const token = gatewayAnonHeaders().get("Authorization")!.replace(/^Bearer\s+/i, "").trim();
@@ -97,7 +97,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — EDGE_TEST_USER_JWT random app → 403 or 404`,
+  name: `${SLUG}  -  EDGE_TEST_USER_JWT random app -> 403 or 404`,
   ignore: auditIgnore() || !edgeTestJwt(),
   async fn() {
     const { status } = await gatewayPost(SLUG, postBody(), userJwtHeaders(edgeTestJwt()));

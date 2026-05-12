@@ -10,7 +10,7 @@ import {
 const SLUG = "sponsor-audience-match";
 
 Deno.test({
-  name: `${SLUG} — OPTIONS`,
+  name: `${SLUG}  -  OPTIONS`,
   ignore: auditIgnore(),
   async fn() {
     assertEquals([200, 204, 503].includes(await gatewayOptions(SLUG)), true);
@@ -18,7 +18,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — POST anon Bearer → not authed sponsor path`,
+  name: `${SLUG}  -  POST anon Bearer -> not authed sponsor path`,
   ignore: auditIgnore(),
   async fn() {
     const { status } = await gatewayPost(
@@ -34,7 +34,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: `${SLUG} — POST EDGE_TEST_USER_JWT + random UUID → 403/404 (ownership)`,
+  name: `${SLUG}  -  POST EDGE_TEST_USER_JWT + random UUID -> 403/404 (ownership)`,
   ignore: auditIgnore() || !edgeTestJwt(),
   async fn() {
     const { status } = await gatewayPost(

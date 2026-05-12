@@ -1,8 +1,8 @@
 /**
- * sponsor-moderate — Gemini vision moderation for sponsor assets.
+ * sponsor-moderate  -  Gemini vision moderation for sponsor assets.
  *
  * POST /functions/v1/sponsor-moderate
- * Auth: Bearer JWT (admin or service_role — called after asset upload)
+ * Auth: Bearer JWT (admin or service_role  -  called after asset upload)
  * Body: { asset_id, storage_url, kind: 'logo'|'video'|'image'|'copy'|'color' }
  * Returns: { success: true, data: { verdict, flags, reasons, score } }
  *
@@ -26,25 +26,25 @@ const requestSchema = z.object({
 });
 
 const SYSTEM_PROMPTS: Record<string, string> = {
-  logo: `You are a content moderator for mdeai.co, a Medellín-based events platform.
-Review this sponsor brand logo. Logos are stylized brand marks — approve clean, professional marks.
+  logo: `You are a content moderator for mdeai.co, a Medellin-based events platform.
+Review this sponsor brand logo. Logos are stylized brand marks  -  approve clean, professional marks.
 Reject for: explicit imagery, offensive symbols, hate speech, or alcohol/tobacco brand marks conflicting with event policies.
 Text-heavy brand logos, wordmarks, abstract art, and stylization are all acceptable.`,
 
-  image: `You are a content moderator for mdeai.co, a Medellín events platform.
+  image: `You are a content moderator for mdeai.co, a Medellin events platform.
 Review this sponsor promotional image. Approve standard brand imagery.
 Reject for: nudity, graphic violence, illegal-substance glorification, or content inappropriate for a public events platform.
 Promotional text overlays are acceptable.`,
 
-  video: `You are a content moderator for mdeai.co, a Medellín events platform.
+  video: `You are a content moderator for mdeai.co, a Medellin events platform.
 Review this sponsor video thumbnail or still frame. Approve professional marketing content.
 Reject for: explicit nudity, graphic violence, illegal-substance glorification.`,
 
-  copy: `You are a content moderator for mdeai.co, a Medellín events platform.
+  copy: `You are a content moderator for mdeai.co, a Medellin events platform.
 Review this sponsor marketing copy text. Approve standard promotional language.
 Reject for: hate speech, explicit sexual content, illegal offers, or content that violates Colombian advertising regulations.`,
 
-  color: `You are a content moderator for mdeai.co, a Medellín events platform.
+  color: `You are a content moderator for mdeai.co, a Medellin events platform.
 Review this brand color palette or swatch. Approve all standard color schemes.
 Only flag if the submitted content is not a color palette at all.`,
 };
@@ -70,7 +70,7 @@ const moderationSchema = {
     },
     score: {
       type: "number",
-      description: "0.0–1.0 safety score (1.0 = completely safe)",
+      description: "0.0-1.0 safety score (1.0 = completely safe)",
     },
   },
 };
