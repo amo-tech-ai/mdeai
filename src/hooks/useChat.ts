@@ -405,18 +405,18 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   prev.map(m => m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)
                 );
               }
-              if (ev.type === 'tool-result' && ev.toolName === 'search-rentals' && ev.result?.results?.length) {
+              if (ev.type === 'data-mdeai-actions' && ev.data?.kind === 'rental_results' && ev.data?.cards?.length) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const listings = (ev.result.results as any[]).map((r) => ({
-                  id: String(r.id),
-                  title: r.title ?? '',
-                  neighborhood: r.neighborhood ?? '',
-                  price_daily: r.nightly_price ?? 0,
-                  bedrooms: r.bedrooms ?? 0,
-                  amenities: r.amenities ?? [],
-                  source_url: r.source_url ?? null,
-                  latitude: r.latitude ?? null,
-                  longitude: r.longitude ?? null,
+                const listings = (ev.data.cards as any[]).map((c) => ({
+                  id: String(c.id),
+                  title: c.title ?? '',
+                  neighborhood: c.neighborhood ?? '',
+                  price_daily: c.price_daily ?? null,
+                  bedrooms: c.bedrooms ?? null,
+                  amenities: c.amenities ?? [],
+                  source_url: c.source_url ?? null,
+                  latitude: c.latitude ?? null,
+                  longitude: c.longitude ?? null,
                 }));
                 const action: ChatAction = { type: 'OPEN_RENTALS_RESULTS', payload: { filters: {}, listings } };
                 setPendingActions(prev => [...prev, action]);
