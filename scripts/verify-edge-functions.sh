@@ -15,8 +15,8 @@ fi
 echo "[verify-edge] Optional: Deno syntax check entrypoints..."
 # Functions skipped from local type-check must use 'name:TASK-ID' format
 # (e.g. "sponsor-roi-explain:MASTRA-036") justifying the skip. Empty is the
-# desired state. Guard below rejects any entry that doesn't match the regex —
-# prevents silent skip-drift (MASTRA-037 §4.4).
+# desired state. Guard below rejects any entry that doesn't match the regex --
+# prevents silent skip-drift (MASTRA-037 Section 4.4).
 SKIP_FUNCTIONS=()
 
 if [ "${#SKIP_FUNCTIONS[@]}" -gt 0 ]; then
@@ -48,7 +48,7 @@ if command -v deno >/dev/null 2>&1; then
   for f in "${entries[@]}"; do
     fn_name="$(basename "$(dirname "$f")")"
     if is_skipped "$fn_name"; then
-      echo "  deno check: supabase/functions/${f#./} (SKIPPED — see SKIP_FUNCTIONS)"
+      echo "  deno check: supabase/functions/${f#./} (SKIPPED -- see SKIP_FUNCTIONS)"
       continue
     fi
     echo "  deno check: supabase/functions/${f#./}"
@@ -56,7 +56,7 @@ if command -v deno >/dev/null 2>&1; then
   done
   popd >/dev/null
 else
-  echo "  (skip) deno not installed — install for full checks."
+  echo "  (skip) deno not installed -- install for full checks."
 fi
 
 echo "[verify-edge] Deno unit tests (supabase/functions/tests/)..."
@@ -65,7 +65,7 @@ if command -v deno >/dev/null 2>&1; then
   EDGE_FUNCTIONS_AUDIT= deno test --allow-all tests/ || { popd >/dev/null; exit 1; }
   popd >/dev/null
 else
-  echo "  (skip) deno not installed — run: npm run test:edge after installing Deno."
+  echo "  (skip) deno not installed -- run: npm run test:edge after installing Deno."
 fi
 
 echo "[verify-edge] OK."
