@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { MastraAuthSupabase } from '@mastra/auth-supabase';
 import { createPostgresStore } from './storage/config';
 import { workspace } from './workspaces';
 import { weatherWorkflow } from './workflows/weather-workflow';
@@ -18,12 +19,21 @@ import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } 
 
 const storage = createPostgresStore();
 
+const auth =
+  process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
+    ? new MastraAuthSupabase({
+        url: process.env.SUPABASE_URL,
+        anonKey: process.env.SUPABASE_ANON_KEY,
+      })
+    : undefined;
+
 export const mastra = new Mastra({
   workflows: { weatherWorkflow, rentalSearchWorkflow, eventDiscoveryWorkflow, conciergeRoutingWorkflow },
   agents: { weatherAgent, pingAgent, routerAgent, conciergeAgent, rentalAgent, eventAgent, evaluationAgent },
   scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage,
   workspace,
+  ...(auth ? { server: { auth } } : {}),
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',

@@ -138,9 +138,13 @@ VITE_SUPABASE_PROJECT_ID
 VITE_SUPABASE_PUBLISHABLE_KEY
 VITE_SUPABASE_URL
 VITE_GOOGLE_MAPS_API_KEY
+VITE_USE_MASTRA_CHAT        # "true" to route chat through Mastra (must be set in Vercel)
+VITE_MASTRA_SERVER_URL      # Mastra server URL, e.g. https://my-mastra-app-beta.vercel.app
 ```
 
-`.env` may only contain the four `VITE_*` vars above. All other secrets live in **Infisical** (source of truth at `localhost:80`) and sync to Supabase / Vercel — never in `.env`.
+`.env` may only contain the `VITE_*` vars above. All other secrets live in **Infisical** (source of truth at `localhost:80`) and sync to Supabase / Vercel — never in `.env`.
+
+> **Mastra chat path:** If `VITE_USE_MASTRA_CHAT` is not set to `"true"` in Vercel, all chat traffic falls back to the legacy `ai-chat` Supabase edge function. `VITE_MASTRA_SERVER_URL` defaults to `http://localhost:4111` — this must be the deployed Mastra service URL in production.
 
 ### Edge function secrets (Supabase dashboard)
 `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `INFOBIP_API_KEY`, `INFOBIP_BASE_URL`, `INFOBIP_PHONE_NUMBER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TICKET_CHECKOUT_KEY`, `STRIPE_TICKET_WEBHOOK_KEY`, `STRIPE_SPONSOR_CHECKOUT_KEY` (⚠ not yet set — blocks sponsor checkout), `STRIPE_SPONSOR_WEBHOOK_KEY`, `STAFF_LINK_SECRET`, `QR_SIGNING_SECRET`, `LEAD_REMINDER_CRON_SECRET`.
