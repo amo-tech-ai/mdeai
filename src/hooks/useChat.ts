@@ -18,6 +18,8 @@ import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const MASTRA_SERVER_URL = import.meta.env.VITE_MASTRA_SERVER_URL ?? 'http://localhost:4111';
+const USE_MASTRA_CHAT = import.meta.env.VITE_USE_MASTRA_CHAT === 'true';
 
 export interface UseChatOptions {
   /** Called when an anon visitor exhausts their free quota (HTTP 402). */
@@ -344,149 +346,193 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
 
       // Get session for auth
       const { data: { session } } = await supabase.auth.getSession();
-
-      // Use anon key as fallback for unauthenticated users
+      const accessToken = session?.access_token;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const authHeader = session?.access_token 
-        ? `Bearer ${session.access_token}` 
-        : `Bearer ${anonKey}`;
 
-      // Build the request headers. Anon visitors carry X-Anon-Session-Id so
-      // the server can enforce a per-session quota without requiring auth.
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader,
-      };
-      if (!user && anonSessionId) {
-        headers['X-Anon-Session-Id'] = anonSessionId;
-      }
+      if (USE_MASTRA_CHAT && accessToken) {
+        // ── Mastra /chat ──────────────────────────────────────────────────────
+        // Auth required: Mastra enforces 401 on every request. Anon visitors
+        // fall through to the legacy ai-chat path below.
+        // AI SDK SSE format (x-vercel-ai-ui-message-stream: v1).
+        const mastraHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (accessToken) mastraHeaders['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          // Send only the current user message for anon (no prior context
-          // stored server-side). Authenticated users get full-history
-          // (server will load from DB in a future refactor; today we send
-          // client state, same as previous behavior).
+        const requestBody: Record<string, unknown> = {
           messages: user
             ? [...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
             : [{ role: 'user', content }],
-          tab: activeTab,
-          conversationId: user ? conversation.id : null,
-          activeTripContext: activeTrip ? {
-            id: activeTrip.id,
-            title: activeTrip.title,
-            start_date: activeTrip.start_date,
-            end_date: activeTrip.end_date,
-            destination: activeTrip.destination,
-          } : null,
-          // Persistent chips (neighborhood · dates · travelers · budget).
-          // Sent only when at least one chip is set so the payload stays
-          // small for empty-context turns.
-          sessionData: hasChatContext(chatContext) ? chatContext : null,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          toast.error('Rate limit exceeded. Please try again later.');
-          throw new Error('Rate limit exceeded');
+        };
+        if (user && conversation) {
+          requestBody.memory = { thread: conversation.id, resource: user.id };
         }
-        // 402 with ANON_LIMIT_EXCEEDED code → trigger the email gate
-        // modal via callback. Other 402s (billing-style) still show toast.
-        if (response.status === 402) {
+
+        const mastraRes = await fetch(`${MASTRA_SERVER_URL}/chat`, {
+          method: 'POST',
+          headers: mastraHeaders,
+          body: JSON.stringify(requestBody),
+          signal: abortControllerRef.current.signal,
+        });
+
+        if (!mastraRes.ok) {
+          const detail = `Mastra chat error ${mastraRes.status}`;
+          toast.error(detail);
+          throw new Error(detail);
+        }
+        if (!mastraRes.body) throw new Error('No response body');
+
+        const mastraReader = mastraRes.body.getReader();
+        const mastraDecoder = new TextDecoder();
+        let mastraBuffer = '';
+
+        outer: while (true) {
+          const { done, value } = await mastraReader.read();
+          if (done) break;
+          mastraBuffer += mastraDecoder.decode(value, { stream: true });
+          let nlIdx: number;
+          while ((nlIdx = mastraBuffer.indexOf('\n')) !== -1) {
+            let line = mastraBuffer.slice(0, nlIdx);
+            mastraBuffer = mastraBuffer.slice(nlIdx + 1);
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6).trim();
+            if (payload === '[DONE]') break outer;
+            try {
+              const ev = JSON.parse(payload);
+              const textChunk: string = ev.delta ?? ev.text ?? ev.textDelta ?? '';
+              if (ev.type === 'text-delta' && textChunk) {
+                assistantContent += textChunk;
+                setMessages(prev =>
+                  prev.map(m => m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)
+                );
+              }
+            } catch { /* incomplete chunk — skip */ }
+          }
+        }
+      } else {
+        // ── Legacy: Supabase Edge Function ai-chat ────────────────────────────
+        // Gemini / OpenAI-compatible SSE format. Includes mdeai_actions sidecar
+        // and reasoning-trace events. Keep until Mastra path is validated.
+        const authHeader = accessToken ? `Bearer ${accessToken}` : `Bearer ${anonKey}`;
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader,
+        };
+        if (!user && anonSessionId) {
+          headers['X-Anon-Session-Id'] = anonSessionId;
+        }
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            messages: user
+              ? [...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
+              : [{ role: 'user', content }],
+            tab: activeTab,
+            conversationId: user ? conversation.id : null,
+            activeTripContext: activeTrip ? {
+              id: activeTrip.id,
+              title: activeTrip.title,
+              start_date: activeTrip.start_date,
+              end_date: activeTrip.end_date,
+              destination: activeTrip.destination,
+            } : null,
+            sessionData: hasChatContext(chatContext) ? chatContext : null,
+          }),
+          signal: abortControllerRef.current.signal,
+        });
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            toast.error('Rate limit exceeded. Please try again later.');
+            throw new Error('Rate limit exceeded');
+          }
+          if (response.status === 402) {
+            try {
+              const j = (await response.clone().json()) as {
+                error?: { code?: string; retry_after_seconds?: number };
+              };
+              if (j?.error?.code === 'ANON_LIMIT_EXCEEDED') {
+                options?.onAnonLimitExceeded?.(j.error.retry_after_seconds ?? 0);
+                setMessages(prev =>
+                  prev.filter(m => m.id !== userMessage.id && m.id !== assistantMessage.id),
+                );
+                return;
+              }
+            } catch {
+              /* fall through to generic */
+            }
+            toast.error('AI credits exhausted. Please add credits to continue.');
+            throw new Error('Payment required');
+          }
+          let detail = 'Failed to get AI response';
           try {
-            const j = (await response.clone().json()) as {
-              error?: { code?: string; retry_after_seconds?: number };
+            const j = (await response.json()) as {
+              error?: string | { code?: string; message?: string };
             };
-            if (j?.error?.code === 'ANON_LIMIT_EXCEEDED') {
-              options?.onAnonLimitExceeded?.(j.error.retry_after_seconds ?? 0);
-              // Remove the optimistic user + assistant placeholders so the
-              // user's message isn't stuck as "in flight" in the transcript.
-              setMessages(prev =>
-                prev.filter(m => m.id !== userMessage.id && m.id !== assistantMessage.id),
-              );
-              return;
+            if (typeof j?.error === 'object' && j.error?.message) {
+              detail = String(j.error.message);
+            } else if (typeof j?.error === 'string') {
+              detail = j.error;
             }
           } catch {
-            /* fall through to generic */
+            /* ignore parse errors */
           }
-          toast.error('AI credits exhausted. Please add credits to continue.');
-          throw new Error('Payment required');
+          toast.error(detail);
+          throw new Error(detail);
         }
-        let detail = 'Failed to get AI response';
-        try {
-          const j = (await response.json()) as {
-            error?: string | { code?: string; message?: string };
-          };
-          if (typeof j?.error === 'object' && j.error?.message) {
-            detail = String(j.error.message);
-          } else if (typeof j?.error === 'string') {
-            detail = j.error;
-          }
-        } catch {
-          /* ignore parse errors */
-        }
-        toast.error(detail);
-        throw new Error(detail);
-      }
 
-      if (!response.body) throw new Error('No response body');
+        if (!response.body) throw new Error('No response body');
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+          buffer += decoder.decode(value, { stream: true });
 
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
+          let newlineIndex: number;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            let line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
 
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '') continue;
-          if (!line.startsWith('data: ')) continue;
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (line.startsWith(':') || line.trim() === '') continue;
+            if (!line.startsWith('data: ')) continue;
 
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') break;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') break;
 
-          try {
-            const parsed = JSON.parse(jsonStr);
-            // Structured sidecar from edge function: tool emitted action(s)
-            if (parsed && Array.isArray(parsed.mdeai_actions)) {
-              setPendingActions(prev => [...prev, ...(parsed.mdeai_actions as ChatAction[])]);
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed && Array.isArray(parsed.mdeai_actions)) {
+                setPendingActions(prev => [...prev, ...(parsed.mdeai_actions as ChatAction[])]);
+              }
+              if (parsed && typeof parsed.phase === 'string' && typeof parsed.message === 'string') {
+                setReasoningPhases(prev => [...prev, {
+                  phase: parsed.phase,
+                  agent_label: parsed.agent_label,
+                  message: parsed.message,
+                  ts: Date.now(),
+                }]);
+              }
+              const deltaContent = parsed.choices?.[0]?.delta?.content;
+              if (deltaContent) {
+                assistantContent += deltaContent;
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === assistantMessage.id ? { ...m, content: assistantContent } : m
+                  )
+                );
+              }
+            } catch {
+              buffer = line + '\n' + buffer;
+              break;
             }
-            // Reasoning-trace phase event (handoff / thinking / ranking / etc)
-            if (parsed && typeof parsed.phase === 'string' && typeof parsed.message === 'string') {
-              setReasoningPhases(prev => [...prev, {
-                phase: parsed.phase,
-                agent_label: parsed.agent_label,
-                message: parsed.message,
-                ts: Date.now(),
-              }]);
-            }
-            const deltaContent = parsed.choices?.[0]?.delta?.content;
-            if (deltaContent) {
-              assistantContent += deltaContent;
-              setMessages(prev =>
-                prev.map(m =>
-                  m.id === assistantMessage.id
-                    ? { ...m, content: assistantContent }
-                    : m
-                )
-              );
-            }
-          } catch {
-            // Incomplete JSON, put back in buffer
-            buffer = line + '\n' + buffer;
-            break;
           }
         }
       }
