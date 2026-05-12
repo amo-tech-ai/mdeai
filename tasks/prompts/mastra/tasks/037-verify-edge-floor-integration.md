@@ -27,7 +27,7 @@ related:
 > **Why:** Three pre-existing type bugs (`event_venues` cast, `corsHeaders` scope, bearer regex) sat in `main` for weeks because `npm run verify:edge` was never required. The next bug will sit just as long unless the floor enforces it.
 > **Delivers:** Two parallel CI jobs blocking PR merge + push-to-main, a structured `SKIP_FUNCTIONS` policy (`name:TASK-ID` entries), a log-tee + conditional artifact for fast failure triage.
 > **Tools/Skills:** `mde-supabase` * `mde-github` * `supabase-edge-functions` * `create-github-action-workflow-specification`
-> **Floor * P1 * Not Started * Effort: 0.5 day**
+> **Floor * P1 * In Review * Effort: 0.5 day**
 
 # Wire `verify:edge` into the floor
 

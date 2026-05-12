@@ -17,6 +17,6 @@ Deno.test({
       Error,
       "transient-gemini",
     );
-    assertEquals(calls >= 2, true);
+    assertEquals(calls, 2);
   },
 });

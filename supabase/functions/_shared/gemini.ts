@@ -20,20 +20,20 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   opts?: { retries?: number; baseDelayMs?: number },
 ): Promise<T> {
-  const retries = opts?.retries ?? 3;
+  const attempts = Math.max(1, opts?.retries ?? 3);
   const baseDelayMs = opts?.baseDelayMs ?? 400;
   let last: unknown;
-  for (let i = 0; i < retries; i++) {
+  for (let i = 0; i < attempts; i++) {
     try {
       return await fn();
     } catch (e) {
       last = e;
-      if (i < retries - 1) {
+      if (i < attempts - 1) {
         await new Promise((r) => setTimeout(r, baseDelayMs * (i + 1)));
       }
     }
   }
-  throw last;
+  throw last instanceof Error ? last : new Error(String(last ?? "withRetry: exhausted retries"));
 }
 
 export async function fetchGemini(
@@ -194,6 +194,7 @@ export type GeminiErrorCode =
   | "GEMINI_TIMEOUT"
   | "GEMINI_RATE_LIMITED"
   | "GEMINI_HTTP_ERROR"
+  | "GEMINI_NETWORK_ERROR"
   | "GEMINI_PARSE_ERROR"
   | "GEMINI_SCHEMA_VIOLATION";
 
@@ -284,7 +285,8 @@ export async function callGeminiStructured<T>(
     if (e instanceof Error && e.name === "AbortError") {
       throw new GeminiStructuredError("GEMINI_TIMEOUT");
     }
-    throw e;
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new GeminiStructuredError("GEMINI_NETWORK_ERROR", msg, e);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -339,7 +341,13 @@ export async function callGeminiStructured<T>(
     data = result.data;
   } else {
     const requiredKeys = extractRequiredKeys(opts.responseJsonSchema);
-    if (requiredKeys.length > 0 && typeof data === "object" && data !== null) {
+    if (requiredKeys.length > 0) {
+      if (typeof data !== "object" || data === null || Array.isArray(data)) {
+        throw new GeminiStructuredError(
+          "GEMINI_SCHEMA_VIOLATION",
+          "response JSON must be an object",
+        );
+      }
       const obj = data as Record<string, unknown>;
       const missing = requiredKeys.filter((k) => !(k in obj));
       if (missing.length > 0) {

@@ -9,7 +9,7 @@
  * See: tasks/CHAT-CENTRAL-PLAN.md §3 — Architecture.
  */
 
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 /**
  * JSON Schema fragment consumed by the LLM (OpenAI-compatible function spec).
