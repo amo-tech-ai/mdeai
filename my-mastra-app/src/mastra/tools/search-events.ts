@@ -44,7 +44,7 @@ const EVENT_TYPE_MAP: Record<string, EventCategory> = {
   conference: 'culture', Conference: 'culture',
 };
 
-function mapCategory(eventType: string | null): EventCategory {
+export function mapCategory(eventType: string | null): EventCategory {
   if (!eventType) return 'culture';
   return EVENT_TYPE_MAP[eventType] ?? 'culture';
 }
@@ -53,7 +53,7 @@ function mapCategory(eventType: string | null): EventCategory {
 // Addresses are stored as "Neighborhood, Street, City" so the first segment
 // before the comma is the neighborhood. Falls back to city name.
 
-function extractNeighborhood(address: string | null, city: string | null): string {
+export function extractNeighborhood(address: string | null, city: string | null): string {
   if (address) return address.split(',')[0].trim();
   return city ?? 'Medellin';
 }
@@ -62,20 +62,20 @@ function extractNeighborhood(address: string | null, city: string | null): strin
 // America/Bogota is UTC-5, no DST. We use fixed offset arithmetic rather than
 // relying on TZ env which may not be set in the Mastra runtime.
 
-const BOGOTA_OFFSET_MS = -5 * 60 * 60 * 1000; // UTC-5
+export const BOGOTA_OFFSET_MS = -5 * 60 * 60 * 1000; // UTC-5
 
-function nowBogota(): Date {
+export function nowBogota(): Date {
   const utcNow = Date.now();
   return new Date(utcNow + BOGOTA_OFFSET_MS);
 }
 
-function bogotaStartOfDay(d: Date): Date {
+export function bogotaStartOfDay(d: Date): Date {
   const b = new Date(d.getTime());
   b.setUTCHours(0, 0, 0, 0);
   return new Date(b.getTime() - BOGOTA_OFFSET_MS); // back to UTC for DB query
 }
 
-function bogotaEndOfDay(d: Date): Date {
+export function bogotaEndOfDay(d: Date): Date {
   const b = new Date(d.getTime());
   b.setUTCHours(23, 59, 59, 999);
   return new Date(b.getTime() - BOGOTA_OFFSET_MS);
@@ -83,7 +83,7 @@ function bogotaEndOfDay(d: Date): Date {
 
 export type DateWindow = 'tonight' | 'this_weekend' | 'this_week' | 'next_week' | 'any';
 
-function dateWindow(window: DateWindow | undefined): { gte?: string; lte?: string } {
+export function dateWindow(window: DateWindow | undefined): { gte?: string; lte?: string } {
   if (!window || window === 'any') return {};
 
   const now = nowBogota();
