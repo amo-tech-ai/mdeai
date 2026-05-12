@@ -2,10 +2,10 @@
  * Shared Gemini API helpers.
  *
  * Two paths live here:
- *   1. `fetchGemini` / `fetchGeminiStream` — OpenAI-compatible endpoint
+ *   1. `fetchGemini` / `fetchGeminiStream` -- OpenAI-compatible endpoint
  *      (chat completions, streaming, tool-calling). Used by the chat surface
- *      (`ai-chat`, `ai-search`, `ai-router`, `ai-trip-planner`, `rentals`, …).
- *   2. `callGeminiStructured` — Gemini **native** `v1beta:generateContent`
+ *      (`ai-chat`, `ai-search`, `ai-router`, `ai-trip-planner`, `rentals`, ...).
+ *   2. `callGeminiStructured` -- Gemini **native** `v1beta:generateContent`
  *      endpoint with `responseSchema` + optional `googleSearch` grounding.
  *      Used by P3 sponsor agents that need typed JSON output.
  */
@@ -68,9 +68,9 @@ export async function fetchGeminiStream(
   return fetchGemini({ ...body, stream: true }, timeoutMs);
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// ----------------------------------------------------------------------------
 // Structured-output helper (Gemini native API)
-// ────────────────────────────────────────────────────────────────────────────
+// ----------------------------------------------------------------------------
 
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high";
 
@@ -96,7 +96,7 @@ export interface CallGeminiStructuredOptions<T = unknown> {
   model: string;
   /** Single-turn prompt. Use `messages` for multi-turn. */
   prompt?: string;
-  /** Multi-turn history — each entry is a user/model turn. */
+  /** Multi-turn history -- each entry is a user/model turn. */
   messages?: Array<{ role: "user" | "model"; text: string }>;
   /** JSON Schema (Gemini-supported subset). Used by Gemini to constrain output. */
   responseJsonSchema: Record<string, unknown>;
@@ -110,7 +110,7 @@ export interface CallGeminiStructuredOptions<T = unknown> {
   tools?: GeminiTool[];
   /** Request timeout. Default 30s. */
   timeoutMs?: number;
-  /** Logged via callers — not sent to Gemini. */
+  /** Logged via callers -- not sent to Gemini. */
   agentName?: string;
 }
 
@@ -232,11 +232,11 @@ function toRestTools(tools: GeminiTool[]): Array<Record<string, unknown>> {
  * Single, typed call to Gemini native `generateContent` with JSON schema.
  *
  * Failure modes (throws `GeminiStructuredError`; branch on `.code`):
- *   - GEMINI_TIMEOUT          — abort fired before response arrived
- *   - GEMINI_RATE_LIMITED     — 429 from Gemini
- *   - GEMINI_HTTP_ERROR       — other non-2xx (status appended to message)
- *   - GEMINI_PARSE_ERROR      — response body wasn't valid JSON or had no text
- *   - GEMINI_SCHEMA_VIOLATION — parsed JSON missing a top-level required key
+ *   - GEMINI_TIMEOUT          -- abort fired before response arrived
+ *   - GEMINI_RATE_LIMITED     -- 429 from Gemini
+ *   - GEMINI_HTTP_ERROR       -- other non-2xx (status appended to message)
+ *   - GEMINI_PARSE_ERROR      -- response body wasn't valid JSON or had no text
+ *   - GEMINI_SCHEMA_VIOLATION -- parsed JSON missing a top-level required key
  *                                or failed caller-supplied Zod validation
  */
 export async function callGeminiStructured<T>(
