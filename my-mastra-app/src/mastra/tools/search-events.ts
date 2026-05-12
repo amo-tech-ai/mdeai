@@ -13,6 +13,8 @@ const eventSchema = z.object({
   pricePerTicket: z.number(),
   currency: z.literal('USD'),
   imageUrl: z.string(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export type EventCard = z.infer<typeof eventSchema>;
@@ -29,6 +31,8 @@ const MOCK_EVENTS: EventCard[] = [
     pricePerTicket: 12,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-event-001',
+    latitude: 6.2520,
+    longitude: -75.5916,
   },
   {
     id: 'evt_002',
@@ -40,6 +44,8 @@ const MOCK_EVENTS: EventCard[] = [
     pricePerTicket: 25,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-event-002',
+    latitude: 6.2524,
+    longitude: -75.5986,
   },
   {
     id: 'evt_003',
@@ -51,6 +57,8 @@ const MOCK_EVENTS: EventCard[] = [
     pricePerTicket: 18,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-event-003',
+    latitude: 6.2462,
+    longitude: -75.6123,
   },
   {
     id: 'evt_004',
@@ -62,6 +70,8 @@ const MOCK_EVENTS: EventCard[] = [
     pricePerTicket: 8,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-event-004',
+    latitude: 6.2518,
+    longitude: -75.5636,
   },
   {
     id: 'evt_005',
@@ -73,6 +83,8 @@ const MOCK_EVENTS: EventCard[] = [
     pricePerTicket: 15,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-event-005',
+    latitude: 6.2554,
+    longitude: -75.5716,
   },
 ];
 
@@ -113,8 +125,33 @@ export const searchEventsTool = createTool({
     total: z.number(),
     source: z.literal('mock'),
   }),
-  execute: async (inputData: EventQuery) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  execute: async (inputData: EventQuery, context?: any) => {
     const { category, neighborhood, maxPricePerTicket, limit = 5 } = inputData;
-    return searchEvents({ category, neighborhood, maxPricePerTicket, limit });
+    const { results, total, source } = searchEvents({ category, neighborhood, maxPricePerTicket, limit });
+
+    await context?.writer?.custom({
+      type: 'data-mdeai-actions',
+      data: {
+        kind: 'event_results',
+        cards: results.map((e) => ({
+          id: e.id,
+          title: e.title,
+          category: e.category,
+          venue: e.venue,
+          neighborhood: e.neighborhood,
+          startsAt: e.startsAt,
+          pricePerTicket: e.pricePerTicket,
+          currency: e.currency,
+          imageUrl: e.imageUrl,
+          sourceUrl: `https://mdeai.co/events/${e.id}`,
+          latitude: e.latitude ?? null,
+          longitude: e.longitude ?? null,
+        })),
+        source,
+      },
+    });
+
+    return { results, total, source };
   },
 });

@@ -23,6 +23,8 @@ const attractionSchema = z.object({
   tags: z.array(z.string()),
   imageUrl: z.string(),
   sourceUrl: z.string(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export type Attraction = z.infer<typeof attractionSchema>;
@@ -41,6 +43,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['street-art', 'history', 'walking', 'guided'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-001',
     sourceUrl: 'https://mdeai.co/attractions/atr_001',
+    latitude: 6.2462,
+    longitude: -75.6123,
   },
   {
     id: 'atr_002',
@@ -54,12 +58,14 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['art', 'history', 'walkable'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-002',
     sourceUrl: 'https://mdeai.co/attractions/atr_002',
+    latitude: 6.2518,
+    longitude: -75.5636,
   },
   {
     id: 'atr_003',
     name: 'Cerro Nutibara & Pueblito Paisa',
     category: 'viewpoint',
-    neighborhood: 'Bel\u00e9n',
+    neighborhood: 'Belén',
     priceUsd: 0,
     durationMinutes: 90,
     rating: 4.4,
@@ -67,10 +73,12 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['viewpoint', 'sunset', 'free'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-003',
     sourceUrl: 'https://mdeai.co/attractions/atr_003',
+    latitude: 6.2266,
+    longitude: -75.6123,
   },
   {
     id: 'atr_004',
-    name: 'Parque Arv\u00ed Cable Car',
+    name: 'Parque Arví Cable Car',
     category: 'day-trip',
     neighborhood: 'Santa Elena',
     priceUsd: 5,
@@ -80,10 +88,12 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['nature', 'cable-car', 'hiking'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-004',
     sourceUrl: 'https://mdeai.co/attractions/atr_004',
+    latitude: 6.3098,
+    longitude: -75.4791,
   },
   {
     id: 'atr_005',
-    name: 'Jard\u00edn Bot\u00e1nico de Medell\u00edn',
+    name: 'Jardín Botánico de Medellín',
     category: 'park',
     neighborhood: 'Carabobo',
     priceUsd: 0,
@@ -93,12 +103,14 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['free', 'nature', 'family-friendly'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-005',
     sourceUrl: 'https://mdeai.co/attractions/atr_005',
+    latitude: 6.2712,
+    longitude: -75.5689,
   },
   {
     id: 'atr_006',
-    name: 'Guatap\u00e9 + El Pe\u00f1ol Day Trip',
+    name: 'Guatapé + El Peñol Day Trip',
     category: 'day-trip',
-    neighborhood: 'Guatap\u00e9',
+    neighborhood: 'Guatapé',
     priceUsd: 45,
     durationMinutes: 600,
     rating: 4.7,
@@ -106,6 +118,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['guided', 'day-trip', 'lake', 'viewpoint'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-006',
     sourceUrl: 'https://mdeai.co/attractions/atr_006',
+    latitude: 6.2326,
+    longitude: -75.1567,
   },
   {
     id: 'atr_007',
@@ -119,6 +133,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['walkable', 'nightlife', 'free', 'food'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-007',
     sourceUrl: 'https://mdeai.co/attractions/atr_007',
+    latitude: 6.2520,
+    longitude: -75.5866,
   },
   {
     id: 'atr_008',
@@ -132,6 +148,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['history', 'free', 'reflective'],
     imageUrl: 'https://images.unsplash.com/photo-attraction-008',
     sourceUrl: 'https://mdeai.co/attractions/atr_008',
+    latitude: 6.2513,
+    longitude: -75.5672,
   },
 ];
 
@@ -179,8 +197,33 @@ export const searchAttractionsTool = createTool({
     total: z.number(),
     source: z.literal('mock'),
   }),
-  execute: async (inputData: AttractionQuery) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  execute: async (inputData: AttractionQuery, context?: any) => {
     const { category, neighborhood, maxPriceUsd, freeOnly, limit = 5 } = inputData;
-    return searchAttractions({ category, neighborhood, maxPriceUsd, freeOnly, limit });
+    const { results, total, source } = searchAttractions({ category, neighborhood, maxPriceUsd, freeOnly, limit });
+
+    await context?.writer?.custom({
+      type: 'data-mdeai-actions',
+      data: {
+        kind: 'attraction_results',
+        cards: results.map((a) => ({
+          id: a.id,
+          name: a.name,
+          category: a.category,
+          neighborhood: a.neighborhood,
+          priceUsd: a.priceUsd,
+          durationMinutes: a.durationMinutes,
+          rating: a.rating,
+          tags: a.tags,
+          imageUrl: a.imageUrl,
+          sourceUrl: a.sourceUrl,
+          latitude: a.latitude ?? null,
+          longitude: a.longitude ?? null,
+        })),
+        source,
+      },
+    });
+
+    return { results, total, source };
   },
 });

@@ -405,21 +405,95 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   prev.map(m => m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)
                 );
               }
-              if (ev.type === 'data-mdeai-actions' && ev.data?.kind === 'rental_results' && ev.data?.cards?.length) {
+              if (ev.type === 'data-mdeai-actions' && ev.data?.cards?.length) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const listings = (ev.data.cards as any[]).map((c) => ({
-                  id: String(c.id),
-                  title: c.title ?? '',
-                  neighborhood: c.neighborhood ?? '',
-                  price_daily: c.price_daily ?? null,
-                  bedrooms: c.bedrooms ?? null,
-                  amenities: c.amenities ?? [],
-                  source_url: c.source_url ?? null,
-                  latitude: c.latitude ?? null,
-                  longitude: c.longitude ?? null,
-                }));
-                const action: ChatAction = { type: 'OPEN_RENTALS_RESULTS', payload: { filters: {}, listings } };
-                setPendingActions(prev => [...prev, action]);
+                const cards = ev.data.cards as any[];
+                const kind: string = ev.data.kind ?? '';
+                let action: ChatAction | null = null;
+
+                if (kind === 'rental_results') {
+                  action = {
+                    type: 'OPEN_RENTALS_RESULTS',
+                    payload: {
+                      filters: {},
+                      listings: cards.map((c) => ({
+                        id: String(c.id),
+                        title: c.title ?? '',
+                        neighborhood: c.neighborhood ?? '',
+                        price_daily: c.price_daily ?? null,
+                        bedrooms: c.bedrooms ?? null,
+                        amenities: c.amenities ?? [],
+                        source_url: c.source_url ?? null,
+                        latitude: c.latitude ?? null,
+                        longitude: c.longitude ?? null,
+                      })),
+                    },
+                  };
+                } else if (kind === 'event_results') {
+                  action = {
+                    type: 'OPEN_EVENT_RESULTS',
+                    payload: {
+                      filters: {},
+                      listings: cards.map((c) => ({
+                        id: String(c.id),
+                        title: c.title ?? '',
+                        category: c.category ?? '',
+                        venue: c.venue ?? '',
+                        neighborhood: c.neighborhood ?? '',
+                        startsAt: c.startsAt ?? '',
+                        pricePerTicket: c.pricePerTicket ?? null,
+                        currency: c.currency ?? 'USD',
+                        imageUrl: c.imageUrl ?? null,
+                        sourceUrl: c.sourceUrl ?? null,
+                        latitude: c.latitude ?? null,
+                        longitude: c.longitude ?? null,
+                      })),
+                    },
+                  };
+                } else if (kind === 'restaurant_results') {
+                  action = {
+                    type: 'OPEN_RESTAURANT_RESULTS',
+                    payload: {
+                      filters: {},
+                      listings: cards.map((c) => ({
+                        id: String(c.id),
+                        name: c.name ?? '',
+                        cuisine: c.cuisine ?? '',
+                        neighborhood: c.neighborhood ?? '',
+                        priceTier: c.priceTier ?? null,
+                        avgPricePerPerson: c.avgPricePerPerson ?? null,
+                        rating: c.rating ?? null,
+                        vibe: c.vibe ?? [],
+                        imageUrl: c.imageUrl ?? null,
+                        sourceUrl: c.sourceUrl ?? null,
+                        latitude: c.latitude ?? null,
+                        longitude: c.longitude ?? null,
+                      })),
+                    },
+                  };
+                } else if (kind === 'attraction_results') {
+                  action = {
+                    type: 'OPEN_ATTRACTION_RESULTS',
+                    payload: {
+                      filters: {},
+                      listings: cards.map((c) => ({
+                        id: String(c.id),
+                        name: c.name ?? '',
+                        category: c.category ?? '',
+                        neighborhood: c.neighborhood ?? '',
+                        priceUsd: c.priceUsd ?? null,
+                        durationMinutes: c.durationMinutes ?? null,
+                        rating: c.rating ?? null,
+                        tags: c.tags ?? [],
+                        imageUrl: c.imageUrl ?? null,
+                        sourceUrl: c.sourceUrl ?? null,
+                        latitude: c.latitude ?? null,
+                        longitude: c.longitude ?? null,
+                      })),
+                    },
+                  };
+                }
+                if (action) setPendingActions(prev => [...prev, action!]);
               }
             } catch { /* incomplete chunk — skip */ }
           }

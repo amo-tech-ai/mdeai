@@ -24,6 +24,8 @@ const restaurantSchema = z.object({
   vibe: z.array(z.string()),
   imageUrl: z.string(),
   sourceUrl: z.string(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export type Restaurant = z.infer<typeof restaurantSchema>;
@@ -42,6 +44,8 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['traditional', 'family-friendly', 'live-music-weekends'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-lau-001',
     sourceUrl: 'https://mdeai.co/restaurants/rst_lau_001',
+    latitude: 6.2516,
+    longitude: -75.5898,
   },
   {
     id: 'rst_pob_001',
@@ -55,10 +59,12 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['fine-dining', 'tasting-menu', 'date-night'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-pob-001',
     sourceUrl: 'https://mdeai.co/restaurants/rst_pob_001',
+    latitude: 6.2098,
+    longitude: -75.5663,
   },
   {
     id: 'rst_pob_002',
-    name: 'Mondongo\u2019s Parque Lleras',
+    name: "Mondongo's Parque Lleras",
     cuisine: 'colombian',
     neighborhood: 'El Poblado',
     priceTier: '$$',
@@ -68,6 +74,8 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['traditional', 'tourist-friendly', 'casual'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-pob-002',
     sourceUrl: 'https://mdeai.co/restaurants/rst_pob_002',
+    latitude: 6.2076,
+    longitude: -75.5668,
   },
   {
     id: 'rst_pob_003',
@@ -81,6 +89,8 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['modern', 'tasting-menu', 'date-night'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-pob-003',
     sourceUrl: 'https://mdeai.co/restaurants/rst_pob_003',
+    latitude: 6.2094,
+    longitude: -75.5658,
   },
   {
     id: 'rst_env_001',
@@ -94,6 +104,8 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['garden-seating', 'casual', 'family-friendly'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-env-001',
     sourceUrl: 'https://mdeai.co/restaurants/rst_env_001',
+    latitude: 6.1745,
+    longitude: -75.5912,
   },
   {
     id: 'rst_lau_002',
@@ -107,10 +119,12 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['plant-based', 'casual', 'lunch-friendly'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-lau-002',
     sourceUrl: 'https://mdeai.co/restaurants/rst_lau_002',
+    latitude: 6.2528,
+    longitude: -75.5907,
   },
   {
     id: 'rst_pob_004',
-    name: 'Pergamino Caf\u00e9',
+    name: 'Pergamino Café',
     cuisine: 'cafe',
     neighborhood: 'El Poblado',
     priceTier: '$',
@@ -120,10 +134,12 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['specialty-coffee', 'remote-work', 'casual'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-pob-004',
     sourceUrl: 'https://mdeai.co/restaurants/rst_pob_004',
+    latitude: 6.2103,
+    longitude: -75.5672,
   },
   {
     id: 'rst_cen_001',
-    name: 'Mercado del R\u00edo',
+    name: 'Mercado del Río',
     cuisine: 'street-food',
     neighborhood: 'Centro',
     priceTier: '$$',
@@ -133,6 +149,8 @@ const MOCK_RESTAURANTS: Restaurant[] = [
     vibe: ['food-hall', 'group-friendly', 'casual'],
     imageUrl: 'https://images.unsplash.com/photo-restaurant-cen-001',
     sourceUrl: 'https://mdeai.co/restaurants/rst_cen_001',
+    latitude: 6.2480,
+    longitude: -75.5622,
   },
 ];
 
@@ -181,8 +199,33 @@ export const searchRestaurantsTool = createTool({
     total: z.number(),
     source: z.literal('mock'),
   }),
-  execute: async (inputData: RestaurantQuery) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  execute: async (inputData: RestaurantQuery, context?: any) => {
     const { cuisine, neighborhood, maxPricePerPerson, minRating, limit = 5 } = inputData;
-    return searchRestaurants({ cuisine, neighborhood, maxPricePerPerson, minRating, limit });
+    const { results, total, source } = searchRestaurants({ cuisine, neighborhood, maxPricePerPerson, minRating, limit });
+
+    await context?.writer?.custom({
+      type: 'data-mdeai-actions',
+      data: {
+        kind: 'restaurant_results',
+        cards: results.map((r) => ({
+          id: r.id,
+          name: r.name,
+          cuisine: r.cuisine,
+          neighborhood: r.neighborhood,
+          priceTier: r.priceTier,
+          avgPricePerPerson: r.avgPricePerPerson,
+          rating: r.rating,
+          vibe: r.vibe,
+          imageUrl: r.imageUrl,
+          sourceUrl: r.sourceUrl,
+          latitude: r.latitude ?? null,
+          longitude: r.longitude ?? null,
+        })),
+        source,
+      },
+    });
+
+    return { results, total, source };
   },
 });

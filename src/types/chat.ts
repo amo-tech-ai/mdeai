@@ -64,7 +64,81 @@ export interface LeadCapturedAction {
   };
 }
 
-export type ChatAction = OpenRentalsResultsAction | LeadCapturedAction;
+export interface EventInlineListing {
+  id: string;
+  title: string;
+  category: string;
+  venue: string;
+  neighborhood: string;
+  startsAt: string;
+  pricePerTicket?: number | null;
+  currency?: string | null;
+  imageUrl?: string | null;
+  sourceUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface RestaurantInlineListing {
+  id: string;
+  name: string;
+  cuisine: string;
+  neighborhood: string;
+  priceTier?: string | null;
+  avgPricePerPerson?: number | null;
+  rating?: number | null;
+  vibe?: string[] | null;
+  imageUrl?: string | null;
+  sourceUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface AttractionInlineListing {
+  id: string;
+  name: string;
+  category: string;
+  neighborhood: string;
+  priceUsd?: number | null;
+  durationMinutes?: number | null;
+  rating?: number | null;
+  tags?: string[] | null;
+  imageUrl?: string | null;
+  sourceUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface OpenEventResultsAction {
+  type: 'OPEN_EVENT_RESULTS';
+  payload: {
+    filters: Record<string, unknown>;
+    listings?: EventInlineListing[];
+  };
+}
+
+export interface OpenRestaurantResultsAction {
+  type: 'OPEN_RESTAURANT_RESULTS';
+  payload: {
+    filters: Record<string, unknown>;
+    listings?: RestaurantInlineListing[];
+  };
+}
+
+export interface OpenAttractionResultsAction {
+  type: 'OPEN_ATTRACTION_RESULTS';
+  payload: {
+    filters: Record<string, unknown>;
+    listings?: AttractionInlineListing[];
+  };
+}
+
+export type ChatAction =
+  | OpenRentalsResultsAction
+  | LeadCapturedAction
+  | OpenEventResultsAction
+  | OpenRestaurantResultsAction
+  | OpenAttractionResultsAction;
 
 export interface ChatMessage {
   id: string;

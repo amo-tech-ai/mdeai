@@ -15,6 +15,11 @@ import {
   type MapPin as MapPinData,
   type RentalPinMeta,
 } from '@/context/MapContext';
+import type {
+  OpenEventResultsAction,
+  OpenRestaurantResultsAction,
+  OpenAttractionResultsAction,
+} from '@/types/chat';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
 import { useAnonSession } from '@/hooks/useAnonSession';
@@ -299,6 +304,54 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     return () => {
       /* intentionally empty — see lifecycle comment above */
     };
+  }, [pendingActions, setPins]);
+
+  // Event pins
+  useEffect(() => {
+    const action = pendingActions.find((a) => a.type === 'OPEN_EVENT_RESULTS') as OpenEventResultsAction | undefined;
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    setPins(listings.map((e) => ({
+      id: e.id,
+      category: 'event' as const,
+      title: e.title,
+      latitude: e.latitude ?? null,
+      longitude: e.longitude ?? null,
+      label: e.pricePerTicket != null ? `$${e.pricePerTicket}` : undefined,
+      meta: { source_url: e.sourceUrl, neighborhood: e.neighborhood, venue: e.venue },
+    } satisfies MapPinData)));
+  }, [pendingActions, setPins]);
+
+  // Restaurant pins
+  useEffect(() => {
+    const action = pendingActions.find((a) => a.type === 'OPEN_RESTAURANT_RESULTS') as OpenRestaurantResultsAction | undefined;
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    setPins(listings.map((r) => ({
+      id: r.id,
+      category: 'restaurant' as const,
+      title: r.name,
+      latitude: r.latitude ?? null,
+      longitude: r.longitude ?? null,
+      label: r.priceTier ?? undefined,
+      meta: { source_url: r.sourceUrl, neighborhood: r.neighborhood, rating: r.rating },
+    } satisfies MapPinData)));
+  }, [pendingActions, setPins]);
+
+  // Attraction pins
+  useEffect(() => {
+    const action = pendingActions.find((a) => a.type === 'OPEN_ATTRACTION_RESULTS') as OpenAttractionResultsAction | undefined;
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    setPins(listings.map((a) => ({
+      id: a.id,
+      category: 'attraction' as const,
+      title: a.name,
+      latitude: a.latitude ?? null,
+      longitude: a.longitude ?? null,
+      label: a.priceUsd === 0 ? 'Free' : a.priceUsd != null ? `$${a.priceUsd}` : undefined,
+      meta: { source_url: a.sourceUrl, neighborhood: a.neighborhood, rating: a.rating },
+    } satisfies MapPinData)));
   }, [pendingActions, setPins]);
 
   // Clear pins when the user clears the message list (e.g. new chat).
