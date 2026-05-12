@@ -808,10 +808,11 @@ async function executeSearchEvents(params: Record<string, unknown>, supabase: Su
     query = query.ilike("name", `%${params.keyword}%`);
   }
   if (params.date_from) {
-    query = query.gte("event_start_time", `${params.date_from}T00:00:00Z`);
+    // Medellín local time (UTC-5) — Gemini emits YYYY-MM-DD intending local-day boundaries
+    query = query.gte("event_start_time", `${params.date_from}T00:00:00-05:00`);
   }
   if (params.date_to) {
-    query = query.lte("event_start_time", `${params.date_to}T23:59:59Z`);
+    query = query.lte("event_start_time", `${params.date_to}T23:59:59-05:00`);
   }
   if (params.event_type) {
     query = query.ilike("event_type", `%${params.event_type}%`);
