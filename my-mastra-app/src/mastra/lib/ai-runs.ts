@@ -47,8 +47,13 @@ export async function recordMastraRun(record: MastraRunRecord): Promise<void> {
     return;
   }
   try {
+    // Race the insert against a 500ms deadline so a slow/down Supabase never
+    // blocks the chat response path. Timeout is swallowed, not thrown.
+    const deadline = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('ai_runs insert timeout')), 500),
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (client as any).from('ai_runs').insert({
+    const { error } = await Promise.race([(client as any).from('ai_runs').insert({
       user_id: record.user_id,
       agent_name: record.agent_name,
       agent_type: record.agent_type,
@@ -60,11 +65,11 @@ export async function recordMastraRun(record: MastraRunRecord): Promise<void> {
       output_tokens: record.output_tokens ?? 0,
       duration_ms: record.duration_ms ?? 0,
       model_name: record.model_name ?? null,
-    });
+    }), deadline]);
     if (error) {
       console.error('[ai-runs] insert failed:', error.message);
     }
   } catch (err) {
-    console.error('[ai-runs] unexpected error:', err instanceof Error ? err.message : String(err));
+    console.warn('[ai-runs] skipped:', err instanceof Error ? err.message : String(err));
   }
 }

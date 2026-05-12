@@ -54,10 +54,7 @@ function mapCategory(eventType: string | null): EventCategory {
 // before the comma is the neighborhood. Falls back to city name.
 
 function extractNeighborhood(address: string | null, city: string | null): string {
-  if (address) {
-    const parts = address.split(',');
-    if (parts.length > 1) return parts[0].trim();
-  }
+  if (address) return address.split(',')[0].trim();
   return city ?? 'Medellin';
 }
 
@@ -93,19 +90,27 @@ function dateWindow(window: DateWindow | undefined): { gte?: string; lte?: strin
   const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon, ... 6=Sat (in Bogota time)
 
   if (window === 'tonight') {
+    // Use current moment as lower bound so past events tonight don't appear.
     return {
-      gte: bogotaStartOfDay(now).toISOString(),
+      gte: new Date(Date.now()).toISOString(),
       lte: bogotaEndOfDay(now).toISOString(),
     };
   }
 
   if (window === 'this_weekend') {
-    // Friday (5) through Sunday (0, 1=Mon) — current or upcoming
-    const daysToFriday = (5 - dayOfWeek + 7) % 7;
-    const friday = new Date(now.getTime() + daysToFriday * 86400000);
+    // daysSinceFriday: 0=Fri, 1=Sat, 2=Sun, 3=Mon … 6=Thu
+    const daysSinceFriday = (dayOfWeek - 5 + 7) % 7;
+    let friday: Date;
+    if (daysSinceFriday <= 2) {
+      // We are in Fri/Sat/Sun — anchor to the most recent Friday
+      friday = new Date(now.getTime() - daysSinceFriday * 86400000);
+    } else {
+      // Mon-Thu — jump to the upcoming Friday
+      friday = new Date(now.getTime() + (7 - daysSinceFriday) * 86400000);
+    }
     const sunday = new Date(friday.getTime() + 2 * 86400000);
     return {
-      gte: bogotaStartOfDay(daysToFriday === 0 ? now : friday).toISOString(),
+      gte: bogotaStartOfDay(friday).toISOString(),
       lte: bogotaEndOfDay(sunday).toISOString(),
     };
   }
