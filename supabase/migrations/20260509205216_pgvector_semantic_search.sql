@@ -74,63 +74,75 @@ alter table public.event_embeddings      enable row level security;
 alter table public.restaurant_embeddings enable row level security;
 
 -- listing_embeddings policies: anyone can read, only service role can write
+drop policy if exists "Listing embeddings are readable by all" on public.listing_embeddings;
 create policy "Listing embeddings are readable by all"
   on public.listing_embeddings for select
   to authenticated, anon
   using (true);
 
+drop policy if exists "Service role can insert listing embeddings" on public.listing_embeddings;
 create policy "Service role can insert listing embeddings"
   on public.listing_embeddings for insert
   to service_role
   with check (true);
 
+drop policy if exists "Service role can update listing embeddings" on public.listing_embeddings;
 create policy "Service role can update listing embeddings"
   on public.listing_embeddings for update
   to service_role
   using (true) with check (true);
 
+drop policy if exists "Service role can delete listing embeddings" on public.listing_embeddings;
 create policy "Service role can delete listing embeddings"
   on public.listing_embeddings for delete
   to service_role
   using (true);
 
 -- event_embeddings policies
+drop policy if exists "Event embeddings are readable by all" on public.event_embeddings;
 create policy "Event embeddings are readable by all"
   on public.event_embeddings for select
   to authenticated, anon
   using (true);
 
+drop policy if exists "Service role can insert event embeddings" on public.event_embeddings;
 create policy "Service role can insert event embeddings"
   on public.event_embeddings for insert
   to service_role
   with check (true);
 
+drop policy if exists "Service role can update event embeddings" on public.event_embeddings;
 create policy "Service role can update event embeddings"
   on public.event_embeddings for update
   to service_role
   using (true) with check (true);
 
+drop policy if exists "Service role can delete event embeddings" on public.event_embeddings;
 create policy "Service role can delete event embeddings"
   on public.event_embeddings for delete
   to service_role
   using (true);
 
 -- restaurant_embeddings policies
+drop policy if exists "Restaurant embeddings are readable by all" on public.restaurant_embeddings;
 create policy "Restaurant embeddings are readable by all"
   on public.restaurant_embeddings for select
   to authenticated, anon
   using (true);
 
+drop policy if exists "Service role can insert restaurant embeddings" on public.restaurant_embeddings;
 create policy "Service role can insert restaurant embeddings"
   on public.restaurant_embeddings for insert
   to service_role
   with check (true);
 
+drop policy if exists "Service role can update restaurant embeddings" on public.restaurant_embeddings;
 create policy "Service role can update restaurant embeddings"
   on public.restaurant_embeddings for update
   to service_role
   using (true) with check (true);
 
+drop policy if exists "Service role can delete restaurant embeddings" on public.restaurant_embeddings;
 create policy "Service role can delete restaurant embeddings"
   on public.restaurant_embeddings for delete
   to service_role
@@ -142,7 +154,11 @@ create policy "Service role can delete restaurant embeddings"
 --    Caller (ai-search edge fn) embeds the user query via Gemini then calls these.
 -- =============================================================================
 
-create or replace function public.semantic_search_listings(
+do $do$ begin
+  if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where p.proname = 'semantic_search_listings' and n.nspname = 'public') then
+    execute $e$
+      create or replace function public.semantic_search_listings(
   query_embedding  vector(768),
   similarity_threshold float8 default 0.6,
   match_count      int    default 20
@@ -166,7 +182,7 @@ returns table (
 )
 language sql stable security invoker
 set search_path = ''
-as $$
+as $fn$
   select
     a.id,
     a.title,
@@ -189,9 +205,16 @@ as $$
     and (1 - (le.embedding operator(extensions.<=>) query_embedding)) > similarity_threshold
   order by le.embedding operator(extensions.<=>) query_embedding
   limit match_count;
-$$;
+$fn$;
+    $e$;
+  end if;
+end $do$;
 
-create or replace function public.semantic_search_events(
+do $do$ begin
+  if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where p.proname = 'semantic_search_events' and n.nspname = 'public') then
+    execute $e$
+      create or replace function public.semantic_search_events(
   query_embedding  vector(768),
   similarity_threshold float8 default 0.6,
   match_count      int    default 20
@@ -211,7 +234,7 @@ returns table (
 )
 language sql stable security invoker
 set search_path = ''
-as $$
+as $fn$
   select
     e.id,
     e.name,
@@ -231,9 +254,16 @@ as $$
     and (1 - (ee.embedding operator(extensions.<=>) query_embedding)) > similarity_threshold
   order by ee.embedding operator(extensions.<=>) query_embedding
   limit match_count;
-$$;
+$fn$;
+    $e$;
+  end if;
+end $do$;
 
-create or replace function public.semantic_search_restaurants(
+do $do$ begin
+  if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                  where p.proname = 'semantic_search_restaurants' and n.nspname = 'public') then
+    execute $e$
+      create or replace function public.semantic_search_restaurants(
   query_embedding  vector(768),
   similarity_threshold float8 default 0.6,
   match_count      int    default 20
@@ -254,7 +284,7 @@ returns table (
 )
 language sql stable security invoker
 set search_path = ''
-as $$
+as $fn$
   select
     r.id,
     r.name,
@@ -274,7 +304,10 @@ as $$
     and (1 - (re.embedding operator(extensions.<=>) query_embedding)) > similarity_threshold
   order by re.embedding operator(extensions.<=>) query_embedding
   limit match_count;
-$$;
+$fn$;
+    $e$;
+  end if;
+end $do$;
 
 -- =============================================================================
 -- 6. updated_at maintenance triggers
@@ -291,14 +324,17 @@ begin
 end;
 $$;
 
+drop trigger if exists listing_embeddings_updated_at on public.listing_embeddings;
 create trigger listing_embeddings_updated_at
   before update on public.listing_embeddings
   for each row execute function public.touch_embedding_updated_at();
 
+drop trigger if exists event_embeddings_updated_at on public.event_embeddings;
 create trigger event_embeddings_updated_at
   before update on public.event_embeddings
   for each row execute function public.touch_embedding_updated_at();
 
+drop trigger if exists restaurant_embeddings_updated_at on public.restaurant_embeddings;
 create trigger restaurant_embeddings_updated_at
   before update on public.restaurant_embeddings
   for each row execute function public.touch_embedding_updated_at();

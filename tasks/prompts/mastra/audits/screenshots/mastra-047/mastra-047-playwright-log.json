@@ -1,0 +1,97 @@
+{
+  "base": "http://127.0.0.1:8081",
+  "routes": {
+    "/chat": {
+      "status": 200,
+      "screenshot": "tasks/prompts/mastra/audits/screenshots/mastra-047/chat-smoke.png",
+      "textareaCount": 1,
+      "loginLikely": false,
+      "consoleWarnErrorCount": 8,
+      "consoleSample": [
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+        },
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+        },
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+        },
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+        },
+        {
+          "type": "error",
+          "text": "Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s \n\nCheck the render method of `Primitive.button.SlotClone`. \n    at Chip (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:60:17)\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1985:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:110:13\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Popper (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1977:11)\n    at Popover (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:58:5)\n    at NeighborhoodPopover (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:119:32)\n    at div\n    at div\n    at ChatContextChips (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:664:36)\n    at main\n    at div\n    at div\n    at ChatCanvasInner (http://127.0.0.1:8081/src/components/chat/ChatCanvas.tsx:207:28)\n    at MapProvider (http://127.0.0.1:8081/src/context/MapContext.tsx:39:35)\n    at ChatCanvas\n    at RenderedRoute (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4088:5)\n    at Routes (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4558:5)\n    at Suspense\n    at TripProvider (http://127.0.0.1:8081/src/context/TripContext.tsx:38:32)\n    at AuthProvider (http://127.0.0.1:8081/src/hooks/useAuth.tsx:26:32)\n    at Router (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4501:15)\n    at BrowserRouter (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:5247:5)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at TooltipProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=249263b2:56:5)\n    at QueryClientProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@tanstack_react-query.js?v=249263b2:2934:3)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/@gadgetinc_react.js?v=249263b2:3683:13)\n    at App\n    at ErrorBoundary (http://127.0.0.1:8081/node_modules/.vite/deps/@sentry_react.js?v=249263b2:30516:5)"
+        },
+        {
+          "type": "error",
+          "text": "Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s \n\nCheck the render method of `Primitive.button.SlotClone`. \n    at Chip (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:60:17)\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1985:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:110:13\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Popper (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1977:11)\n    at Popover (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:58:5)\n    at DatesPopover (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:244:25)\n    at div\n    at div\n    at ChatContextChips (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:664:36)\n    at main\n    at div\n    at div\n    at ChatCanvasInner (http://127.0.0.1:8081/src/components/chat/ChatCanvas.tsx:207:28)\n    at MapProvider (http://127.0.0.1:8081/src/context/MapContext.tsx:39:35)\n    at ChatCanvas\n    at RenderedRoute (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4088:5)\n    at Routes (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4558:5)\n    at Suspense\n    at TripProvider (http://127.0.0.1:8081/src/context/TripContext.tsx:38:32)\n    at AuthProvider (http://127.0.0.1:8081/src/hooks/useAuth.tsx:26:32)\n    at Router (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4501:15)\n    at BrowserRouter (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:5247:5)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at TooltipProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=249263b2:56:5)\n    at QueryClientProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@tanstack_react-query.js?v=249263b2:2934:3)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/@gadgetinc_react.js?v=249263b2:3683:13)\n    at App\n    at ErrorBoundary (http://127.0.0.1:8081/node_modules/.vite/deps/@sentry_react.js?v=249263b2:30516:5)"
+        },
+        {
+          "type": "error",
+          "text": "Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s \n\nCheck the render method of `Primitive.button.SlotClone`. \n    at Chip (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:60:17)\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1985:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:110:13\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Popper (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1977:11)\n    at Popover (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:58:5)\n    at TravelersPopover (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:400:29)\n    at div\n    at div\n    at ChatContextChips (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:664:36)\n    at main\n    at div\n    at div\n    at ChatCanvasInner (http://127.0.0.1:8081/src/components/chat/ChatCanvas.tsx:207:28)\n    at MapProvider (http://127.0.0.1:8081/src/context/MapContext.tsx:39:35)\n    at ChatCanvas\n    at RenderedRoute (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4088:5)\n    at Routes (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4558:5)\n    at Suspense\n    at TripProvider (http://127.0.0.1:8081/src/context/TripContext.tsx:38:32)\n    at AuthProvider (http://127.0.0.1:8081/src/hooks/useAuth.tsx:26:32)\n    at Router (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4501:15)\n    at BrowserRouter (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:5247:5)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at TooltipProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=249263b2:56:5)\n    at QueryClientProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@tanstack_react-query.js?v=249263b2:2934:3)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/@gadgetinc_react.js?v=249263b2:3683:13)\n    at App\n    at ErrorBoundary (http://127.0.0.1:8081/node_modules/.vite/deps/@sentry_react.js?v=249263b2:30516:5)"
+        },
+        {
+          "type": "error",
+          "text": "Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s \n\nCheck the render method of `Primitive.button.SlotClone`. \n    at Chip (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:60:17)\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:79:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-OATS2GQ6.js?v=249263b2:56:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-GDO7FOZN.js?v=249263b2:43:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1985:13\n    at http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:110:13\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at Popper (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-5OFSMZVL.js?v=249263b2:1977:11)\n    at Popover (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-popover.js?v=249263b2:58:5)\n    at BudgetPopover (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:499:26)\n    at div\n    at div\n    at ChatContextChips (http://127.0.0.1:8081/src/components/chat/ChatContextChips.tsx:664:36)\n    at main\n    at div\n    at div\n    at ChatCanvasInner (http://127.0.0.1:8081/src/components/chat/ChatCanvas.tsx:207:28)\n    at MapProvider (http://127.0.0.1:8081/src/context/MapContext.tsx:39:35)\n    at ChatCanvas\n    at RenderedRoute (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4088:5)\n    at Routes (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4558:5)\n    at Suspense\n    at TripProvider (http://127.0.0.1:8081/src/context/TripContext.tsx:38:32)\n    at AuthProvider (http://127.0.0.1:8081/src/hooks/useAuth.tsx:26:32)\n    at Router (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:4501:15)\n    at BrowserRouter (http://127.0.0.1:8081/node_modules/.vite/deps/react-router-dom.js?v=249263b2:5247:5)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/chunk-JBZZGT57.js?v=249263b2:51:15)\n    at TooltipProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=249263b2:56:5)\n    at QueryClientProvider (http://127.0.0.1:8081/node_modules/.vite/deps/@tanstack_react-query.js?v=249263b2:2934:3)\n    at Provider (http://127.0.0.1:8081/node_modules/.vite/deps/@gadgetinc_react.js?v=249263b2:3683:13)\n    at App\n    at ErrorBoundary (http://127.0.0.1:8081/node_modules/.vite/deps/@sentry_react.js?v=249263b2:30516:5)"
+        }
+      ],
+      "pageErrors": [],
+      "failedRequestsSample": [
+        {
+          "url": "http://127.0.0.1:8081/node_modules/.vite/deps/chunk-G4EQJLRE.js?v=249263b2",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "url": "http://127.0.0.1:8081/node_modules/.vite/deps/chunk-QCHXOAYK.js?v=249263b2",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "url": "http://127.0.0.1:8081/node_modules/.vite/deps/chunk-TTCDDKFV.js?v=249263b2",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "url": "http://127.0.0.1:8081/node_modules/.vite/deps/chunk-T2SWDQEL.js?v=249263b2",
+          "failure": "net::ERR_ABORTED"
+        },
+        {
+          "url": "http://127.0.0.1:8081/node_modules/.vite/deps/chunk-QIFPAX7L.js?v=249263b2",
+          "failure": "net::ERR_ABORTED"
+        }
+      ]
+    },
+    "/concierge": {
+      "status": 200,
+      "screenshot": "tasks/prompts/mastra/audits/screenshots/mastra-047/concierge-smoke.png",
+      "textareaCount": 1,
+      "loginLikely": true,
+      "consoleWarnErrorCount": 4,
+      "consoleSample": [
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+        },
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+        },
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+        },
+        {
+          "type": "warning",
+          "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+        }
+      ],
+      "pageErrors": [],
+      "failedRequestsSample": []
+    }
+  },
+  "errors": []
+}

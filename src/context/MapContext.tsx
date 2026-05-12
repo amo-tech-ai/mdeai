@@ -1,6 +1,32 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 
-export type MapPinCategory = 'rental' | 'restaurant' | 'event' | 'attraction';
+export type MapPinCategory =
+  | 'rental'
+  | 'restaurant'
+  | 'event'
+  | 'attraction'
+  | 'grounded';
+
+/**
+ * Merge pins for multi-tool turns: replace only pins of `category`, keep others.
+ * Used by Concierge + ChatCanvas when syncing listing actions → map.
+ */
+export function mergePinsByCategory(
+  prev: MapPin[],
+  category: MapPinCategory,
+  nextPins: MapPin[],
+): MapPin[] {
+  return [...prev.filter((p) => p.category !== category), ...nextPins];
+}
 
 /**
  * Per-vertical typed shapes for `MapPin.meta`. Today only `rental` has
@@ -39,7 +65,7 @@ export interface MapPin {
 
 interface MapContextValue {
   pins: MapPin[];
-  setPins: (pins: MapPin[]) => void;
+  setPins: Dispatch<SetStateAction<MapPin[]>>;
   clearPins: () => void;
   highlightedPinId: string | null;
   setHighlightedPinId: (id: string | null) => void;
@@ -55,15 +81,11 @@ const MapContext = createContext<MapContextValue | undefined>(undefined);
  * See: tasks/CHAT-CENTRAL-PLAN.md §3 — Architecture.
  */
 export function MapProvider({ children }: { children: ReactNode }) {
-  const [pins, setPinsState] = useState<MapPin[]>([]);
+  const [pins, setPins] = useState<MapPin[]>([]);
   const [highlightedPinId, setHighlightedPinId] = useState<string | null>(null);
 
-  const setPins = useCallback((next: MapPin[]) => {
-    setPinsState(next);
-  }, []);
-
   const clearPins = useCallback(() => {
-    setPinsState([]);
+    setPins([]);
     setHighlightedPinId(null);
   }, []);
 
@@ -95,4 +117,6 @@ export const PIN_CATEGORY_CONFIG: Record<
   restaurant: { emoji: '🍽️', color: '#f59e0b', label: 'Restaurant' },
   event: { emoji: '🎉', color: '#a855f7', label: 'Event' },
   attraction: { emoji: '📍', color: '#3b82f6', label: 'Attraction' },
+  /** Maps Grounding Lite / live-Google place pins (MASTRA-049+) — neutral gray. */
+  grounded: { emoji: '📌', color: '#6B7280', label: 'Place' },
 };
