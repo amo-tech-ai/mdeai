@@ -17,6 +17,8 @@ const rentalSchema = z.object({
   host_name: z.string(),
   availability: z.string(),
   tags: z.array(z.string()),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export type Rental = z.infer<typeof rentalSchema>;
@@ -98,7 +100,7 @@ async function searchRentalsFromDB(query: RentalQuery): Promise<{ results: Renta
     SELECT id, title, neighborhood, bedrooms, price_daily, currency,
            wifi_speed, amenities, images, host_name, source_url,
            available_from, available_to, pet_friendly, parking_included,
-           minimum_stay_days, slug
+           minimum_stay_days, slug, latitude, longitude
     FROM apartments
     WHERE ${conditions.join(' AND ')}
     ORDER BY price_daily ASC
@@ -123,6 +125,8 @@ async function searchRentalsFromDB(query: RentalQuery): Promise<{ results: Renta
     host_name: r.host_name ?? 'Host',
     availability: formatAvailability(r.available_from, r.available_to),
     tags: deriveTags(r),
+    latitude: r.latitude != null ? Number(r.latitude) : undefined,
+    longitude: r.longitude != null ? Number(r.longitude) : undefined,
   }));
 
   return { results, total: results.length, source: 'supabase' };
@@ -145,6 +149,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Andrés Restrepo',
     availability: 'Available May 15 – Aug 30, 2026',
     tags: ['long-stay', 'remote-work', 'walkable'],
+    latitude: 6.2530,
+    longitude: -75.5910,
   },
   {
     id: 'rnt_lau_002',
@@ -161,6 +167,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Sofía Vélez',
     availability: 'Available now – Jul 10, 2026',
     tags: ['solo-traveler', 'remote-work', 'pet-friendly'],
+    latitude: 6.2515,
+    longitude: -75.5922,
   },
   {
     id: 'rnt_lau_003',
@@ -177,6 +185,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Camila Ortiz',
     availability: 'Available Jun 1 – Dec 31, 2026',
     tags: ['budget', 'long-stay', 'quiet'],
+    latitude: 6.2525,
+    longitude: -75.5932,
   },
   {
     id: 'rnt_lau_004',
@@ -193,6 +203,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Miguel Arango',
     availability: 'Available Jul 1 – Oct 31, 2026',
     tags: ['family', 'premium', 'long-stay'],
+    latitude: 6.2510,
+    longitude: -75.5905,
   },
   {
     id: 'rnt_lau_005',
@@ -209,6 +221,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Laura Gómez',
     availability: 'Available now – Sep 30, 2026',
     tags: ['nightlife', 'walkable', 'solo-traveler'],
+    latitude: 6.2535,
+    longitude: -75.5917,
   },
   {
     id: 'rnt_pob_001',
@@ -225,6 +239,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Patricia Lopera',
     availability: 'Available Jun 1 – Aug 31, 2026',
     tags: ['nightlife', 'walkable', 'gym'],
+    latitude: 6.2090,
+    longitude: -75.5655,
   },
   {
     id: 'rnt_env_001',
@@ -241,6 +257,8 @@ const MOCK_RENTALS: Rental[] = [
     host_name: 'Juliana Mejía',
     availability: 'Available now – Aug 15, 2026',
     tags: ['budget', 'quiet', 'long-stay'],
+    latitude: 6.1750,
+    longitude: -75.5908,
   },
 ];
 
@@ -299,6 +317,8 @@ export const searchRentalsTool = createTool({
         availability: z.string().optional(),
         source_url: z.string().optional(),
         schedule_viewing_url: z.string().optional(),
+        latitude: z.number().optional(),
+        longitude: z.number().optional(),
       }),
     ),
     source: z.enum(['supabase', 'mock']),
@@ -319,6 +339,8 @@ export const searchRentalsTool = createTool({
         availability: r.availability,
         source_url: r.source_url,
         schedule_viewing_url: r.schedule_viewing_url,
+        latitude: r.latitude,
+        longitude: r.longitude,
       })),
       source,
     };

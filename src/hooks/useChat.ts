@@ -405,6 +405,22 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   prev.map(m => m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)
                 );
               }
+              if (ev.type === 'tool-result' && ev.toolName === 'search-rentals' && ev.result?.results?.length) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const listings = (ev.result.results as any[]).map((r) => ({
+                  id: String(r.id),
+                  title: r.title ?? '',
+                  neighborhood: r.neighborhood ?? '',
+                  price_daily: r.nightly_price ?? 0,
+                  bedrooms: r.bedrooms ?? 0,
+                  amenities: r.amenities ?? [],
+                  source_url: r.source_url ?? null,
+                  latitude: r.latitude ?? null,
+                  longitude: r.longitude ?? null,
+                }));
+                const action: ChatAction = { type: 'OPEN_RENTALS_RESULTS', payload: { filters: {}, listings } };
+                setPendingActions(prev => [...prev, action]);
+              }
             } catch { /* incomplete chunk — skip */ }
           }
         }
