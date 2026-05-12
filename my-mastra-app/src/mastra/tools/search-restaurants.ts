@@ -181,5 +181,8 @@ export const searchRestaurantsTool = createTool({
     total: z.number(),
     source: z.literal('mock'),
   }),
-  execute: async (inputData: RestaurantQuery) => searchRestaurants(inputData),
+  execute: async (inputData: RestaurantQuery) => {
+    const { cuisine, neighborhood, maxPricePerPerson, minRating, limit = 5 } = inputData;
+    return searchRestaurants({ cuisine, neighborhood, maxPricePerPerson, minRating, limit });
+  },
 });

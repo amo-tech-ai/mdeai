@@ -179,5 +179,8 @@ export const searchAttractionsTool = createTool({
     total: z.number(),
     source: z.literal('mock'),
   }),
-  execute: async (inputData: AttractionQuery) => searchAttractions(inputData),
+  execute: async (inputData: AttractionQuery) => {
+    const { category, neighborhood, maxPriceUsd, freeOnly, limit = 5 } = inputData;
+    return searchAttractions({ category, neighborhood, maxPriceUsd, freeOnly, limit });
+  },
 });

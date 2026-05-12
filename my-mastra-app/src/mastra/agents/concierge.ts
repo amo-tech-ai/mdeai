@@ -168,9 +168,11 @@ Never reply with an empty list and no recovery.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
   model: 'google/gemini-3.1-flash-lite-preview',
   tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
-  processors: [
-    new PromptInjectionDetector(),
-    new TokenLimiter({ maxTokens: 8192 }),
+  inputProcessors: [
+    new PromptInjectionDetector({
+      model: 'google/gemini-3.1-flash-lite-preview',
+    }),
+    new TokenLimiter(8192),
   ],
   memory: new Memory({
     options: {

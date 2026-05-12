@@ -113,5 +113,8 @@ export const searchEventsTool = createTool({
     total: z.number(),
     source: z.literal('mock'),
   }),
-  execute: async (inputData: EventQuery) => searchEvents(inputData),
+  execute: async (inputData: EventQuery) => {
+    const { category, neighborhood, maxPricePerTicket, limit = 5 } = inputData;
+    return searchEvents({ category, neighborhood, maxPricePerTicket, limit });
+  },
 });

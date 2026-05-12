@@ -278,7 +278,7 @@ export async function searchRentals(
 export const searchRentalsTool = createTool({
   id: 'search-rentals',
   description:
-    'Search Medellín rentals by neighborhood, bedrooms, and price. Returns rich cards with source_url and schedule_viewing_url. Queries live Supabase apartments table; falls back to demo data if DB is unavailable.',
+    'Search Medellín rentals by neighborhood, bedrooms, and price. Returns rental cards with source_url and schedule_viewing_url. Queries live Supabase apartments table; falls back to demo data if DB is unavailable.',
   inputSchema: z.object({
     neighborhood: z.string().optional().describe('e.g. Laureles, El Poblado, Envigado'),
     minBedrooms: z.number().int().min(0).optional(),
@@ -286,18 +286,41 @@ export const searchRentalsTool = createTool({
     limit: z.number().int().min(1).max(20).default(8),
   }),
   outputSchema: z.object({
-    results: z.array(rentalSchema),
-    total: z.number(),
+    results: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        neighborhood: z.string(),
+        bedrooms: z.number(),
+        nightly_price: z.number(),
+        host_name: z.string().optional(),
+        wifi: z.boolean().optional(),
+        amenities: z.array(z.string()).optional(),
+        availability: z.string().optional(),
+        source_url: z.string().optional(),
+        schedule_viewing_url: z.string().optional(),
+      }),
+    ),
     source: z.enum(['supabase', 'mock']),
   }),
   execute: async (inputData: RentalQuery) => {
-    if (process.env.DATABASE_URL) {
-      try {
-        return await searchRentalsFromDB(inputData);
-      } catch (err) {
-        console.warn('[search-rentals] DB query failed, falling back to mock:', (err as Error).message);
-      }
-    }
-    return searchRentalsFromMock(inputData);
+    const { neighborhood, minBedrooms, maxPricePerNight, limit = 8 } = inputData;
+    const { results, source } = await searchRentals({ neighborhood, minBedrooms, maxPricePerNight, limit });
+    return {
+      results: results.map((r) => ({
+        id: r.id,
+        title: r.title,
+        neighborhood: r.neighborhood,
+        bedrooms: r.bedrooms,
+        nightly_price: r.nightly_price,
+        host_name: r.host_name,
+        wifi: r.wifi,
+        amenities: r.amenities,
+        availability: r.availability,
+        source_url: r.source_url,
+        schedule_viewing_url: r.schedule_viewing_url,
+      })),
+      source,
+    };
   },
 });

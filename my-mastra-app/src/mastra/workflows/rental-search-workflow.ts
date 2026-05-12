@@ -49,7 +49,7 @@ const cardSchema = z.object({
 
 const searchStep = createStep({
   id: 'search-rentals',
-  description: 'Calls the search-rentals helper with mock data.',
+  description: 'Calls searchRentalsTool with official execute({ context }) pattern.',
   inputSchema: queryInputSchema,
   outputSchema: z.object({
     results: z.array(rentalSchema),
@@ -63,7 +63,15 @@ const searchStep = createStep({
       maxPricePerNight: inputData.maxPricePerNight,
       limit: inputData.limit ?? 8,
     });
-    return { results: out.results, total: out.total, preference: inputData.preference };
+    const results = out.results.map((r) => ({
+      ...r,
+      currency: 'USD' as const,
+      wifi: r.wifi ?? false,
+      amenities: r.amenities ?? [],
+      image: r.image ?? '',
+      tags: r.tags ?? [],
+    }));
+    return { results, total: results.length, preference: inputData.preference };
   },
 });
 
