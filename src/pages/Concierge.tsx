@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Sparkles, MessageCircle, Plus, Clock, Home, Plane, Compass, 
-  CalendarCheck, Archive, ChevronRight, MapPin, UtensilsCrossed, Building2, Car
-} from "lucide-react";
+import { ChatMap } from "@/components/chat/ChatMap";
+import { MapProvider, mergePinsByCategory, useMapContext, type MapPin as MapPinData } from "@/context/MapContext";
+import type { OpenEventResultsAction, OpenRestaurantResultsAction, OpenAttractionResultsAction } from "@/types/chat";
+import { Sparkles, MessageCircle, Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useChat } from "@/hooks/useChat";
@@ -16,24 +14,17 @@ import { ChatTabs } from "@/components/chat/ChatTabs";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatWelcome } from "@/components/chat/ChatWelcome";
-import { ConversationList } from "@/components/chat/ConversationList";
-import type { ChatTab, Conversation } from "@/types/chat";
-import { format, formatDistanceToNow } from "date-fns";
+import type { ChatTab } from "@/types/chat";
+import { formatDistanceToNow } from "date-fns";
 
-// Quick action cards for the Intelligence panel
-const quickActions = [
-  { icon: UtensilsCrossed, label: "Find Restaurant", query: "Find a restaurant in El Poblado" },
-  { icon: Building2, label: "Find Apartment", query: "Find an apartment for next month" },
-  { icon: Car, label: "Rent a Car", query: "Find a car to rent" },
-  { icon: MapPin, label: "Things to Do", query: "What events are happening this weekend?" },
-];
 
-export default function Concierge() {
+function ConciergeInner() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { activeTrip } = useTripContext();
+  useTripContext();
   const [activeTab, setActiveTab] = useState<ChatTab>("concierge");
-  
+  const { setPins } = useMapContext();
+
   const {
     messages,
     conversations,
@@ -43,12 +34,64 @@ export default function Concierge() {
     fetchConversations,
     sendMessage,
     cancelStream,
-    createConversation,
     selectConversation,
-    archiveConversation,
     setCurrentConversation,
     setMessages,
+    pendingActions,
   } = useChat(activeTab);
+
+  // Sync pending tool results → map pins (per-category merge; latest action wins per type — MASTRA-047)
+  useEffect(() => {
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_RENTALS_RESULTS');
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    const newPins = listings.map((l) => ({
+      id: l.id, category: 'rental' as const, title: l.title,
+      latitude: l.latitude ?? null, longitude: l.longitude ?? null,
+      label: l.price_daily != null ? `$${l.price_daily}/mo` : undefined,
+      meta: { image: l.images?.[0] ?? null, neighborhood: l.neighborhood },
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'rental', newPins));
+  }, [pendingActions, setPins]);
+
+  useEffect(() => {
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_EVENT_RESULTS') as OpenEventResultsAction | undefined;
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    const newPins = listings.map((e) => ({
+      id: e.id, category: 'event' as const, title: e.title,
+      latitude: e.latitude ?? null, longitude: e.longitude ?? null,
+      label: e.pricePerTicket != null ? `$${e.pricePerTicket}` : undefined,
+      meta: { source_url: e.sourceUrl, neighborhood: e.neighborhood, venue: e.venue },
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'event', newPins));
+  }, [pendingActions, setPins]);
+
+  useEffect(() => {
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_RESTAURANT_RESULTS') as OpenRestaurantResultsAction | undefined;
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    const newPins = listings.map((r) => ({
+      id: r.id, category: 'restaurant' as const, title: r.name,
+      latitude: r.latitude ?? null, longitude: r.longitude ?? null,
+      label: r.priceTier ?? undefined,
+      meta: { source_url: r.sourceUrl, neighborhood: r.neighborhood, rating: r.rating },
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'restaurant', newPins));
+  }, [pendingActions, setPins]);
+
+  useEffect(() => {
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_ATTRACTION_RESULTS') as OpenAttractionResultsAction | undefined;
+    const listings = action?.payload.listings;
+    if (!listings?.length) return;
+    const newPins = listings.map((a) => ({
+      id: a.id, category: 'attraction' as const, title: a.name,
+      latitude: a.latitude ?? null, longitude: a.longitude ?? null,
+      label: a.priceUsd === 0 ? 'Free' : a.priceUsd != null ? `$${a.priceUsd}` : undefined,
+      meta: { source_url: a.sourceUrl, neighborhood: a.neighborhood, rating: a.rating },
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'attraction', newPins));
+  }, [pendingActions, setPins]);
 
   // Fetch conversations on mount and tab change
   useEffect(() => {
@@ -72,9 +115,6 @@ export default function Concierge() {
     sendMessage(suggestion);
   };
 
-  const handleQuickAction = (query: string) => {
-    sendMessage(query);
-  };
 
   if (!user) {
     return (
@@ -199,88 +239,10 @@ export default function Concierge() {
           </div>
         </main>
 
-        {/* RIGHT PANEL: Intelligence */}
-        <aside className="border-l border-border bg-secondary/30 flex flex-col h-screen">
-          <div className="p-6 border-b border-border">
-            <h2 className="font-display text-lg font-semibold text-foreground">Intelligence</h2>
-            <p className="text-sm text-muted-foreground mt-1">Context & quick actions</p>
-          </div>
-
-          <ScrollArea className="flex-1 p-6">
-            <div className="space-y-6">
-              {/* Active Trip Context */}
-              {activeTrip && (
-                <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Plane className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium text-primary">Active Trip</span>
-                  </div>
-                  <p className="text-sm font-medium text-foreground">{activeTrip.title}</p>
-                  {activeTrip.start_date && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {format(new Date(activeTrip.start_date), "MMM d")} - {activeTrip.end_date && format(new Date(activeTrip.end_date), "MMM d, yyyy")}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Quick Actions */}
-              <div>
-                <h3 className="text-sm font-medium text-foreground uppercase tracking-wider mb-3">
-                  Quick Actions
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {quickActions.map((action) => (
-                    <button
-                      key={action.label}
-                      onClick={() => handleQuickAction(action.query)}
-                      className="flex flex-col items-center gap-2 p-4 rounded-xl bg-card border border-border hover:border-primary/50 transition-all text-center"
-                    >
-                      <action.icon className="w-5 h-5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-foreground">{action.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* AI Insight */}
-              <div className="p-4 rounded-2xl bg-card border border-border">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium text-foreground">AI Insight</span>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  I can help you discover restaurants, plan trips, find apartments, or book experiences in Medellín. Just ask!
-                </p>
-              </div>
-
-              {/* Tab-Specific Context */}
-              {activeTab === "explore" && (
-                <div className="p-4 rounded-xl bg-muted/50 border border-border">
-                  <h4 className="text-sm font-medium text-foreground mb-2">Popular Areas</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["El Poblado", "Laureles", "Envigado", "El Centro"].map((area) => (
-                      <Badge key={area} variant="secondary" className="cursor-pointer hover:bg-secondary/80">
-                        {area}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "bookings" && (
-                <div className="p-4 rounded-xl bg-muted/50 border border-border">
-                  <h4 className="text-sm font-medium text-foreground mb-2">Booking Help</h4>
-                  <p className="text-xs text-muted-foreground">
-                    I can help you manage reservations, cancel bookings, or find new availability.
-                  </p>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </aside>
+        {/* RIGHT PANEL: Map */}
+        <div className="h-screen overflow-hidden">
+          <ChatMap />
+        </div>
       </div>
 
       {/* Mobile Layout */}
@@ -322,5 +284,13 @@ export default function Concierge() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Concierge() {
+  return (
+    <MapProvider>
+      <ConciergeInner />
+    </MapProvider>
   );
 }

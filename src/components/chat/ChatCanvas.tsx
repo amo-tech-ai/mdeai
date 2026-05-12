@@ -11,6 +11,7 @@ import { ChatLeftNav } from './ChatLeftNav';
 import { MobileNav } from '@/components/layout/MobileNav';
 import {
   MapProvider,
+  mergePinsByCategory,
   useMapContext,
   type MapPin as MapPinData,
   type RentalPinMeta,
@@ -256,11 +257,11 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, authLoading, user, anonSessionId]);
 
-  // Populate map pins whenever actions deliver new listings. Uses
-  // latitude/longitude from the inline payload; falls back to a "title-only"
-  // pin (still renders in the list even without coords).
+  // Populate map pins when listing actions deliver coords. Per-category merge
+  // (MASTRA-047): multi-tool turns keep pins from other categories; latest
+  // action wins within each category (reverse find below).
   useEffect(() => {
-    const rentalAction = pendingActions.find(
+    const rentalAction = [...pendingActions].reverse().find(
       (a) => a.type === 'OPEN_RENTALS_RESULTS',
     );
     const listings = rentalAction?.payload.listings;
@@ -286,32 +287,18 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
         meta,
       };
     });
-    // Pin lifecycle (single source of truth — see also ChatMap which
-    // only RENDERS pins from this context, never owns them):
-    //   • Each new tool response REPLACES the entire pin set
-    //     (`setPins(nextPins)` above) — we don't merge with prior
-    //     turns. Rationale: the user's intent shifts conversationally
-    //     ("show me Laureles" → "what about Provenza?"), and merging
-    //     would leave Laureles pins lingering on the Provenza map.
-    //   • The two effects below DO clear pins, but only on bigger
-    //     scope changes:
-    //       (a) message list emptied → presumably new chat
-    //       (b) currentConversation.id changed → switched chats
-    //   • The cleanup below is intentionally empty — un-mounting this
-    //     effect doesn't drop pins (they belong to the conversation,
-    //     not the effect's lifecycle).
-    setPins(nextPins);
+    setPins((prev) => mergePinsByCategory(prev, 'rental', nextPins));
     return () => {
-      /* intentionally empty — see lifecycle comment above */
+      /* intentionally empty — pins belong to conversation, not effect teardown */
     };
   }, [pendingActions, setPins]);
 
   // Event pins
   useEffect(() => {
-    const action = pendingActions.find((a) => a.type === 'OPEN_EVENT_RESULTS') as OpenEventResultsAction | undefined;
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_EVENT_RESULTS') as OpenEventResultsAction | undefined;
     const listings = action?.payload.listings;
     if (!listings?.length) return;
-    setPins(listings.map((e) => ({
+    const nextPins = listings.map((e) => ({
       id: e.id,
       category: 'event' as const,
       title: e.title,
@@ -319,15 +306,16 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
       longitude: e.longitude ?? null,
       label: e.pricePerTicket != null ? `$${e.pricePerTicket}` : undefined,
       meta: { source_url: e.sourceUrl, neighborhood: e.neighborhood, venue: e.venue },
-    } satisfies MapPinData)));
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'event', nextPins));
   }, [pendingActions, setPins]);
 
   // Restaurant pins
   useEffect(() => {
-    const action = pendingActions.find((a) => a.type === 'OPEN_RESTAURANT_RESULTS') as OpenRestaurantResultsAction | undefined;
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_RESTAURANT_RESULTS') as OpenRestaurantResultsAction | undefined;
     const listings = action?.payload.listings;
     if (!listings?.length) return;
-    setPins(listings.map((r) => ({
+    const nextPins = listings.map((r) => ({
       id: r.id,
       category: 'restaurant' as const,
       title: r.name,
@@ -335,15 +323,16 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
       longitude: r.longitude ?? null,
       label: r.priceTier ?? undefined,
       meta: { source_url: r.sourceUrl, neighborhood: r.neighborhood, rating: r.rating },
-    } satisfies MapPinData)));
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'restaurant', nextPins));
   }, [pendingActions, setPins]);
 
   // Attraction pins
   useEffect(() => {
-    const action = pendingActions.find((a) => a.type === 'OPEN_ATTRACTION_RESULTS') as OpenAttractionResultsAction | undefined;
+    const action = [...pendingActions].reverse().find((a) => a.type === 'OPEN_ATTRACTION_RESULTS') as OpenAttractionResultsAction | undefined;
     const listings = action?.payload.listings;
     if (!listings?.length) return;
-    setPins(listings.map((a) => ({
+    const nextPins = listings.map((a) => ({
       id: a.id,
       category: 'attraction' as const,
       title: a.name,
@@ -351,7 +340,8 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
       longitude: a.longitude ?? null,
       label: a.priceUsd === 0 ? 'Free' : a.priceUsd != null ? `$${a.priceUsd}` : undefined,
       meta: { source_url: a.sourceUrl, neighborhood: a.neighborhood, rating: a.rating },
-    } satisfies MapPinData)));
+    } satisfies MapPinData));
+    setPins((prev) => mergePinsByCategory(prev, 'attraction', nextPins));
   }, [pendingActions, setPins]);
 
   // Clear pins when the user clears the message list (e.g. new chat).

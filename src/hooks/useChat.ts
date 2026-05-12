@@ -16,6 +16,7 @@ import type { ReasoningPhase } from '@/components/chat/ChatReasoningTrace';
 import { useAnonSession } from './useAnonSession';
 import { useRealtimeChannel, RealtimeEvent } from '@/hooks/useRealtimeChannel';
 import { toast } from 'sonner';
+import { listingToolActionPassesVersionGate, normalizeToolOutput } from '@/lib/chat/normalize-tool-output';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const MASTRA_SERVER_URL = import.meta.env.VITE_MASTRA_SERVER_URL ?? 'http://localhost:4111';
@@ -383,6 +384,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
         const mastraReader = mastraRes.body.getReader();
         const mastraDecoder = new TextDecoder();
         let mastraBuffer = '';
+        const toolCallNames = new Map<string, string>();
 
         outer: while (true) {
           const { done, value } = await mastraReader.read();
@@ -405,6 +407,24 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   prev.map(m => m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)
                 );
               }
+              if (ev.type === 'tool-input-available' && ev.toolCallId && ev.toolName) {
+                toolCallNames.set(String(ev.toolCallId), String(ev.toolName));
+              }
+              if (ev.type === 'tool-output-available' && ev.toolCallId && ev.output) {
+                const toolName = toolCallNames.get(String(ev.toolCallId)) ?? '';
+                const normalized = normalizeToolOutput(toolName, ev.output);
+                if (
+                  normalized &&
+                  listingToolActionPassesVersionGate(normalized, toolName) &&
+                  normalized.payload &&
+                  'listings' in normalized.payload
+                ) {
+                  const listings = normalized.payload.listings;
+                  if (Array.isArray(listings) && listings.length > 0) {
+                    setPendingActions((prev) => [...prev, normalized]);
+                  }
+                }
+              }
               if (ev.type === 'data-mdeai-actions' && ev.data?.cards?.length) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const cards = ev.data.cards as any[];
@@ -413,6 +433,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
 
                 if (kind === 'rental_results') {
                   action = {
+                    version: 1,
                     type: 'OPEN_RENTALS_RESULTS',
                     payload: {
                       filters: {},
@@ -432,6 +453,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   };
                 } else if (kind === 'event_results') {
                   action = {
+                    version: 1,
                     type: 'OPEN_EVENT_RESULTS',
                     payload: {
                       filters: {},
@@ -453,6 +475,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   };
                 } else if (kind === 'restaurant_results') {
                   action = {
+                    version: 1,
                     type: 'OPEN_RESTAURANT_RESULTS',
                     payload: {
                       filters: {},
@@ -474,6 +497,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                   };
                 } else if (kind === 'attraction_results') {
                   action = {
+                    version: 1,
                     type: 'OPEN_ATTRACTION_RESULTS',
                     payload: {
                       filters: {},

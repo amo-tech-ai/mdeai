@@ -42,6 +42,7 @@ export interface ConsideredButRejected {
 }
 
 export interface OpenRentalsResultsAction {
+  version: 1;
   type: 'OPEN_RENTALS_RESULTS';
   payload: {
     filters: Record<string, unknown>;
@@ -110,6 +111,7 @@ export interface AttractionInlineListing {
 }
 
 export interface OpenEventResultsAction {
+  version: 1;
   type: 'OPEN_EVENT_RESULTS';
   payload: {
     filters: Record<string, unknown>;
@@ -118,6 +120,7 @@ export interface OpenEventResultsAction {
 }
 
 export interface OpenRestaurantResultsAction {
+  version: 1;
   type: 'OPEN_RESTAURANT_RESULTS';
   payload: {
     filters: Record<string, unknown>;
@@ -126,6 +129,7 @@ export interface OpenRestaurantResultsAction {
 }
 
 export interface OpenAttractionResultsAction {
+  version: 1;
   type: 'OPEN_ATTRACTION_RESULTS';
   payload: {
     filters: Record<string, unknown>;
