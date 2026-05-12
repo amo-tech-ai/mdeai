@@ -423,6 +423,7 @@ export function useChat(activeTab: ChatTab, options?: UseChatOptions) {
                         price_daily: c.price_daily ?? null,
                         bedrooms: c.bedrooms ?? null,
                         amenities: c.amenities ?? [],
+                        images: c.image ? [c.image] : null,
                         source_url: c.source_url ?? null,
                         latitude: c.latitude ?? null,
                         longitude: c.longitude ?? null,

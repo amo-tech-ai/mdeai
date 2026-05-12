@@ -340,6 +340,7 @@ export const searchRentalsTool = createTool({
           price_daily: r.nightly_price,
           bedrooms: r.bedrooms,
           amenities: r.amenities,
+          image: r.image,
           source_url: r.source_url,
           latitude: r.latitude ?? null,
           longitude: r.longitude ?? null,
