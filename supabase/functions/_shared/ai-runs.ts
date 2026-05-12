@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- SupabaseClient<> generic matches createClient() from supabase-js@2 */
-/** Keep `esm.sh` here until all callers migrate to `npm:` — avoids cross-specifier type incompatibility with insertAiRun(). */
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.101.1";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 /** Matches `public.agent_type` enum. */
 export type AgentTypeEnum =
