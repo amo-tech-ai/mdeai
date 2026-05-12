@@ -220,7 +220,7 @@ const dispatchStep = createStep({
     }
 
     if (intent === 'event_discovery') {
-      const out = searchEvents({
+      const out = await searchEvents({
         category: filters.category as
           | 'music'
           | 'food'

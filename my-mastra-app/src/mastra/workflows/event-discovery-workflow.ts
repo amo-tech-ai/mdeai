@@ -40,7 +40,7 @@ const searchStep = createStep({
     total: z.number(),
   }),
   execute: async ({ inputData }) => {
-    const out = searchEvents({
+    const out = await searchEvents({
       category: inputData.category,
       neighborhood: inputData.neighborhood,
       maxPricePerTicket: inputData.maxPricePerTicket,
