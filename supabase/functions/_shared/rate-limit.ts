@@ -9,7 +9,7 @@
  *                         take down the whole service.
  */
 
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const buckets = new Map<string, number[]>();
 

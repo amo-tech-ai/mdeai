@@ -81,7 +81,7 @@ The earlier plan was to land all of this — helper, 5 sponsor functions, tests,
    All tests must pass.
 3. **Run `npm run verify:edge`** — confirms no edge function regression and that the orphan-skip guard (from MASTRA-037) correctly skips the untracked sponsor functions on disk.
 4. **Run `npm run floor`** — `lint` + `build` + `test` + `verify:edge` all green.
-5. **Open PR-2** titled `feat(edge-shared): callGeminiStructured helper + 8 Deno tests`. PR body must:
+5. **Open PR-2** titled `feat(edge-shared): callGeminiStructured helper + 9 Deno tests`. PR body must:
    - State that this is the helper foundation only.
    - List the missing sponsor schema (see §11) as the reason sponsor functions are not in this PR.
    - Link to MASTRA-043 (sponsor schema foundation) and MASTRA-044 (sponsor Gemini functions) as the planned follow-ups.
