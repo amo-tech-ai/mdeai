@@ -80,20 +80,21 @@ COMMENT ON FUNCTION public.set_updated_at() IS
 -- NOTE: `events.updated_at` already exists on the live `medellin` Supabase project (verified 2026-05-03).
 -- Skipping `ADD COLUMN updated_at` to avoid 42701 conflict.
 ALTER TABLE public.events
-  ADD COLUMN slug                text,
-  ADD COLUMN status              text NOT NULL DEFAULT 'draft'
+  ADD COLUMN IF NOT EXISTS slug                text,
+  ADD COLUMN IF NOT EXISTS status              text NOT NULL DEFAULT 'draft'
     CHECK (status IN ('draft','published','live','closed','archived')),
-  ADD COLUMN organizer_id        uuid REFERENCES public.profiles(id),
-  ADD COLUMN total_capacity      int,
-  ADD COLUMN staff_link_version  int  NOT NULL DEFAULT 1,
-  ADD COLUMN venue_id            uuid;                     -- FK added below after event_venues exists
+  ADD COLUMN IF NOT EXISTS organizer_id        uuid REFERENCES public.profiles(id),
+  ADD COLUMN IF NOT EXISTS total_capacity      int,
+  ADD COLUMN IF NOT EXISTS staff_link_version  int  NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS venue_id            uuid;       -- FK added below after event_venues exists
 
-CREATE UNIQUE INDEX events_slug_uk        ON public.events(slug) WHERE slug IS NOT NULL;
-CREATE        INDEX events_organizer_idx  ON public.events(organizer_id) WHERE organizer_id IS NOT NULL;
-CREATE        INDEX events_status_idx     ON public.events(status);
+CREATE UNIQUE INDEX IF NOT EXISTS events_slug_uk        ON public.events(slug) WHERE slug IS NOT NULL;
+CREATE        INDEX IF NOT EXISTS events_organizer_idx  ON public.events(organizer_id) WHERE organizer_id IS NOT NULL;
+CREATE        INDEX IF NOT EXISTS events_status_idx     ON public.events(status);
 -- Per supabase-postgres-best-practices/schema-foreign-key-indexes: index every FK column.
-CREATE        INDEX events_venue_idx      ON public.events(venue_id) WHERE venue_id IS NOT NULL;
+CREATE        INDEX IF NOT EXISTS events_venue_idx      ON public.events(venue_id) WHERE venue_id IS NOT NULL;
 
+DROP TRIGGER IF EXISTS events_set_updated_at ON public.events;
 CREATE TRIGGER events_set_updated_at
   BEFORE UPDATE ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -105,7 +106,7 @@ COMMENT ON COLUMN public.events.staff_link_version IS
 -- 2. NEW: event_venues — distinct from inline events.address for clean P2 evolution
 -- =============================================================================
 
-CREATE TABLE public.event_venues (
+CREATE TABLE IF NOT EXISTS public.event_venues (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organizer_id    uuid NOT NULL REFERENCES public.profiles(id),
   name            text NOT NULL,
@@ -121,24 +122,29 @@ CREATE TABLE public.event_venues (
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX event_venues_org_idx  ON public.event_venues(organizer_id);
-CREATE INDEX event_venues_city_idx ON public.event_venues(city);
+CREATE INDEX IF NOT EXISTS event_venues_org_idx  ON public.event_venues(organizer_id);
+CREATE INDEX IF NOT EXISTS event_venues_city_idx ON public.event_venues(city);
 
 ALTER TABLE public.event_venues ENABLE ROW LEVEL SECURITY;
 
+DROP TRIGGER IF EXISTS event_venues_set_updated_at ON public.event_venues;
 CREATE TRIGGER event_venues_set_updated_at
   BEFORE UPDATE ON public.event_venues
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- Wire events.venue_id FK now that event_venues exists
-ALTER TABLE public.events
-  ADD CONSTRAINT events_venue_fkey FOREIGN KEY (venue_id) REFERENCES public.event_venues(id);
+DO $do$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'events_venue_fkey') THEN
+    ALTER TABLE public.events
+      ADD CONSTRAINT events_venue_fkey FOREIGN KEY (venue_id) REFERENCES public.event_venues(id);
+  END IF;
+END $do$;
 
 -- =============================================================================
 -- 3. NEW: event_tickets — ticket types per event with sale windows + per-order limits
 -- =============================================================================
 
-CREATE TABLE public.event_tickets (
+CREATE TABLE IF NOT EXISTS public.event_tickets (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id        uuid NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
   name            text NOT NULL,
@@ -161,10 +167,11 @@ CREATE TABLE public.event_tickets (
   CHECK (sale_ends_at IS NULL OR sale_starts_at IS NULL OR sale_ends_at > sale_starts_at)
 );
 
-CREATE INDEX event_tickets_event_idx ON public.event_tickets(event_id);
+CREATE INDEX IF NOT EXISTS event_tickets_event_idx ON public.event_tickets(event_id);
 
 ALTER TABLE public.event_tickets ENABLE ROW LEVEL SECURITY;
 
+DROP TRIGGER IF EXISTS event_tickets_set_updated_at ON public.event_tickets;
 CREATE TRIGGER event_tickets_set_updated_at
   BEFORE UPDATE ON public.event_tickets
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -173,7 +180,7 @@ CREATE TRIGGER event_tickets_set_updated_at
 -- 4. NEW: event_orders — one purchase, parent of N attendees, ledger-linked
 -- =============================================================================
 
-CREATE TABLE public.event_orders (
+CREATE TABLE IF NOT EXISTS public.event_orders (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id              uuid NOT NULL REFERENCES public.events(id),
   ticket_id             uuid NOT NULL REFERENCES public.event_tickets(id),
@@ -195,15 +202,16 @@ CREATE TABLE public.event_orders (
   updated_at            timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX event_orders_event_idx   ON public.event_orders(event_id);
-CREATE INDEX event_orders_ticket_idx  ON public.event_orders(ticket_id);                                    -- FK index (skill: schema-foreign-key-indexes)
-CREATE INDEX event_orders_buyer_idx   ON public.event_orders(buyer_user_id) WHERE buyer_user_id IS NOT NULL;
-CREATE INDEX event_orders_payment_idx ON public.event_orders(payment_id) WHERE payment_id IS NOT NULL;      -- FK index for refund lookups
-CREATE INDEX event_orders_status_idx  ON public.event_orders(status);
-CREATE INDEX event_orders_pi_idx      ON public.event_orders(stripe_payment_intent) WHERE stripe_payment_intent IS NOT NULL;
+CREATE INDEX IF NOT EXISTS event_orders_event_idx   ON public.event_orders(event_id);
+CREATE INDEX IF NOT EXISTS event_orders_ticket_idx  ON public.event_orders(ticket_id);                                    -- FK index (skill: schema-foreign-key-indexes)
+CREATE INDEX IF NOT EXISTS event_orders_buyer_idx   ON public.event_orders(buyer_user_id) WHERE buyer_user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS event_orders_payment_idx ON public.event_orders(payment_id) WHERE payment_id IS NOT NULL;      -- FK index for refund lookups
+CREATE INDEX IF NOT EXISTS event_orders_status_idx  ON public.event_orders(status);
+CREATE INDEX IF NOT EXISTS event_orders_pi_idx      ON public.event_orders(stripe_payment_intent) WHERE stripe_payment_intent IS NOT NULL;
 
 ALTER TABLE public.event_orders ENABLE ROW LEVEL SECURITY;
 
+DROP TRIGGER IF EXISTS event_orders_set_updated_at ON public.event_orders;
 CREATE TRIGGER event_orders_set_updated_at
   BEFORE UPDATE ON public.event_orders
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -222,18 +230,23 @@ ALTER TABLE public.payments
   ALTER COLUMN booking_id DROP NOT NULL;
 
 ALTER TABLE public.payments
-  ADD COLUMN event_order_id uuid REFERENCES public.event_orders(id);
+  ADD COLUMN IF NOT EXISTS event_order_id uuid REFERENCES public.event_orders(id);
 
-ALTER TABLE public.payments
-  ADD CONSTRAINT payments_source_chk CHECK (
-    (booking_id IS NOT NULL AND event_order_id IS NULL)
-    OR (booking_id IS NULL AND event_order_id IS NOT NULL)
-  );
+DO $do$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_source_chk') THEN
+    ALTER TABLE public.payments
+      ADD CONSTRAINT payments_source_chk CHECK (
+        (booking_id IS NOT NULL AND event_order_id IS NULL)
+        OR (booking_id IS NULL AND event_order_id IS NOT NULL)
+      );
+  END IF;
+END $do$;
 
 CREATE INDEX IF NOT EXISTS idx_payments_event_order_id
   ON public.payments(event_order_id) WHERE event_order_id IS NOT NULL;
 
 -- New RLS policy for event-order payments (existing booking-payment policies untouched; Postgres OR-unions)
+DROP POLICY IF EXISTS payments_event_order_select ON public.payments;
 CREATE POLICY payments_event_order_select ON public.payments FOR SELECT
   USING (
     payments.event_order_id IS NOT NULL AND EXISTS (
@@ -253,7 +266,7 @@ COMMENT ON COLUMN public.payments.event_order_id IS
 -- =============================================================================
 -- id is caller-provided so JWT.attendee_id always equals event_attendees.id (audit #1 R6 fix)
 
-CREATE TABLE public.event_attendees (
+CREATE TABLE IF NOT EXISTS public.event_attendees (
   id            uuid PRIMARY KEY,                            -- caller-provided UUID (NOT default)
   order_id      uuid NOT NULL REFERENCES public.event_orders(id) ON DELETE CASCADE,
   ticket_id     uuid NOT NULL REFERENCES public.event_tickets(id),
@@ -269,12 +282,13 @@ CREATE TABLE public.event_attendees (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX event_attendees_order_idx  ON public.event_attendees(order_id);
-CREATE INDEX event_attendees_ticket_idx ON public.event_attendees(ticket_id);  -- FK index (skill: schema-foreign-key-indexes)
-CREATE INDEX event_attendees_event_idx  ON public.event_attendees(event_id);
+CREATE INDEX IF NOT EXISTS event_attendees_order_idx  ON public.event_attendees(order_id);
+CREATE INDEX IF NOT EXISTS event_attendees_ticket_idx ON public.event_attendees(ticket_id);  -- FK index (skill: schema-foreign-key-indexes)
+CREATE INDEX IF NOT EXISTS event_attendees_event_idx  ON public.event_attendees(event_id);
 
 ALTER TABLE public.event_attendees ENABLE ROW LEVEL SECURITY;
 
+DROP TRIGGER IF EXISTS event_attendees_set_updated_at ON public.event_attendees;
 CREATE TRIGGER event_attendees_set_updated_at
   BEFORE UPDATE ON public.event_attendees
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -286,7 +300,7 @@ COMMENT ON COLUMN public.event_attendees.id IS
 -- 6. NEW: event_check_ins — audit trail per scan (forensics + ops monitoring)
 -- =============================================================================
 
-CREATE TABLE public.event_check_ins (
+CREATE TABLE IF NOT EXISTS public.event_check_ins (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id        uuid NOT NULL REFERENCES public.events(id),
   attendee_id     uuid REFERENCES public.event_attendees(id),  -- nullable: failed scans w/ unknown token
@@ -301,10 +315,10 @@ CREATE TABLE public.event_check_ins (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX event_check_ins_event_idx     ON public.event_check_ins(event_id, created_at DESC);
-CREATE INDEX event_check_ins_attendee_idx  ON public.event_check_ins(attendee_id) WHERE attendee_id IS NOT NULL;
-CREATE INDEX event_check_ins_scanned_idx   ON public.event_check_ins(scanned_by) WHERE scanned_by IS NOT NULL;  -- FK index (skill: schema-foreign-key-indexes)
-CREATE INDEX event_check_ins_failures_idx  ON public.event_check_ins(event_id, result) WHERE result <> 'consumed';
+CREATE INDEX IF NOT EXISTS event_check_ins_event_idx     ON public.event_check_ins(event_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS event_check_ins_attendee_idx  ON public.event_check_ins(attendee_id) WHERE attendee_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS event_check_ins_scanned_idx   ON public.event_check_ins(scanned_by) WHERE scanned_by IS NOT NULL;  -- FK index (skill: schema-foreign-key-indexes)
+CREATE INDEX IF NOT EXISTS event_check_ins_failures_idx  ON public.event_check_ins(event_id, result) WHERE result <> 'consumed';
 
 ALTER TABLE public.event_check_ins ENABLE ROW LEVEL SECURITY;
 -- No updated_at trigger — check-in records are immutable.
@@ -315,23 +329,27 @@ ALTER TABLE public.event_check_ins ENABLE ROW LEVEL SECURITY;
 
 -- event_venues: public SELECT only when venue has at least one published/live event
 -- (audit #2 R: don't expose draft/private venue rows). Owner sees all own venues.
+DROP POLICY IF EXISTS venues_public_select ON public.event_venues;
 CREATE POLICY venues_public_select ON public.event_venues FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM public.events e
     WHERE e.venue_id = event_venues.id AND e.status IN ('published','live')
   ));
 
+DROP POLICY IF EXISTS venues_owner_all ON public.event_venues;
 CREATE POLICY venues_owner_all ON public.event_venues FOR ALL
   USING (organizer_id = (select auth.uid()))
   WITH CHECK (organizer_id = (select auth.uid()));
 
 -- event_tickets: public SELECT only on active tickets of published-or-live events
+DROP POLICY IF EXISTS tickets_public_select ON public.event_tickets;
 CREATE POLICY tickets_public_select ON public.event_tickets FOR SELECT
   USING (is_active = true AND EXISTS (
     SELECT 1 FROM public.events e
     WHERE e.id = event_tickets.event_id AND e.status IN ('published','live')
   ));
 
+DROP POLICY IF EXISTS tickets_organizer_all ON public.event_tickets;
 CREATE POLICY tickets_organizer_all ON public.event_tickets FOR ALL
   USING (EXISTS (
     SELECT 1 FROM public.events e
@@ -345,9 +363,11 @@ CREATE POLICY tickets_organizer_all ON public.event_tickets FOR ALL
 -- event_orders: authenticated buyer sees own; organizer sees own event's orders;
 -- ANONYMOUS buyer reads via get_anonymous_order RPC (no direct policy).
 -- INSERT/UPDATE/DELETE: service-role only via RPCs.
+DROP POLICY IF EXISTS orders_buyer_select ON public.event_orders;
 CREATE POLICY orders_buyer_select ON public.event_orders FOR SELECT
   USING (buyer_user_id = (select auth.uid()));
 
+DROP POLICY IF EXISTS orders_organizer_select ON public.event_orders;
 CREATE POLICY orders_organizer_select ON public.event_orders FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM public.events e
@@ -355,6 +375,7 @@ CREATE POLICY orders_organizer_select ON public.event_orders FOR SELECT
   ));
 
 -- event_attendees: visible via order chain
+DROP POLICY IF EXISTS attendees_via_order_select ON public.event_attendees;
 CREATE POLICY attendees_via_order_select ON public.event_attendees FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM public.event_orders o
@@ -369,6 +390,7 @@ CREATE POLICY attendees_via_order_select ON public.event_attendees FOR SELECT
 
 -- event_check_ins: organizer sees own event's logs only.
 -- INSERT: service-role-only (via record_check_in RPC, called from task 006).
+DROP POLICY IF EXISTS checkins_organizer_select ON public.event_check_ins;
 CREATE POLICY checkins_organizer_select ON public.event_check_ins FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM public.events e

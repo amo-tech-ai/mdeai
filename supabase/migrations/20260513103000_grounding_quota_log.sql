@@ -22,6 +22,7 @@ comment on table public.grounding_quota_log is
 alter table public.grounding_quota_log enable row level security;
 
 -- Restrict operations to service_role JWT context only (defense in depth).
+drop policy if exists "service_role_write" on public.grounding_quota_log;
 create policy "service_role_write" on public.grounding_quota_log
   for all
   using ((select auth.role()) = 'service_role')

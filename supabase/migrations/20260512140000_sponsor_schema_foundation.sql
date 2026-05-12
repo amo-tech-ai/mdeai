@@ -32,15 +32,22 @@ comment on table sponsor.invoices is
 
 create index if not exists idx_sponsor_invoices_application
   on sponsor.invoices (application_id);
-create index if not exists idx_sponsor_invoices_owner
-  on sponsor.invoices (owner_user_id);
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='invoices' AND column_name='owner_user_id') THEN
+    EXECUTE 'create index if not exists idx_sponsor_invoices_owner on sponsor.invoices (owner_user_id)';
+  END IF;
+END $do$;
 
 alter table sponsor.invoices enable row level security;
 
-create policy sponsor_invoices_select_own
-  on sponsor.invoices for select to authenticated
-  using (owner_user_id = (select auth.uid()));
+drop policy if exists sponsor_invoices_select_own on sponsor.invoices;
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='invoices' AND column_name='owner_user_id') THEN
+    EXECUTE $e$ create policy sponsor_invoices_select_own on sponsor.invoices for select to authenticated using (owner_user_id = (select auth.uid())); $e$;
+  END IF;
+END $do$;
 
+drop policy if exists sponsor_invoices_service_all on sponsor.invoices;
 create policy sponsor_invoices_service_all
   on sponsor.invoices for all to service_role
   using (true) with check (true);
@@ -67,15 +74,22 @@ comment on table sponsor.contracts is
 
 create index if not exists idx_sponsor_contracts_application
   on sponsor.contracts (application_id);
-create index if not exists idx_sponsor_contracts_owner
-  on sponsor.contracts (owner_user_id);
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='contracts' AND column_name='owner_user_id') THEN
+    EXECUTE 'create index if not exists idx_sponsor_contracts_owner on sponsor.contracts (owner_user_id)';
+  END IF;
+END $do$;
 
 alter table sponsor.contracts enable row level security;
 
-create policy sponsor_contracts_select_own
-  on sponsor.contracts for select to authenticated
-  using (owner_user_id = (select auth.uid()));
+drop policy if exists sponsor_contracts_select_own on sponsor.contracts;
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='contracts' AND column_name='owner_user_id') THEN
+    EXECUTE $e$ create policy sponsor_contracts_select_own on sponsor.contracts for select to authenticated using (owner_user_id = (select auth.uid())); $e$;
+  END IF;
+END $do$;
 
+drop policy if exists sponsor_contracts_service_all on sponsor.contracts;
 create policy sponsor_contracts_service_all
   on sponsor.contracts for all to service_role
   using (true) with check (true);
@@ -104,18 +118,25 @@ comment on table sponsor.placements is
 
 create index if not exists idx_sponsor_placements_application
   on sponsor.placements (application_id);
-create index if not exists idx_sponsor_placements_owner
-  on sponsor.placements (owner_user_id);
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='placements' AND column_name='owner_user_id') THEN
+    EXECUTE 'create index if not exists idx_sponsor_placements_owner on sponsor.placements (owner_user_id)';
+  END IF;
+END $do$;
 -- composite index for activate_placements_if_ready update predicate
 create index if not exists idx_sponsor_placements_active_start
   on sponsor.placements (application_id, active, start_at);
 
 alter table sponsor.placements enable row level security;
 
-create policy sponsor_placements_select_own
-  on sponsor.placements for select to authenticated
-  using (owner_user_id = (select auth.uid()));
+drop policy if exists sponsor_placements_select_own on sponsor.placements;
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='placements' AND column_name='owner_user_id') THEN
+    EXECUTE $e$ create policy sponsor_placements_select_own on sponsor.placements for select to authenticated using (owner_user_id = (select auth.uid())); $e$;
+  END IF;
+END $do$;
 
+drop policy if exists sponsor_placements_service_all on sponsor.placements;
 create policy sponsor_placements_service_all
   on sponsor.placements for all to service_role
   using (true) with check (true);
@@ -147,16 +168,18 @@ create index if not exists idx_sponsor_roi_daily_placement_day
 alter table sponsor.roi_daily enable row level security;
 
 -- authenticated sponsors see metrics for their own placements
-create policy sponsor_roi_daily_select_own
-  on sponsor.roi_daily for select to authenticated
-  using (
-    placement_id in (
-      select id from sponsor.placements
-      where owner_user_id = (select auth.uid())
-    )
-  );
+drop policy if exists sponsor_roi_daily_select_own on sponsor.roi_daily;
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='sponsor' AND table_name='placements' AND column_name='owner_user_id') THEN
+    EXECUTE $e$
+      create policy sponsor_roi_daily_select_own on sponsor.roi_daily for select to authenticated
+      using (placement_id in (select id from sponsor.placements where owner_user_id = (select auth.uid())));
+    $e$;
+  END IF;
+END $do$;
 
 -- service_role (cron, analytics, roi-explain edge fn) has full access
+drop policy if exists sponsor_roi_daily_service_all on sponsor.roi_daily;
 create policy sponsor_roi_daily_service_all
   on sponsor.roi_daily for all to service_role
   using (true) with check (true);
@@ -185,4 +208,8 @@ grant all on sponsor.placements to service_role;
 grant all on sponsor.roi_daily  to service_role;
 
 -- identity sequence must be explicitly granted for service_role inserts
-grant usage, select on sequence sponsor.roi_daily_id_seq to service_role;
+DO $do$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_sequences WHERE schemaname='sponsor' AND sequencename='roi_daily_id_seq') THEN
+    EXECUTE $e$ grant usage, select on sequence sponsor.roi_daily_id_seq to service_role $e$;
+  END IF;
+END $do$;
