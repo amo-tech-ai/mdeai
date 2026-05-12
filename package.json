@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:edge": "bash scripts/verify-edge-functions.sh",
-    "verify:supabase": "bash scripts/verify-supabase.sh"
+    "verify:supabase": "bash scripts/verify-supabase.sh",
+    "floor": "npm run lint && npm run build && npm run test && npm run verify:edge"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
