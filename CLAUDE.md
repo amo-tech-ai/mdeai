@@ -40,7 +40,7 @@ npm run test         # Vitest (run once)
 npm run test:watch   # Vitest (watch mode)
 ```
 
-Floor before shipping any change: `npm run lint && npm run build && npm run test`.
+Floor before shipping any change: `npm run floor` (lint + build + test + verify:edge).
 
 ## Project Structure
 

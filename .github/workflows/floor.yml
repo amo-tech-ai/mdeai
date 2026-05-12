@@ -1,0 +1,62 @@
+name: floor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: floor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: lint + build + test (node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: lint
+        run: npm run lint 2>&1 | tee /tmp/floor-lint.log
+      - name: build
+        run: npm run build 2>&1 | tee /tmp/floor-build.log
+      - name: test
+        run: npm run test 2>&1 | tee /tmp/floor-test.log
+      - name: upload node logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: floor-node-logs
+          path: |
+            /tmp/floor-lint.log
+            /tmp/floor-build.log
+            /tmp/floor-test.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deno:
+    name: verify:edge (deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+      - name: verify:edge
+        run: bash scripts/verify-edge-functions.sh 2>&1 | tee /tmp/verify-edge.log
+      - name: upload verify:edge log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: floor-verify-edge-log
+          path: /tmp/verify-edge.log
+          if-no-files-found: ignore
+          retention-days: 7

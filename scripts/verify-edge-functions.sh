@@ -13,20 +13,29 @@ if grep -rE --include='*.ts' 'https://deno\.land/std@[^"'\'']+/http/server' supa
 fi
 
 echo "[verify-edge] Optional: Deno syntax check entrypoints..."
-# Functions skipped from local type-check (must list reason).
-# - sponsor-audience-match: P3, uses unimplemented callGeminiStructured helper (gemini native API). Re-enable when helper lands.
-SKIP_FUNCTIONS=(
-  "sponsor-audience-match"
-  "sponsor-creative-gen"
-  "sponsor-moderate"
-  "sponsor-optimize"
-  "sponsor-roi-explain"
-)
+# Functions skipped from local type-check must use 'name:TASK-ID' format
+# (e.g. "sponsor-roi-explain:MASTRA-036") justifying the skip. Empty is the
+# desired state. Guard below rejects any entry that doesn't match the regex —
+# prevents silent skip-drift (MASTRA-037 §4.4).
+SKIP_FUNCTIONS=()
+
+if [ "${#SKIP_FUNCTIONS[@]}" -gt 0 ]; then
+  for s in "${SKIP_FUNCTIONS[@]}"; do
+    if ! [[ "$s" =~ ^[a-z0-9-]+:[A-Z]+-[0-9]+$ ]]; then
+      echo "[verify-edge] FAIL: SKIP_FUNCTIONS entry '$s' must match 'name:TASK-ID'"
+      echo "                   (e.g. 'sponsor-roi-explain:MASTRA-036')"
+      exit 1
+    fi
+  done
+fi
 
 is_skipped() {
   local name="$1"
+  if [ "${#SKIP_FUNCTIONS[@]}" -eq 0 ]; then
+    return 1
+  fi
   for s in "${SKIP_FUNCTIONS[@]}"; do
-    [ "$name" = "$s" ] && return 0
+    [ "${s%%:*}" = "$name" ] && return 0
   done
   return 1
 }
