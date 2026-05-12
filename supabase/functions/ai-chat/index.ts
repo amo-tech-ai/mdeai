@@ -829,7 +829,11 @@ async function executeSearchEvents(params: Record<string, unknown>, supabase: Su
     id: e.id,
     title: e.name,
     category: (e.event_type || e.subcategory || "Event") as string,
-    venue: ((e.event_venues as { name: string } | null)?.name || e.address || "Medellín") as string,
+    venue: (() => {
+      const v = e.event_venues as unknown as { name: string } | { name: string }[] | null;
+      const venueName = Array.isArray(v) ? v[0]?.name : v?.name;
+      return (venueName || e.address || "Medellín") as string;
+    })(),
     neighborhood: (e.city || "Medellín") as string,
     startsAt: e.event_start_time as string,
     pricePerTicket: e.ticket_price_min != null ? Number(e.ticket_price_min) : null,

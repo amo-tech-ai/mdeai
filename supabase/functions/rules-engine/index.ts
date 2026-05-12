@@ -1,11 +1,7 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { timingSafeEqual } from "../_shared/crypto.ts";
 import { extractRulesEngineSecretCandidate } from "../_shared/rules-engine-secret.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/http.ts";
 
 interface RuleResult {
   userId: string;
@@ -17,7 +13,11 @@ interface RuleResult {
   priority?: number;
 }
 
-function rulesEngineJsonResponse(body: unknown, status: number): Response {
+function rulesEngineJsonResponse(
+  body: unknown,
+  status: number,
+  corsHeaders: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -30,10 +30,12 @@ function hasRulesEngineCredentialAttempt(headers: Headers): boolean {
   if (x != null && x.trim().length > 0) return true;
   const auth = headers.get("Authorization");
   const m = auth?.match(/^Bearer\s*(.*)$/i);
-  return m !== null && String(m[1] ?? "").trim().length > 0;
+  if (!m) return false;
+  return String(m[1] ?? "").trim().length > 0;
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -51,12 +53,14 @@ Deno.serve(async (req) => {
           message: "Missing rules engine credentials (x-rules-engine-secret or Bearer)",
         },
         401,
+        corsHeaders,
       );
     }
     if (!timingSafeEqual(provided, rulesSecret)) {
       return rulesEngineJsonResponse(
         { error: "Forbidden", message: "Invalid rules engine credentials" },
         403,
+        corsHeaders,
       );
     }
   } else {
@@ -76,6 +80,7 @@ Deno.serve(async (req) => {
           return rulesEngineJsonResponse(
             { error: "Bad Request", message: "Invalid JSON body" },
             400,
+            corsHeaders,
           );
         }
       }
