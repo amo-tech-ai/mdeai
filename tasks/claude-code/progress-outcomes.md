@@ -253,3 +253,88 @@ A pass requires every deterministic probe PASS **and** every coverage gap below 
 Four conditions are unmet. Honest framing: **the Outcomes scaffolding is correct, but the system has not yet been exercised end-to-end on a real PR.** No claim of "100 % working" is warranted today.
 
 When the four boxes are checked, this section flips to `PASS` and Phase 2 (Managed Agents API runner) is unblocked.
+
+---
+
+# Rubric review — latest (2026-05-14)
+
+Strict line-by-line audit against the four rubric files + `README.md`, with the user's seven feedback items as the starting point.
+
+## Errors found
+
+| # | Rubric | Line / criterion | Problem | Severity |
+|---|---|---|---|---|
+| E1 | `pr-review.md` | Criterion 3 | Used `git stash && npm run test && git stash pop` to get a baseline test count — **destructive** in a dirty worktree (loses uncommitted work if anything goes wrong mid-run, can fail on merge-conflicting stashes). | 🔴 high |
+| E2 | `events-ticketing.md` | Criterion 3 | Concurrent curl probe sent `stripe-signature: <test-sig>` — Stripe webhook handlers reject this; **all 50 requests return 400** and the probe proves nothing. | 🔴 high |
+| E3 | `supabase-migration.md` | Criterion 7 | Referenced `npm run gen:types` — **the script does not exist** in this repo's `package.json`. Verifier would hit `Missing script: "gen:types"` and silently mark criterion failed. | 🟡 medium |
+| E4 | All four rubrics | (entire file) | No mode tagging — every PR ran the same heavy checklist regardless of risk. Forced graders to demand mobile screenshots for a one-line typo fix. | 🟡 medium |
+| E5 | `pr-review.md` | Criterion 5 | Secret regex missed `AIzaSy…`, `ghp_…`, `Bearer <token>`, and short Stripe `sk_test_…` patterns — would let a Google Maps key or a GitHub PAT slip through the secret check. | 🟡 medium |
+| E6 | `maps-grounding.md` + `events-ticketing.md` | Several criteria | External-service dependencies (Maps Grounding Lite API, Infobip, Stripe, Supabase local) were not labeled as blockers — they could be silently skipped as "N/A" without the verifier realizing they're load-bearing. | 🟡 medium |
+
+## Red flags / failure points
+
+- **F1 — `maps-grounding.md` criterion 7 (`<GroundingAttribution>`):** correctly documented as failing-by-definition until MASTRA-066 ships. Already explicit. **No fix needed**, just preserved.
+- **F2 — `maps-grounding.md` criterion 11 (real Medellín smoke):** depends on Maps Grounding Lite API being enabled in the test GCP project. Currently disabled (`H2` blocker). Now explicitly tagged as `[Locked]` only.
+- **F3 — `events-ticketing.md` criteria 11–13:** Camila / Roberto / Lighthouse E2E require a running preview server + a Stripe test session + real Lighthouse. Now tagged `[Locked]` only — Fast and Full modes skip them.
+- **F4 — `events-ticketing.md` criterion 7 (Infobip delivery):** external API dependency. Now flagged in the README "External-service blockers" table — verifier must either get a real Infobip `messageId` or write `BLOCKED — Infobip unreachable`.
+- **F5 — `supabase-migration.md` requires running `supabase start`:** added as an explicit prerequisite in the file header. If the local stack isn't running, the rubric fails closed (cannot silently skip).
+- **F6 — `pr-review.md` criterion 10 (RLS not removed):** light check (only `relrowsecurity`). For PRs that also include a migration, the heavier `supabase-migration.md` rubric runs in series — by design, no overlap.
+
+## Fixes applied
+
+| # | File | Change |
+|---|---|---|
+| F1 | `README.md` | Added **Modes** section (Fast / Full / Locked) with explicit iteration caps and criterion coverage. |
+| F2 | `README.md` | Added **Universal N/A rule** — three criteria that are never N/A (build/lint/test/typecheck, secret scan, §9 DoD). |
+| F3 | `README.md` | Added **Accepted evidence — examples by class** table (command output / HTTP / SQL / screenshot / test summary / log / Lighthouse / Stripe session / email). |
+| F4 | `README.md` | Added **External-service blockers** table flagging Stripe / Infobip / Maps Grounding Lite / Supabase as fail-closed. |
+| F5 | `pr-review.md` | Replaced `git stash` baseline with `git worktree add /tmp/mdeai-baseline main` OR cached CI baseline — non-destructive. |
+| F6 | `pr-review.md` | Tagged every criterion with `[Fast]` / `[Full]` / `[Locked]`. |
+| F7 | `pr-review.md` | Expanded secret regex in criterion 5 to cover `AIzaSy…`, `ghp_…`, `sk_test_…`, JWTs, and `Bearer <token>`. |
+| F8 | `pr-review.md` | Criterion 10 N/A wording now precise: `N/A — No migration files changed in this PR.` |
+| F9 | `supabase-migration.md` | Header now declares `supabase start` as a prerequisite. Modes tagged. |
+| F10 | `supabase-migration.md` | Criterion 7 uses `supabase gen types --lang=typescript --local > …` directly (no missing `npm run gen:types`); explicit N/A clause for policy-only migrations. |
+| F11 | `maps-grounding.md` | Modes tagged. Header lists external-service prerequisites + the MASTRA-066 dependency. |
+| F12 | `events-ticketing.md` | Modes tagged. Header lists Stripe test-mode + Infobip sandbox + Supabase local + preview server as prerequisites. |
+| F13 | `events-ticketing.md` | **Criterion 3 (oversell probe) rewritten** with two valid paths: (A) `stripe trigger` CLI generates signed events; (B) documented `STRIPE_WEBHOOK_VERIFY=false` test-mode bypass with `_diag` precondition check. The user must document which path they used. |
+
+## Remaining blockers
+
+| Blocker | Affected criterion | Resolution path |
+|---|---|---|
+| MASTRA-066 (`<GroundingAttribution>`) not built | `maps-grounding.md` #7 | Ship MASTRA-066 — concrete: Mastra tool plus React component. |
+| Maps Grounding Lite API not enabled in test GCP project | `maps-grounding.md` #8, #11 | Enable in Google Cloud Console (see `grounding-runtime-hardening.md` H2). |
+| `stripe` CLI not in PATH on the local dev box | `events-ticketing.md` #3 path A | `brew install stripe/stripe-cli/stripe` (mac) or download from stripe.com/docs/stripe-cli. Otherwise use path B. |
+| Phase 1 gate items (Camila / Roberto / Lighthouse) untested | `events-ticketing.md` #11–13 | Locked-mode runs against preview build with real Stripe test mode + real Lighthouse. Manual today; Phase 2 wraps in API. |
+| 0 / 3 real PR outcome loops at `satisfied` | Phase 2 gate | Run pr-review.md against the next 3 real mdeai PRs. |
+| `dist/assets/*.js` contains live `VITE_GOOGLE_MAPS_API_KEY` | Deploy gate (dist-leak hook) | Complete rotation in `secret-rotation-checklist-2026-05-14.md §1` + rebuild. |
+
+## Next validation plan
+
+Order matters — each step is independently shippable:
+
+1. **Smoke the updated rubrics** against this very PR (the rubric refactor itself). Run `pr-review.md` in **Fast** mode against the rubric diff and confirm it reaches `satisfied` in 1 iteration. This is the lowest-risk first real run.
+2. **Pick the next real PR** that touches `supabase/migrations/` and run `supabase-migration.md` in Full mode. Expect 2–3 iterations.
+3. **Pick the next real PR** that touches a `src/**/*Map*` file and run `maps-grounding.md` in Full mode. The Grounding sub-section will fail on criterion 7 (MASTRA-066) — that's expected; the PR ships when the rendering sub-section passes.
+4. After 3 PRs reach `satisfied`, flip the 100 % gate to `PASS` and start Phase 2 (`scripts/outcomes/run-outcome.ts` against the Managed Agents API).
+
+## Current score
+
+| Axis | Score / 10 | Reason |
+|---|---:|---|
+| Mechanical rubric quality | **9** | Modes tagged, prerequisites declared, regex expanded, dangerous `git stash` removed, missing `gen:types` fallback documented. Only −1 because the rubrics have not yet survived a real-PR run. |
+| Evidence discipline | **9** | Accepted-evidence table in the README + per-criterion specifics + Stripe-signature reality check. −1 because the verifier has not yet been observed pasting evidence under fire. |
+| Production readiness | **7** | Hooks proven live; rubrics now realistic; **but** 0 / 3 real PR loops + external-service blockers (MASTRA-066, Maps Grounding Lite, Infobip, `stripe` CLI, dist rotation) all still unresolved. |
+| **Full 100 % certification** | **FAIL** | Phase 2 still blocked: 0 / 3 real PR loops at `satisfied`, two missing CI scripts, four external-service blockers. |
+
+### Dashboard delta projected
+
+After committing this audit: dashboard `§10 Outcomes readiness` stays at 9.0/10 (rubrics improved, but the gating real-PR runs are still 0). Overall dashboard score: **89 → 90** (the +1 reflects the +0.5 rubric-quality bump on a 10-axis rollup). Will not move further until 3 real PR loops are graded.
+
+---
+
+## GitHub reference (audit commit)
+
+- **Progress tracker:** https://github.com/amo-tech-ai/mde/blob/main/tasks/claude-code/progress-outcomes.md
+- **Previous audit commit:** `4bae3e66250993e25643c7c7e58291cc36810c75`
+- **Current audit commit:** _filled by the commit step below_
