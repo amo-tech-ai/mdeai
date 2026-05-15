@@ -34,15 +34,23 @@ export function EventCardInline({ event }: EventCardInlineProps) {
   const [imgError, setImgError] = useState(false);
   const categoryColor = CATEGORY_COLORS[event.category] ?? 'bg-muted text-muted-foreground';
 
+  function openSource(e: React.MouseEvent | React.KeyboardEvent) {
+    if (!event.sourceUrl) return;
+    if ((e.target as HTMLElement).closest('a')) return;
+    window.open(event.sourceUrl, '_blank', 'noopener,noreferrer');
+  }
+
   return (
-    <a
-      href={event.sourceUrl ?? '#'}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
+      role={event.sourceUrl ? 'link' : undefined}
+      tabIndex={event.sourceUrl ? 0 : undefined}
+      onClick={openSource}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openSource(e); }}
+      aria-label={event.sourceUrl ? `View ${event.title}` : undefined}
       className={cn(
         'group flex flex-row h-[120px] overflow-hidden rounded-2xl border border-border bg-card',
         'transition-all hover:shadow-md',
-        !event.sourceUrl && 'pointer-events-none',
+        event.sourceUrl ? 'cursor-pointer' : 'opacity-60',
       )}
     >
       {/* Content */}
@@ -110,6 +118,6 @@ export function EventCardInline({ event }: EventCardInlineProps) {
           </div>
         )}
       </div>
-    </a>
+    </div>
   );
 }

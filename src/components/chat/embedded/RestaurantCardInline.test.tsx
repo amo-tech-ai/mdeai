@@ -72,16 +72,20 @@ describe('RestaurantCardInline — base rendering', () => {
     expect(screen.getByText('$$$')).toBeInTheDocument();
   });
 
-  it('wraps card in anchor pointing to sourceUrl', () => {
-    render(<RestaurantCardInline restaurant={make()} />);
-    const link = screen.getAllByRole('link')[0];
-    expect(link).toHaveAttribute('href', 'https://mdeai.co/restaurants/rst-001');
+  it('outer wrapper has role=link and aria-label when sourceUrl is set', () => {
+    const { container } = render(<RestaurantCardInline restaurant={make()} />);
+    // Outer card wrapper is a div[role="link"] — not a native <a>
+    const outerDiv = container.firstChild as HTMLElement;
+    expect(outerDiv.getAttribute('role')).toBe('link');
+    expect(outerDiv.getAttribute('tabindex')).toBe('0');
+    expect(outerDiv.getAttribute('aria-label')).toMatch(/El Cielo/);
   });
 
-  it('applies pointer-events-none when sourceUrl is null', () => {
-    render(<RestaurantCardInline restaurant={make({ sourceUrl: null })} />);
-    const outerLinks = screen.getAllByRole('link');
-    expect(outerLinks[0].className).toMatch(/pointer-events-none/);
+  it('outer wrapper has no role=link and shows opacity-60 when sourceUrl is null', () => {
+    const { container } = render(<RestaurantCardInline restaurant={make({ sourceUrl: null })} />);
+    const outerDiv = container.firstChild as HTMLElement;
+    expect(outerDiv.getAttribute('role')).toBeNull();
+    expect(outerDiv.className).toMatch(/opacity-60/);
   });
 
   it('shows UtensilsCrossed fallback when no imageUrl', () => {

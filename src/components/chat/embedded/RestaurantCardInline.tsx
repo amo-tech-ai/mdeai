@@ -23,15 +23,24 @@ export function RestaurantCardInline({ restaurant }: RestaurantCardInlineProps) 
   const [imgError, setImgError] = useState(false);
   const cuisineLabel = CUISINE_LABELS[restaurant.cuisine] ?? restaurant.cuisine;
 
+  function openSource(e: React.MouseEvent | React.KeyboardEvent) {
+    if (!restaurant.sourceUrl) return;
+    // Don't navigate if the click originated on the inner Maps link
+    if ((e.target as HTMLElement).closest('a')) return;
+    window.open(restaurant.sourceUrl, '_blank', 'noopener,noreferrer');
+  }
+
   return (
-    <a
-      href={restaurant.sourceUrl ?? '#'}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
+      role={restaurant.sourceUrl ? 'link' : undefined}
+      tabIndex={restaurant.sourceUrl ? 0 : undefined}
+      onClick={openSource}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openSource(e); }}
+      aria-label={restaurant.sourceUrl ? `View ${restaurant.name}` : undefined}
       className={cn(
         'group flex flex-row h-[120px] overflow-hidden rounded-2xl border border-border bg-card',
         'transition-all hover:shadow-md',
-        !restaurant.sourceUrl && 'pointer-events-none',
+        restaurant.sourceUrl ? 'cursor-pointer' : 'opacity-60',
       )}
     >
       {/* Content */}
@@ -113,6 +122,6 @@ export function RestaurantCardInline({ restaurant }: RestaurantCardInlineProps) 
           </div>
         )}
       </div>
-    </a>
+    </div>
   );
 }

@@ -78,10 +78,11 @@ describe('AttractionCardInline — base rendering', () => {
     expect(screen.getByText('$12')).toBeInTheDocument();
   });
 
-  it('applies pointer-events-none when sourceUrl is null', () => {
-    render(<AttractionCardInline attraction={make({ sourceUrl: null })} />);
-    const outerLinks = screen.getAllByRole('link');
-    expect(outerLinks[0].className).toMatch(/pointer-events-none/);
+  it('outer wrapper has no role=link and shows opacity-60 when sourceUrl is null', () => {
+    const { container } = render(<AttractionCardInline attraction={make({ sourceUrl: null })} />);
+    const outerDiv = container.firstChild as HTMLElement;
+    expect(outerDiv.getAttribute('role')).toBeNull();
+    expect(outerDiv.className).toMatch(/opacity-60/);
   });
 
   it('shows fallback icon when no imageUrl', () => {

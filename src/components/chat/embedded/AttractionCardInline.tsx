@@ -30,15 +30,23 @@ export function AttractionCardInline({ attraction }: AttractionCardInlineProps) 
   const categoryLabel = CATEGORY_LABELS[attraction.category] ?? attraction.category;
   const isFree = attraction.priceUsd === 0;
 
+  function openSource(e: React.MouseEvent | React.KeyboardEvent) {
+    if (!attraction.sourceUrl) return;
+    if ((e.target as HTMLElement).closest('a')) return;
+    window.open(attraction.sourceUrl, '_blank', 'noopener,noreferrer');
+  }
+
   return (
-    <a
-      href={attraction.sourceUrl ?? '#'}
-      target="_blank"
-      rel="noopener noreferrer"
+    <div
+      role={attraction.sourceUrl ? 'link' : undefined}
+      tabIndex={attraction.sourceUrl ? 0 : undefined}
+      onClick={openSource}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openSource(e); }}
+      aria-label={attraction.sourceUrl ? `View ${attraction.name}` : undefined}
       className={cn(
         'group flex flex-row h-[120px] overflow-hidden rounded-2xl border border-border bg-card',
         'transition-all hover:shadow-md',
-        !attraction.sourceUrl && 'pointer-events-none',
+        attraction.sourceUrl ? 'cursor-pointer' : 'opacity-60',
       )}
     >
       {/* Content */}
@@ -122,6 +130,6 @@ export function AttractionCardInline({ attraction }: AttractionCardInlineProps) 
           </div>
         )}
       </div>
-    </a>
+    </div>
   );
 }

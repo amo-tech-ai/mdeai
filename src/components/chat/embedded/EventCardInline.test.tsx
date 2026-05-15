@@ -64,17 +64,19 @@ describe('EventCardInline', () => {
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
   });
 
-  it('wraps in anchor pointing to sourceUrl', () => {
-    render(<EventCardInline event={make()} />);
-    const link = screen.getByRole('link');
-    expect(link).toHaveAttribute('href', 'https://teatrolido.com/eventos');
-    expect(link).toHaveAttribute('target', '_blank');
+  it('outer wrapper has role=link and aria-label when sourceUrl is set', () => {
+    const { container } = render(<EventCardInline event={make()} />);
+    const outerDiv = container.firstChild as HTMLElement;
+    expect(outerDiv.getAttribute('role')).toBe('link');
+    expect(outerDiv.getAttribute('tabindex')).toBe('0');
+    expect(outerDiv.getAttribute('aria-label')).toMatch(/Salsa Night/);
   });
 
-  it('makes link non-interactive when sourceUrl is null', () => {
-    render(<EventCardInline event={make({ sourceUrl: null })} />);
-    const link = screen.getByRole('link');
-    expect(link.className).toMatch(/pointer-events-none/);
+  it('outer wrapper has no role=link and shows opacity-60 when sourceUrl is null', () => {
+    const { container } = render(<EventCardInline event={make({ sourceUrl: null })} />);
+    const outerDiv = container.firstChild as HTMLElement;
+    expect(outerDiv.getAttribute('role')).toBeNull();
+    expect(outerDiv.className).toMatch(/opacity-60/);
   });
 
   it('shows Calendar fallback when no imageUrl', () => {
