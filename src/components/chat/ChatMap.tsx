@@ -15,7 +15,9 @@ import {
   onMapsAuthFailed,
 } from '@/lib/google-maps-loader';
 import { measureScriptLoad, trackMapEvent } from '@/lib/maps-telemetry';
+import { getGoogleMapsMapId } from '@/lib/google-maps-map-id';
 import { cn } from '@/lib/utils';
+import { buildPinContent } from '@/components/map/pinContent';
 
 /**
  * Right-panel live map for the chat canvas.
@@ -35,7 +37,10 @@ import { cn } from '@/lib/utils';
 // Medellín fallback center so the map has a reasonable default pose before
 // any pins arrive (vs. staring at the Atlantic or whatever the default is).
 const MEDELLIN_CENTER = { lat: 6.2442, lng: -75.5812 };
-const MAP_ID = 'mdeai-chat-map';
+// MASTRA-068: Map ID resolved via helper — reads VITE_GOOGLE_MAPS_MAP_ID,
+// falls back to DEMO_MAP_ID in dev/test only, returns undefined in production
+// if the env var is not set (AdvancedMarkerElement fails clearly, not silently).
+// See: src/lib/google-maps-map-id.ts
 
 function FallbackPinList({
   pins,
@@ -249,7 +254,7 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
         mapRef.current = new mapsLib.Map(containerRef.current!, {
           center: initialCenter,
           zoom: 13,
-          mapId: MAP_ID,
+          mapId: getGoogleMapsMapId(),
           disableDefaultUI: false,
           zoomControl: true,
           mapTypeControl: false,
@@ -394,45 +399,10 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
     [],
   );
 
-  // Create / update marker content. Uses a plain div so we can keep the
-  // mdeai visual language (emoji + title pill) without MapID-bound custom
-  // styles. `isHot` is the hover-highlight from card ↔ pin cross-link.
-  //
-  // A11y: `gmpClickable: true` already makes the marker keyboard-focusable.
-  // We ALSO set `role="button"` and an `aria-label` so screen readers
-  // announce it as "Open <title>, <label>". Decorative emoji is
-  // `aria-hidden`. Enter / Space already triggers gmp-click natively.
-  const makeContent = useCallback((pin: MapPin, isHot: boolean) => {
-    const cfg = PIN_CATEGORY_CONFIG[pin.category];
-    const div = document.createElement('div');
-    div.className = [
-      'inline-flex items-center gap-1.5 pr-2.5 pl-1.5 py-1 rounded-full border-2 shadow-md cursor-pointer',
-      'transition-all font-sans select-none whitespace-nowrap',
-      isHot ? 'bg-black text-white scale-110 z-20' : 'bg-white text-gray-900 hover:scale-105',
-    ].join(' ');
-    div.style.borderColor = isHot ? '#000' : cfg.color;
-    div.setAttribute('role', 'button');
-    div.setAttribute(
-      'aria-label',
-      `Open ${pin.title}${pin.label ? `, ${pin.label}` : ''}`,
-    );
-    if (isHot) div.setAttribute('aria-current', 'true');
-
-    const dot = document.createElement('span');
-    dot.className = 'w-5 h-5 rounded-full flex items-center justify-center text-[11px]';
-    dot.style.background = isHot ? 'rgba(255,255,255,0.15)' : `${cfg.color}20`;
-    dot.textContent = cfg.emoji;
-    dot.setAttribute('aria-hidden', 'true');
-    div.appendChild(dot);
-
-    const label = document.createElement('span');
-    label.className = 'text-[11px] font-medium max-w-[140px] truncate';
-    // Prefer the short label (price) when present; fall back to title.
-    label.textContent = pin.label || pin.title;
-    div.appendChild(label);
-
-    return div;
-  }, []);
+  // buildPinContent (imported from pinContent.ts) renders the emoji+label pill.
+  // It already sets role="button", aria-label, aria-hidden on emoji.
+  // ChatMap used to have a duplicate makeContent() — removed to keep a
+  // single source of truth. See pinContent.ts for the canonical implementation.
 
   // Rebuild markers whenever the pin set changes + refit bounds. Keeping
   // markers keyed by pin.id lets us update content-only (no churn) for
@@ -469,14 +439,17 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
         const existing = markersRef.current.get(pin.id);
         if (existing) {
           existing.marker.position = { lat: pin.latitude!, lng: pin.longitude! };
-          existing.marker.content = makeContent(pin, isHot);
+          existing.marker.content = buildPinContent(pin, isHot);
         } else {
           // NOTE: do NOT pass `map` here — the clusterer owns on-map
           // visibility. Setting both leaks markers behind clusters when
           // zoomed out.
           const marker = new MarkerCtor({
             position: { lat: pin.latitude!, lng: pin.longitude! },
-            content: makeContent(pin, isHot),
+            content: buildPinContent(pin, isHot),
+            // title is read by screen readers and shown as tooltip.
+            // See: developers.google.com/maps/documentation/javascript/advanced-markers/accessible-markers
+            title: `${pin.title}${pin.label ? ` — ${pin.label}` : ''}`,
             zIndex: isHot ? 1000 : 1,
             // gmpClickable enables the `gmp-click` event on this marker
             // (also makes the element keyboard-focusable for a11y).
@@ -571,7 +544,7 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
     // `highlightedPinId` intentionally omitted — handled in the next effect
     // to avoid re-creating markers on every hover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pins, librariesReady, authFailed, makeContent, makeInfoContent, setHighlightedPinId, navigateToPin]);
+  }, [pins, librariesReady, authFailed, makeInfoContent, setHighlightedPinId, navigateToPin]);
 
   // Close any open InfoWindow when the pin set changes — otherwise the
   // peek can outlive its anchor (e.g. conversation switch clears pins
@@ -588,13 +561,13 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
         const entry = markersRef.current.get(pin.id);
         if (!entry) continue;
         const isHot = pin.id === highlightedPinId;
-        entry.marker.content = makeContent(pin, isHot);
+        entry.marker.content = buildPinContent(pin, isHot);
         entry.marker.zIndex = isHot ? 1000 : 1;
       }
     } catch (err) {
       console.error('ChatMap highlight update failed:', err);
     }
-  }, [highlightedPinId, pins, librariesReady, authFailed, makeContent]);
+  }, [highlightedPinId, pins, librariesReady, authFailed]);
 
   // Full unmount cleanup — symmetric to addEventListener('gmp-click') +
   // MarkerClusterer.addMarkers(). Without this, listeners and DOM

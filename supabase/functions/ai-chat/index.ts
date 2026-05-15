@@ -449,6 +449,93 @@ IMPORTANT: Always use create_booking_preview and WAIT for explicit user confirma
   return (basePrompts[tab] || basePrompts.concierge) + sessionBlock + universalGuardrails;
 };
 
+/**
+ * Maps Grounding pre-pass — optional, feature-flagged (MDEAI_MAPS_GROUNDING=true).
+ *
+ * Uses Gemini's native generateContent endpoint with `tools: [{ googleMaps: {} }]`
+ * and Medellín's lat/lng so location-aware queries return factually accurate place
+ * data (opening hours, ratings, current addresses) from Google Maps.
+ *
+ * This runs BEFORE the main fetchGemini call and injects a grounded context block
+ * into the system prompt. It is deliberately non-fatal — any failure returns null
+ * and the main chat continues unaffected.
+ *
+ * API reference (MCP-verified 2026-05-15):
+ *   https://ai.google.dev/gemini-api/docs/maps-grounding
+ *   REST key: "googleMaps" (camelCase), not "google_maps"
+ *   toolConfig.retrievalConfig.latLng for location context
+ */
+async function groundWithMaps(userMessage: string, apiKey: string): Promise<string | null> {
+  // Pattern-gate: only trigger on queries with geographical / venue intent.
+  // Avoids billing for general chat turns that don't need Maps data.
+  const isLocationQuery =
+    /\b(restaurant|caf[eé]|bar|club|museum|park|hotel|hostel|tour|tours|place|places|where|near|around|medellin|medell[ií]n|poblado|laureles|envigado|sabaneta|bel[eé]n|provenza|carnival|festival|nightlife|nightclub|coffee|brunch|dinner|lunch|eat|dining|attraction|activities|sightseeing)\b/i.test(
+      userMessage,
+    );
+  if (!isLocationQuery) return null;
+
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `In Medellín, Colombia: ${userMessage}` }],
+            },
+          ],
+          // REST key is "googleMaps" (camelCase) — verified against Gemini API docs
+          tools: [{ googleMaps: {} }],
+          toolConfig: {
+            retrievalConfig: {
+              // Medellín city center — provides local context for "near me" queries
+              latLng: { latitude: 6.2442, longitude: -75.5812 },
+            },
+          },
+          generationConfig: {
+            // Short grounding snippet — injected into system prompt only
+            maxOutputTokens: 400,
+            temperature: 0.1,
+          },
+        }),
+        // 8s hard cap — grounding is a pre-pass; main chat must start promptly
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+
+    if (!res.ok) {
+      console.warn(`[maps-grounding] HTTP ${res.status} — grounding skipped`);
+      return null;
+    }
+
+    const data = (await res.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string; thought?: boolean }> };
+      }>;
+    };
+
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought && typeof p.text === "string")
+      .map((p) => p.text as string)
+      .join("")
+      .trim();
+
+    return text.length > 20 ? text : null;
+  } catch (err) {
+    // AbortError (timeout) or network error — grounding is non-fatal
+    console.warn(
+      `[maps-grounding] ${err instanceof Error ? err.message : String(err)} — grounding skipped`,
+    );
+    return null;
+  }
+}
+
 // Type alias for Supabase client (uses shared helpers from _shared/supabase-clients.ts)
 type SupabaseClientType = ReturnType<typeof getUserClient>;
 
@@ -1126,6 +1213,23 @@ Deno.serve(async (req) => {
       toolChoice = { type: "function", function: { name: "search_attractions" } };
     } else if (/\b(apartment|rental|rent|housing|flat|place to stay|accommodation)\b/i.test(lastUserContent)) {
       toolChoice = { type: "function", function: { name: "search_apartments" } };
+    }
+
+    // Maps Grounding pre-pass (MDEAI_MAPS_GROUNDING=true — off by default).
+    // Runs BEFORE fetchGemini; injects live Maps context into the system prompt.
+    // Non-fatal: if grounding times out or fails, chat proceeds without it.
+    if (Deno.env.get("MDEAI_MAPS_GROUNDING") === "true") {
+      const groundedContext = await groundWithMaps(lastUserContent, GEMINI_API_KEY);
+      if (groundedContext) {
+        console.log(`[maps-grounding] injected ${groundedContext.length} chars of Maps context`);
+        // Append to the system message so Gemini can cite Maps sources inline
+        aiMessages[0] = {
+          ...aiMessages[0],
+          content:
+            aiMessages[0].content +
+            `\n\n🗺️ LIVE MAPS CONTEXT (grounded from Google Maps — cite these facts when relevant):\n${groundedContext}`,
+        };
+      }
     }
 
     const initialResponse = await fetchGemini({

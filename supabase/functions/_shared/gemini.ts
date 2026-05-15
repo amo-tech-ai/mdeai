@@ -213,9 +213,15 @@ export class GeminiStructuredError extends Error {
   }
 }
 
+// REST key mapping for Gemini native generateContent tools.
+// NOTE: google_search uses snake_case per the REST API spec.
+//       googleMaps uses camelCase per the REST API spec (verified 2026-05-15 against
+//       ai.google.dev/gemini-api/docs/maps-grounding — the curl example sends
+//       "tools": [{"googleMaps": {}}], NOT {"google_maps": {}}).
+//       url_context uses snake_case (same pattern as google_search).
 const REST_TOOL_KEY_MAP: Record<string, string> = {
   googleSearch: "google_search",
-  googleMaps: "google_maps",
+  googleMaps: "googleMaps",    // camelCase — REST API uses "googleMaps" not "google_maps"
   urlContext: "url_context",
 };
 

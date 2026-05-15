@@ -2,7 +2,7 @@
  * MASTRA-048 — geocode-missing.ts
  *
  * Backfills latitude/longitude for rows where coordinates are NULL
- * but a venue name + neighborhood is present.
+ * but a name + address is present.
  *
  * Tables: events, restaurants, tourist_destinations
  * Method: Google Geocoding API via @googlemaps/google-maps-services-js
@@ -58,15 +58,13 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Build a geocode query string.
- * Events store venue name in `venue`; restaurants/tourist_destinations use `name`.
+ * All three tables store the venue/place name in `name` and location context in `address`.
+ * NOTE: events has no `venue` or `neighborhood` columns — only `name` and `address`.
  */
-function buildQuery(row: Record<string, unknown>, table: TableName): string {
-  const venueName =
-    table === 'events'
-      ? ((row['venue'] as string | undefined) ?? (row['name'] as string | undefined) ?? '')
-      : ((row['name'] as string | undefined) ?? '');
-  const neighborhood = (row['neighborhood'] as string | undefined) ?? '';
-  return `${venueName} ${neighborhood} Medellín Colombia`.trim();
+function buildQuery(row: Record<string, unknown>, _table: TableName): string {
+  const venueName = (row['name'] as string | undefined) ?? '';
+  const address = (row['address'] as string | undefined) ?? '';
+  return `${venueName} ${address} Medellín Colombia`.trim();
 }
 
 // ─── Geocode loop ─────────────────────────────────────────────────────────────
@@ -74,11 +72,8 @@ function buildQuery(row: Record<string, unknown>, table: TableName): string {
 async function geocodeTable(
   table: TableName,
 ): Promise<{ ok: number; skipped: number; errors: number }> {
-  // Select name columns based on table
-  const selectCols =
-    table === 'events'
-      ? 'id, name, venue, neighborhood'
-      : 'id, name, neighborhood';
+  // All three tables expose name + address; events has no `venue` or `neighborhood` columns
+  const selectCols = 'id, name, address';
 
   console.log(`\n[${table}] Fetching rows where latitude IS NULL…`);
 
@@ -172,7 +167,7 @@ async function main() {
   }
 
   console.log('\nSC-5 verification:');
-  console.log("  SELECT count(*) FROM events WHERE latitude IS NULL AND venue IS NOT NULL;  -- goal: 0");
+  console.log("  SELECT count(*) FROM events WHERE latitude IS NULL AND name IS NOT NULL;  -- goal: 0");
   console.log("  SELECT count(*) FROM restaurants WHERE latitude IS NULL AND name IS NOT NULL;");
   console.log("  SELECT count(*) FROM tourist_destinations WHERE latitude IS NULL AND name IS NOT NULL;");
 }
