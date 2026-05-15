@@ -121,9 +121,10 @@ To reach 10/10: run the loop on **3 real PRs** to `satisfied`, then mark this ax
 
 _(Populate as real PRs are graded. One row per session.)_
 
-| Date | PR # | Rubric | Iterations | Final result | Verifier | Notes |
-|---|---|---|---:|---|---|---|
-| _empty_ | | | | | | First run pending |
+| Date | PR # | Rubric | Mode | Iterations | Final result | Verifier | Notes |
+|---|---|---|---|---:|---|---|---|
+| 2026-05-14 | (local branch, 10 commits `ed99e81…39ccaeb`) | `pr-review.md` | Fast | **1** | **`satisfied`** | Claude Code | 5/5 Fast applicable criteria pass; secret scan 0 real-shape values; commit `d609d29`. **Loop 1/3.** |
+| 2026-05-14 | (same branch, Full re-grade) | `pr-review.md` | **Full** | **1** | **`needs_revision`** | Claude Code | **Pass 8/10** (C1-C8 ✓). C9 DoD: pending PR body. C10 RLS: N/A no migrations. Overall blockers: 4 credential rotations + `dist/` rebuild + `npm run verify` & `test:e2e` scripts. **Loop count unchanged at 1/3** (Full re-grade of same diff at higher rigor; not a new slot). |
 
 ---
 
@@ -167,7 +168,7 @@ Strict per the task rule "if something cannot be tested, mark it as failed for 1
 |---|---|---|---|
 | 1 | `npm run verify` script not in `package.json` | `node -e '…scripts.verify'` → `(not present)` | -1 CI readiness |
 | 2 | `npm run test:e2e` script not in `package.json` | `node -e '…scripts["test:e2e"]'` → `(not present)`; Playwright config present but suite empty | -1 CI readiness |
-| 3 | 3 real PR outcome loops at `satisfied` | Run log empty (`_empty_` row) | Phase 2 blocked |
+| 3 | 3 real PR outcome loops at `satisfied` | Run log: **1 / 3** (Loop 1 Fast `satisfied`; Loop 1-Full re-grade `needs_revision`; Loops 2 & 3 pending) | Phase 2 blocked |
 | 4 | `dist/assets/*.js` contains live `AIzaSy*` (Vite-inlined Maps key) | `grep AIzaSy dist/assets/` → 3 files | Deploy hook will block until rotation + rebuild |
 | 5 | Lint warnings (155, mostly `@typescript-eslint/no-explicit-any` outside this PR's scope) | `npm run lint` → 0 errors, 155 warnings, exit 0 | -1 lint quality (warning-level, not failing) |
 | 6 | Skill triggering not verifiable from a Bash script | The `outcomes` skill appears in this session's registry but auto-trigger on `paths:` only fires in a fresh session | Defer to next session restart |
@@ -805,3 +806,132 @@ Phase 2 gate progress: **5 / 13** boxes green (rubric quality, hook tests, deter
 
 - **Loop 1 commit (this record):** `d609d29`
 - **Pushed:** **No.** Local `main` is **11 commits ahead** of `origin/main`. No `git push` performed.
+
+---
+
+# Real PR outcome loop — Full re-grade — 2026-05-14
+
+The previous loop graded the rubric-cleanup commit range in **Fast** mode. Per audit feedback (Fast checks build/lint/typecheck only; "production readiness" needs Full), this is a strict **Full** re-grade of the same diff (`origin/main..HEAD`, 12 commits — added 2 hash records after Loop 1 record).
+
+**Mode:** Full · **Rubric:** `.claude/outcomes/pr-review.md` · **max_iterations:** 3 · **Used:** 1.
+
+## Official-doc alignment (web-verified)
+
+WebSearch May 2026 confirmed our rubrics align with the public Anthropic Outcomes API surface:
+
+| Surface | Our usage | Official doc |
+|---|---|---|
+| Beta header | `managed-agents-2026-04-01` | matches |
+| Event type | `user.define_outcome` | matches |
+| `max_iterations` | rubric values 3 / 5 / 5 / 5 / 8 (all ≤ 20) | default 3, max 20 — matches |
+| Rubric content | markdown, per-criterion scoring | matches |
+| Grader behavior | separate context window, per-criterion breakdown | matches |
+| Result enum | `satisfied`, `needs_revision`, `max_iterations_reached` | matches |
+
+**No invented APIs detected.** See [`docs.claude.com/en/managed-agents/define-outcomes`](https://platform.claude.com/docs/en/managed-agents/define-outcomes) and the [Outcomes cookbook](https://platform.claude.com/cookbook/managed-agents-cma-verify-with-outcome-grader).
+
+## Full criteria — evidence
+
+| # | Criterion | Mode tag | Result | Evidence |
+|---|---|---|---|---|
+| 1 | Build green | `[Fast]` | ✅ PASS | `✓ built in 4.78s`, dist 454.5 KB / 128.2 KB gzip, exit 0 (5.24 s wall) |
+| 2 | Lint green | `[Fast]` | ✅ PASS | 0 errors, 155 warnings (warnings allowed per rubric), exit 0 (8.72 s) |
+| 3 | Tests + baseline | `[Full]` | ✅ PASS | **PR: 76 / 76 in 1.51 s** vs **baseline `origin/main`: 76 / 76 in 0.89 s** (clean worktree at `/tmp/outcomes-baseline`, detached `36d1636`, `npm ci --silent && npm test -- --run`). **No regression — count and pass-rate identical.** |
+| 4 | Typecheck green | `[Fast]` | ✅ PASS | `tsc --noEmit` exit 0 in 0.23 s |
+| 5 | No secrets in diff | `[Full, Locked-doubled]` | ✅ PASS | Wide regex: 14 pattern-literal hits inside backticks (rubric/doc files describing scan patterns). **Tighter regex** `AIzaSy{33,}\|ghp_{35,}\|sk_live_{20,}\|whsec_{32,}` over the same diff: **empty**. |
+| 6 | No console.log added | `[Full]` | ✅ PASS | `git diff origin/main...HEAD -- 'src/**' \| grep '^+.*console\.log'` returned empty (no `src/**` files in this diff). |
+| 7 | No unsafe `VITE_*` | `[Full]` | ✅ PASS | `git diff … -- 'src/**' \| grep -E "VITE_(GEMINI\|STRIPE\|ANTHROPIC\|SERVICE_ROLE\|MAPS_SERVER)"` returned empty. |
+| 8 | Scope match | `[Full, Locked-doubled]` | ✅ PASS | 12 files: 6 `.claude/outcomes/*.md`, 2 `.claude/skills/outcomes/`, `.gitignore`, `package.json`, 2 `tasks/claude-code/`. Every file maps 1:1 to commit messages "Outcomes audit pass 3 / 4 / Sprint plan / Loop 1 record". |
+| 9 | §9 Definition of Done | `[Full]` | ❌ **needs_revision** | No GitHub PR body exists for this local branch yet. The rubric requires `## 9. Definition of Done` populated with checked boxes or `N/A — reason` per row. Per-commit messages document tests run but do not satisfy the §9 contract. **Required fix:** open a real GitHub PR with §9 filled in before this can pass Full. |
+| 10 | RLS not removed | `[Full]` | ☑ N/A — No migration files changed in this PR. |
+
+## Security gate — separate from criteria 1–10
+
+| Item | Status |
+|---|---|
+| 4 leaked credentials in worktree backup rotated | ❌ pending (manual user action) |
+| Old `VITE_GOOGLE_MAPS_API_KEY` removed from `dist/assets/*.js` via rebuild after key swap | ❌ pending (waits on rotation #4) |
+| `.claude/worktrees/` + `*.pre-sanitize.bak` gitignored | ✅ confirmed (commit `74eeffc`) |
+| Tracked diff secret scan | ✅ clean (criterion 5 above) |
+
+The tracked diff is safe to push; the **disk-resident** secrets are gitignored. Rotation is still mandatory before the 100% gate flips.
+
+## CI readiness — separate from criteria 1–10
+
+| Script | Status | Effect on 100% gate |
+|---|---|---|
+| `npm run lint` | ✅ present | — |
+| `npm run typecheck` | ✅ present | — |
+| `npm run build` | ✅ present | — |
+| `npm run test` | ✅ present | — |
+| `npm run verify:edge` | ✅ present | — |
+| `npm run verify:mastra` | ✅ present | — |
+| `npm run floor` | ✅ present (chains 6 above) | — |
+| `npm run outcomes:verify` | ✅ present (added pass 3, exit 0 in 17 s) | — |
+| `npm run gen:types` | ✅ present (added pass 3) | — |
+| `npm run verify` (generic) | ❌ **MISSING** | FAIL — 100% cert blocked |
+| `npm run test:e2e` | ❌ **MISSING / deferred** | FAIL — 100% cert blocked (deferred pending first real mdeai E2E spec) |
+
+## Verdict
+
+```
+Mode: Full. Pass 8/10 + 1 N/A (C10 RLS). Final: needs_revision.
+Real PR loop count: 1/3 (Full re-grade does not earn a new slot — same diff, stricter pass).
+Phase 2 status: BLOCKED.
+```
+
+## Failed criterion — exact fix
+
+**C9 §9 Definition of Done**
+Open a GitHub PR for this branch (`gh pr create`) with the §9 section per [`.claude/rules/task-writing.md`](../../../.claude/rules/task-writing.md):
+
+```markdown
+## 9. Definition of Done
+
+- [x] `npm run lint` clean
+- [x] `npm run build` clean
+- [x] `npm run test` clean (76 → 76, no regression vs origin/main baseline)
+- [x] `npm run verify:edge` clean (21 / 0 / 51)
+- [ ] E2E covered — N/A: rubric/doc-only change, no UI flow touched
+- [ ] Live verification on https://www.mdeai.co — N/A: docs / package.json / .gitignore only; no UI ships
+- [x] PR body lists what was tested + result for each layer
+```
+
+Once the PR is opened with the above, the Full re-grade flips to `satisfied`. Loop count still stays at 1/3 (same diff, higher rigor).
+
+## Remaining blockers before Phase 2 unblocks
+
+| Blocker | Status |
+|---|---|
+| Loop 1 Fast `satisfied` | ✅ (commit `d609d29`) |
+| **Loop 1 Full `satisfied`** | ❌ pending PR body |
+| Loop 2 (`supabase-migration.md` Full on next migration PR) | ❌ pending |
+| Loop 3 (`maps-grounding.md` OR `mastra-workflow.md` Full) | ❌ pending |
+| Gemini key rotation | ❌ pending |
+| Maps preview key rotation | ❌ pending |
+| GitHub PAT revocation | ❌ pending |
+| `VITE_GOOGLE_MAPS_API_KEY` rotation + `dist/` rebuild clean of old key | ❌ pending |
+| `npm run verify` script | ❌ missing |
+| `npm run test:e2e` script | 🟡 deferred (no mdeai E2E specs yet) |
+
+## Final recommendation
+
+**Do not push.** Open a GitHub PR with §9 DoD populated first, then re-grade Full. After that flips to `satisfied`, rotate the 4 credentials, rebuild `dist/`, then push. Loop 2 and Loop 3 must come from the next real migration / map / mastra PRs — they cannot be re-graded from this same audit branch.
+
+## Path drift caught + reconciliation (this run)
+
+The user moved the Outcomes docs from `tasks/claude-code/*.md` into `tasks/claude-code/outcomes/*.md` between sessions. Git status before this commit:
+
+```
+ D tasks/claude-code/outcomes-real-pr-validation-sprint.md   ← old path (tracked, deleted in worktree)
+ D tasks/claude-code/progress-outcomes.md                     ← old path (tracked, deleted in worktree)
+?? tasks/claude-code/outcomes/                                ← new path (untracked copy, identical content)
+```
+
+This commit stages both as renames so the git history follows the move. Cross-references inside the docs and skills will be updated in a follow-up cleanup commit to point at `tasks/claude-code/outcomes/...`.
+
+## Commit reference (Loop 1 Full re-grade)
+
+- **Previous:** `5e35537` (Loop 1 Fast hash record)
+- **This audit:** recorded after `git commit`
+- **Pushed:** **No.** Awaiting `satisfied` on Full re-grade + 4 credential rotations.
