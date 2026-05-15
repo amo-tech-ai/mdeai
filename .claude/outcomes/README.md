@@ -74,6 +74,7 @@ Replace `<name>` with:
 | New `supabase/migrations/*.sql` file | `supabase-migration.md` |
 | Map components, grounding client, Places SDK | `maps-grounding.md` |
 | Ticket checkout, scanner, events tables | `events-ticketing.md` |
+| Mastra agents / workflows / tools (`my-mastra-app/**`) | `mastra-workflow.md` |
 
 ## Available rubrics
 
@@ -81,6 +82,7 @@ Replace `<name>` with:
 |---|---|---|
 | `pr-review.md` | 3 | Every PR before merge |
 | `supabase-migration.md` | 5 | Any new migration file |
+| `mastra-workflow.md` | 5 | Any change under `my-mastra-app/src/mastra/**` |
 | `maps-grounding.md` | 5 | Map or grounding diff |
 | `events-ticketing.md` | 8 | Events / ticket / scanner diff; Phase 1 gate |
 
