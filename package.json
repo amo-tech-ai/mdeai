@@ -22,6 +22,7 @@
     "verify:mastra": "node scripts/verify-mastra-all.mjs",
     "gen:types": "supabase gen types --lang=typescript --local > src/integrations/supabase/types.ts",
     "outcomes:verify": "npm run lint && npm run typecheck && npm run test -- --run && npm run build && npm run verify:edge && npm run verify:mastra",
+    "verify": "npm run outcomes:verify",
     "floor": "npm run lint && npm run typecheck && npm run build && npm run test && npm run verify:edge && npm run verify:mastra"
   },
   "dependencies": {

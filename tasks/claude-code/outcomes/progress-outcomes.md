@@ -23,9 +23,11 @@ companions:
 | Rubrics extracted | **4 / 4** (`pr-review`, `supabase-migration`, `maps-grounding`, `events-ticketing`) |
 | Skill installed | `outcomes` (`.claude/skills/outcomes/SKILL.md` + 4 references) |
 | Hooks reinforcing | `stop-attribution-gate.mjs`, `stop-rls-gate.mjs`, `dist-leak-scan.mjs` (3/3 syntactically valid + hook-tested) |
-| Real PRs run through the rubrics | **0** — next action |
-| API runner shipped | **No** (deferred per Phase 2 of `01-outcomes-plan.md`) |
+| Real PRs run through the rubrics | **Fast satisfied: 1 / 3** · **Full satisfied: 0 / 3** (Loop 1 Fast `satisfied` 2026-05-14, commit `d609d29`; Loop 1 Full `needs_revision` 2026-05-14, commit `94b955e` — pending §9 DoD + 4 credential rotations) |
+| API runner shipped | **No** (deferred per Phase 2 of [`01-outcomes-plan.md`](./01-outcomes-plan.md)) |
 | Dashboard score Outcomes axis | **7.5 → 9.0** (jumped this session) |
+
+> **Loop count semantics:** A sprint slot is earned only when a rubric reaches `satisfied` in **Full mode** (or `Locked` for money/RLS/maps/grounding/credentials). A Fast pass on the same diff does **not** double-count. The 3-of-3 gate uses Full satisfied loops — current: **0 / 3 Full**. Historical "0/3" references in earlier audit-pass sections are snapshots at the time of writing and should not be backfilled.
 
 ## Phase 1 deliverables — DONE
 
@@ -933,5 +935,101 @@ This commit stages both as renames so the git history follows the move. Cross-re
 ## Commit reference (Loop 1 Full re-grade)
 
 - **Previous:** `5e35537` (Loop 1 Fast hash record)
-- **This audit:** recorded after `git commit`
+- **This audit:** `94b955e` (Loop 1 Full re-grade + path drift reconciliation)
 - **Pushed:** **No.** Awaiting `satisfied` on Full re-grade + 4 credential rotations.
+
+---
+
+# Tracker reconciliation + CI gap — 2026-05-14 (loop 1 cleanup)
+
+## What changed this pass
+
+| Fix | Detail |
+|---|---|
+| Headline loop count | `Real PRs run through the rubrics` row now shows **Fast satisfied: 1/3** and **Full satisfied: 0/3** with commit hashes. Single source of truth for "are we 1/3 yet?" — answer depends on which mode. |
+| Loop-count semantics callout | Added under headline: only Full (or Locked) `satisfied` earns a sprint slot. A Fast pass on the same diff does **not** double-count. The 3-of-3 gate uses Full. |
+| Historical "0 / 3" references | Left in place — each lives inside a dated audit-pass section and represents the state at that snapshot. Backfilling would erase the audit trail. |
+| `npm run verify` script | **Added** as `npm run verify` → `npm run outcomes:verify` (chains lint + typecheck + test + build + verify:edge + verify:mastra). Smoke run: exit 0 in **18.57 s**. Closes 1 of 2 CI-readiness gaps. |
+| `npm run test:e2e` | **Explicitly deferred** in `package.json` comment + tracker §"test:e2e — decision: explicitly defer". Reason: only 2 Mastra-smoke specs exist (`tests/smoke/`), both require live `mastra dev` + Supabase local. Wiring `test:e2e` to those would duplicate `npm run smoke:runtime` from `my-mastra-app/` and give a false-green signal in CI. Re-evaluate when the first true mdeai E2E spec lands (Camila buy-ticket flow). |
+
+## Loop 1 Full — current state
+
+Still **`needs_revision`** until the following land **outside this branch**:
+
+| Blocker | Owner | Action |
+|---|---|---|
+| C9 §9 Definition of Done | User | Open GitHub PR (`gh pr create`) with §9 populated per [`.claude/rules/task-writing.md`](../../../.claude/rules/task-writing.md) |
+| Gemini key rotated | User | Google AI Studio + `supabase secrets set GEMINI_API_KEY=…` |
+| Maps preview key rotated | User | Google Cloud Console + Vercel env var |
+| GitHub PAT revoked | User | github.com/settings/tokens |
+| `VITE_GOOGLE_MAPS_API_KEY` rotated + `dist/` rebuilt clean of old key | User | Google Cloud Console → Vercel → `rm -rf dist && npm run build && grep -RIE 'AIzaSy' dist/` |
+
+These are all manual user actions. Claude cannot rotate live credentials or open a GitHub PR for an unpushed branch.
+
+## What does NOT change from prior audit pass
+
+- Loop 1 Fast remains `satisfied` at commit `d609d29`.
+- Loop 1 Full remains `needs_revision` — only C9 DoD fails; C1–C8 + C10-N/A unchanged.
+- Real PR sprint slot count: **1/3 Fast satisfied**, **0/3 Full satisfied**.
+- Phase 2: still **BLOCKED**.
+
+## Updated 100 % certification gate
+
+| Condition | State |
+|---|---|
+| All rubric / skill / hook files present | ✅ |
+| Hook syntax + behavior probes | ✅ 3/3 + 7/7 |
+| Rubric structure (Modes / Forbidden / Output) | ✅ 5/5 |
+| `npm run outcomes:verify` exit 0 in < 30 s | ✅ 18.57 s |
+| `npm run verify` script present | ✅ **added this pass** |
+| `npm run test:e2e` script present | 🟡 **deferred with documented reason** (no real mdeai E2E specs yet) |
+| Loop 1 Fast `satisfied` | ✅ |
+| Loop 1 Full `satisfied` | ❌ pending §9 DoD |
+| Loop 2 Full `satisfied` | ❌ pending next migration PR |
+| Loop 3 Full `satisfied` | ❌ pending next maps/mastra PR |
+| 4 credential rotations | ❌ 0 / 4 |
+| `dist/` clean of old Maps key | ❌ pending rotation #4 |
+| MASTRA-066 shipped | ❌ domain blocker |
+| Maps Grounding Lite API enabled in test GCP | ❌ domain blocker |
+| Workflow-state-runtime task 012 shipped | ❌ domain blocker |
+
+**Result: `FAIL`.** Phase 2 stays blocked.
+
+## Performance grade — fifth pass (strict 5-axis)
+
+| Axis | /10 | Reason |
+|---|--:|---|
+| Mechanical correctness | **9** | All rubrics + new `verify` alias + reconciled headline. −1 because `test:e2e` deferred (correctly). |
+| Evidence discipline | **9** | Loop 1 Fast + Full both have command output, exit codes, baseline comparison. −1 because Full failed C9 (no PR body). |
+| Security readiness | **6** | Hooks block; gitignore covers worktree backups; rotation checklist documented. **−4** because 0 / 4 keys rotated. |
+| Runtime readiness | **7** | `outcomes:verify` chain green in 18.57 s; **+1** vs prior pass because CI surface now has `verify` alias. −3 because Mastra full mode still needs live env + Supabase + `mastra dev`. |
+| Production readiness | **5** | 1/3 Fast `satisfied`, 0/3 Full `satisfied`. Security gate red. |
+
+**Fifth-pass total: `9 + 9 + 6 + 7 + 5 = 36 / 50` → grade `7.2 / 10`** (up from 7.0).
+
+## Testing strategy reminder (from audit feedback)
+
+| Mode | When to use |
+|---|---|
+| **Fast** | Tiny doc / style / comment-only changes. **Cannot** earn a sprint slot. |
+| **Full (default)** | Every normal PR. Earns a sprint slot when `satisfied`. |
+| **Locked** | Money, tickets, RLS, Maps Grounding, production credentials, Phase 1 gate items. Grader runs each criterion twice. |
+
+The user feedback that prompted this pass: *"Fast checks build/lint/typecheck only; production readiness needs Full. Use Locked for money, tickets, RLS, Maps Grounding, or production credentials."* → captured in `.claude/outcomes/README.md` §Modes and now in this tracker.
+
+## Final recommendation
+
+**Do not push.** Order of operations:
+
+1. Rotate 4 credentials (Gemini, Maps preview, GitHub PAT, prod `VITE_GOOGLE_MAPS_API_KEY`).
+2. `rm -rf dist && npm run build` — verify `grep -RIE 'AIzaSy' dist/` shows only the new key.
+3. `gh pr create` with §9 DoD populated.
+4. Re-run `pr-review.md` Full — expect `satisfied` (8/10 today + C9 = 9/10 + C10 N/A).
+5. Push.
+6. Move to Loop 2 (next migration PR) and Loop 3 (next maps/mastra PR) in Full mode.
+
+## Commit reference (cleanup)
+
+- **Previous:** `94b955e` (Loop 1 Full re-grade + path drift)
+- **This commit:** recorded after `git commit`
+- **Pushed:** **No.** Local `main` will be **14 commits ahead** of `origin/main` after this commit.
