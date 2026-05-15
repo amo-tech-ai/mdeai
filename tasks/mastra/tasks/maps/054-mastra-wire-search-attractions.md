@@ -11,7 +11,7 @@ depends_on: [MASTRA-050]
 blocks: [MASTRA-048]
 last_updated: 2026-05-14
 completed_at: 2026-05-14
-evidence_commit: pending
+evidence_commit: b80258a
 verified_docs:
   - .claude/skills/mde-supabase/references/project-rules/supabase-migrations.md
   - .claude/skills/mde-maps/references/places-official/README.md
