@@ -1,5 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { Pool } from 'pg';
+
+// ---- Schemas (kept aligned with MASTRA-046 AttractionListingSchema) ---------
 
 const categoryEnum = z.enum([
   'park',
@@ -11,6 +14,8 @@ const categoryEnum = z.enum([
   'day-trip',
 ]);
 
+const bestTimeEnum = z.enum(['morning', 'afternoon', 'evening', 'any']);
+
 const attractionSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -19,7 +24,7 @@ const attractionSchema = z.object({
   priceUsd: z.number().describe('Entry / tour cost in USD; 0 = free'),
   durationMinutes: z.number().int().positive(),
   rating: z.number().min(0).max(5),
-  bestTimeOfDay: z.enum(['morning', 'afternoon', 'evening', 'any']),
+  bestTimeOfDay: bestTimeEnum,
   tags: z.array(z.string()),
   imageUrl: z.string(),
   sourceUrl: z.string(),
@@ -29,129 +34,9 @@ const attractionSchema = z.object({
 
 export type Attraction = z.infer<typeof attractionSchema>;
 export type AttractionCategory = z.infer<typeof categoryEnum>;
+export type BestTimeOfDay = z.infer<typeof bestTimeEnum>;
 
-const MOCK_ATTRACTIONS: Attraction[] = [
-  {
-    id: 'atr_001',
-    name: 'Comuna 13 Graffiti Tour',
-    category: 'tour',
-    neighborhood: 'San Javier',
-    priceUsd: 18,
-    durationMinutes: 180,
-    rating: 4.8,
-    bestTimeOfDay: 'afternoon',
-    tags: ['street-art', 'history', 'walking', 'guided'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-001',
-    sourceUrl: 'https://mdeai.co/attractions/atr_001',
-    latitude: 6.2462,
-    longitude: -75.6123,
-  },
-  {
-    id: 'atr_002',
-    name: 'Plaza Botero & Museo de Antioquia',
-    category: 'museum',
-    neighborhood: 'Centro',
-    priceUsd: 6,
-    durationMinutes: 120,
-    rating: 4.6,
-    bestTimeOfDay: 'morning',
-    tags: ['art', 'history', 'walkable'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-002',
-    sourceUrl: 'https://mdeai.co/attractions/atr_002',
-    latitude: 6.2518,
-    longitude: -75.5636,
-  },
-  {
-    id: 'atr_003',
-    name: 'Cerro Nutibara & Pueblito Paisa',
-    category: 'viewpoint',
-    neighborhood: 'Belén',
-    priceUsd: 0,
-    durationMinutes: 90,
-    rating: 4.4,
-    bestTimeOfDay: 'evening',
-    tags: ['viewpoint', 'sunset', 'free'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-003',
-    sourceUrl: 'https://mdeai.co/attractions/atr_003',
-    latitude: 6.2266,
-    longitude: -75.6123,
-  },
-  {
-    id: 'atr_004',
-    name: 'Parque Arví Cable Car',
-    category: 'day-trip',
-    neighborhood: 'Santa Elena',
-    priceUsd: 5,
-    durationMinutes: 240,
-    rating: 4.5,
-    bestTimeOfDay: 'morning',
-    tags: ['nature', 'cable-car', 'hiking'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-004',
-    sourceUrl: 'https://mdeai.co/attractions/atr_004',
-    latitude: 6.3098,
-    longitude: -75.4791,
-  },
-  {
-    id: 'atr_005',
-    name: 'Jardín Botánico de Medellín',
-    category: 'park',
-    neighborhood: 'Carabobo',
-    priceUsd: 0,
-    durationMinutes: 90,
-    rating: 4.5,
-    bestTimeOfDay: 'morning',
-    tags: ['free', 'nature', 'family-friendly'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-005',
-    sourceUrl: 'https://mdeai.co/attractions/atr_005',
-    latitude: 6.2712,
-    longitude: -75.5689,
-  },
-  {
-    id: 'atr_006',
-    name: 'Guatapé + El Peñol Day Trip',
-    category: 'day-trip',
-    neighborhood: 'Guatapé',
-    priceUsd: 45,
-    durationMinutes: 600,
-    rating: 4.7,
-    bestTimeOfDay: 'morning',
-    tags: ['guided', 'day-trip', 'lake', 'viewpoint'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-006',
-    sourceUrl: 'https://mdeai.co/attractions/atr_006',
-    latitude: 6.2326,
-    longitude: -75.1567,
-  },
-  {
-    id: 'atr_007',
-    name: 'La 70 Walking Loop',
-    category: 'neighborhood-walk',
-    neighborhood: 'Laureles',
-    priceUsd: 0,
-    durationMinutes: 60,
-    rating: 4.3,
-    bestTimeOfDay: 'evening',
-    tags: ['walkable', 'nightlife', 'free', 'food'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-007',
-    sourceUrl: 'https://mdeai.co/attractions/atr_007',
-    latitude: 6.2520,
-    longitude: -75.5866,
-  },
-  {
-    id: 'atr_008',
-    name: 'Museo Casa de la Memoria',
-    category: 'museum',
-    neighborhood: 'Boston',
-    priceUsd: 0,
-    durationMinutes: 90,
-    rating: 4.6,
-    bestTimeOfDay: 'afternoon',
-    tags: ['history', 'free', 'reflective'],
-    imageUrl: 'https://images.unsplash.com/photo-attraction-008',
-    sourceUrl: 'https://mdeai.co/attractions/atr_008',
-    latitude: 6.2513,
-    longitude: -75.5672,
-  },
-];
+// ---- Query API --------------------------------------------------------------
 
 export type AttractionQuery = {
   category?: AttractionCategory;
@@ -161,30 +46,184 @@ export type AttractionQuery = {
   limit?: number;
 };
 
-export function searchAttractions(
-  query: AttractionQuery,
-): { results: Attraction[]; total: number; source: 'mock' } {
-  let results = MOCK_ATTRACTIONS.slice();
-  if (query.category) {
-    results = results.filter((a) => a.category === query.category);
+// ---- DB plumbing (mirrors search-rentals.ts pattern) -----------------------
+
+let _pool: Pool | null = null;
+function getPool(): Pool {
+  if (!_pool) {
+    _pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 3,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 10000,
+    });
   }
+  return _pool;
+}
+
+// ---- DB-row → tool-output mapping helpers (exported for unit tests) --------
+
+const CATEGORY_VALUES: AttractionCategory[] = [
+  'park',
+  'museum',
+  'viewpoint',
+  'tour',
+  'landmark',
+  'neighborhood-walk',
+  'day-trip',
+];
+
+/** Coerce a free-form DB category string to the strict enum; default `landmark`. */
+export function normalizeCategory(raw: string | null | undefined): AttractionCategory {
+  if (!raw) return 'landmark';
+  const lower = raw.toLowerCase().trim();
+  // Direct match
+  if ((CATEGORY_VALUES as string[]).includes(lower)) {
+    return lower as AttractionCategory;
+  }
+  // Common aliases
+  if (lower.includes('park') || lower.includes('garden') || lower.includes('plaza')) return 'park';
+  if (lower.includes('museum') || lower.includes('gallery')) return 'museum';
+  if (lower.includes('viewpoint') || lower.includes('mirador') || lower.includes('cerro')) return 'viewpoint';
+  if (lower.includes('tour') || lower.includes('walking-tour') || lower.includes('guided')) return 'tour';
+  if (lower.includes('walk') || lower.includes('neighborhood') || lower.includes('barrio')) return 'neighborhood-walk';
+  if (lower.includes('day-trip') || lower.includes('daytrip') || lower.includes('excursion')) return 'day-trip';
+  return 'landmark';
+}
+
+/**
+ * Parse `estimated_visit_duration` text (e.g. "60 minutes", "1 hour", "1.5 hours",
+ * "90 min", "all day") into a positive integer of minutes. Fallback 60.
+ */
+export function parseDurationMinutes(raw: string | null | undefined): number {
+  if (!raw) return 60;
+  const lower = raw.toLowerCase().trim();
+  if (lower.includes('all day') || lower.includes('full day')) return 480; // 8h
+  const numMatch = lower.match(/(\d+(?:\.\d+)?)/);
+  if (!numMatch) return 60;
+  const n = parseFloat(numMatch[1]);
+  if (!isFinite(n) || n <= 0) return 60;
+  if (lower.includes('hour') || lower.includes('hr') || lower.includes('h ')) {
+    return Math.max(1, Math.round(n * 60));
+  }
+  // default unit: minutes
+  return Math.max(1, Math.round(n));
+}
+
+const BEST_TIME_VALUES: BestTimeOfDay[] = ['morning', 'afternoon', 'evening', 'any'];
+
+/** Pull a `bestTimeOfDay` hint out of the `best_for` / `tags` arrays; default `any`. */
+export function deriveBestTime(
+  bestFor: string[] | null | undefined,
+  tags: string[] | null | undefined,
+): BestTimeOfDay {
+  const haystack = [...(bestFor ?? []), ...(tags ?? [])].map((s) => s.toLowerCase());
+  for (const candidate of BEST_TIME_VALUES) {
+    if (haystack.some((h) => h.includes(candidate))) return candidate;
+  }
+  if (haystack.some((h) => h.includes('sunset') || h.includes('night'))) return 'evening';
+  if (haystack.some((h) => h.includes('breakfast') || h.includes('sunrise'))) return 'morning';
+  return 'any';
+}
+
+/** Choose a non-empty neighborhood string from address-shaped columns. */
+export function deriveNeighborhood(row: {
+  subcategory: string | null;
+  address: string | null;
+  city: string | null;
+}): string {
+  return (
+    (row.subcategory ?? '').trim() ||
+    (row.address ?? '').trim() ||
+    (row.city ?? '').trim() ||
+    'Medellín'
+  );
+}
+
+// ---- DB query --------------------------------------------------------------
+
+async function searchAttractionsFromDB(
+  query: AttractionQuery,
+): Promise<{ results: Attraction[]; total: number; source: 'supabase'; error?: string }> {
+  const pool = getPool();
+  const params: (string | number)[] = [];
+  const conditions: string[] = [
+    "(latitude IS NOT NULL OR longitude IS NOT NULL OR address IS NOT NULL)",
+  ];
+
   if (query.neighborhood) {
-    const q = query.neighborhood.toLowerCase();
-    results = results.filter((a) => a.neighborhood.toLowerCase().includes(q));
+    params.push(`%${query.neighborhood}%`);
+    conditions.push(
+      `(subcategory ILIKE $${params.length} OR address ILIKE $${params.length} OR city ILIKE $${params.length})`,
+    );
+  }
+  if (query.category) {
+    params.push(`%${query.category}%`);
+    conditions.push(`(category ILIKE $${params.length} OR subcategory ILIKE $${params.length})`);
   }
   if (query.freeOnly) {
-    results = results.filter((a) => a.priceUsd === 0);
+    conditions.push(`(entry_fee_amount IS NULL OR entry_fee_amount = 0)`);
   } else if (typeof query.maxPriceUsd === 'number') {
-    results = results.filter((a) => a.priceUsd <= query.maxPriceUsd!);
+    params.push(query.maxPriceUsd);
+    conditions.push(`(entry_fee_amount IS NULL OR entry_fee_amount <= $${params.length})`);
   }
-  const total = results.length;
-  return { results: results.slice(0, query.limit ?? 5), total, source: 'mock' };
+
+  const limit = Math.max(1, Math.min(query.limit ?? 5, 20));
+  params.push(limit);
+
+  const sql = `
+    SELECT id, name, category, subcategory, address, city,
+           tags, best_for, entry_fee_amount, currency, rating,
+           estimated_visit_duration, primary_image_url, website,
+           latitude, longitude
+    FROM tourist_destinations
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY rating DESC NULLS LAST, name ASC
+    LIMIT $${params.length}
+  `;
+
+  try {
+    const { rows } = await pool.query(sql, params);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const results: Attraction[] = rows.map((r: any) => ({
+      id: String(r.id),
+      name: r.name,
+      category: normalizeCategory(r.category ?? r.subcategory),
+      neighborhood: deriveNeighborhood(r),
+      priceUsd: r.entry_fee_amount != null ? Number(r.entry_fee_amount) : 0,
+      durationMinutes: parseDurationMinutes(r.estimated_visit_duration),
+      rating: r.rating != null ? Number(r.rating) : 0,
+      bestTimeOfDay: deriveBestTime(r.best_for, r.tags),
+      tags: Array.isArray(r.tags) ? r.tags : [],
+      imageUrl: r.primary_image_url ?? '',
+      sourceUrl: r.website ?? `https://mdeai.co/attractions/${r.id}`,
+      latitude: r.latitude != null ? Number(r.latitude) : undefined,
+      longitude: r.longitude != null ? Number(r.longitude) : undefined,
+    }));
+    return { results, total: results.length, source: 'supabase' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { results: [], total: 0, source: 'supabase', error: message };
+  }
 }
+
+/**
+ * Public, testable wrapper. Calls Supabase under the hood. Never throws —
+ * returns `{ results: [], total: 0, error }` on failure so the agent can fall
+ * back to text.
+ */
+export async function searchAttractions(
+  query: AttractionQuery,
+): Promise<{ results: Attraction[]; total: number; source: 'supabase'; error?: string }> {
+  return searchAttractionsFromDB(query);
+}
+
+// ---- Mastra tool wrapper ---------------------------------------------------
 
 export const searchAttractionsTool = createTool({
   id: 'search-attractions',
   description:
-    'Search Medell\u00edn attractions, tours, viewpoints, and day-trips. Mock data \u2014 does not hit Supabase yet.',
+    'Search Medellín attractions, tours, viewpoints, and day-trips from the live `tourist_destinations` table.',
   inputSchema: z.object({
     category: categoryEnum.optional(),
     neighborhood: z.string().optional(),
@@ -195,12 +234,19 @@ export const searchAttractionsTool = createTool({
   outputSchema: z.object({
     results: z.array(attractionSchema),
     total: z.number(),
-    source: z.literal('mock'),
+    source: z.literal('supabase'),
+    error: z.string().optional(),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async (inputData: AttractionQuery, context?: any) => {
     const { category, neighborhood, maxPriceUsd, freeOnly, limit = 5 } = inputData;
-    const { results, total, source } = searchAttractions({ category, neighborhood, maxPriceUsd, freeOnly, limit });
+    const { results, total, source, error } = await searchAttractions({
+      category,
+      neighborhood,
+      maxPriceUsd,
+      freeOnly,
+      limit,
+    });
 
     await context?.writer?.custom({
       type: 'data-mdeai-actions',
@@ -221,9 +267,10 @@ export const searchAttractionsTool = createTool({
           longitude: a.longitude ?? null,
         })),
         source,
+        ...(error ? { error } : {}),
       },
     });
 
-    return { results, total, source };
+    return { results, total, source, ...(error ? { error } : {}) };
   },
 });

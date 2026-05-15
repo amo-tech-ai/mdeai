@@ -159,7 +159,7 @@ const cardSchema = z.object({
 const dispatchOutputSchema = z.object({
   intent: intentEnum,
   confidence: z.number(),
-  source: z.literal('mock'),
+  source: z.enum(['mock', 'supabase', 'fallback']),
   cards: z.array(cardSchema),
   total: z.number(),
   followups: z.array(z.string()),
@@ -242,7 +242,7 @@ const dispatchStep = createStep({
       return {
         intent,
         confidence,
-        source: 'mock' as const,
+        source: out.source,
         cards,
         total: out.total,
         followups: ['Buy ticket for #1', 'Show cheaper', 'Show this weekend', 'More music events'],
@@ -250,7 +250,7 @@ const dispatchStep = createStep({
     }
 
     if (intent === 'restaurant_search') {
-      const out = searchRestaurants({
+      const out = await searchRestaurants({
         cuisine: filters.cuisine as
           | 'colombian'
           | 'paisa'
@@ -276,7 +276,7 @@ const dispatchStep = createStep({
       return {
         intent,
         confidence,
-        source: 'mock' as const,
+        source: out.source,
         cards,
         total: out.total,
         followups: ['Cheaper options', 'Vegetarian only', 'Near El Poblado', 'Reserve #1'],
@@ -284,7 +284,7 @@ const dispatchStep = createStep({
     }
 
     if (intent === 'attraction_search') {
-      const out = searchAttractions({
+      const out = await searchAttractions({
         category: filters.category as
           | 'park'
           | 'museum'
@@ -309,7 +309,7 @@ const dispatchStep = createStep({
       return {
         intent,
         confidence,
-        source: 'mock' as const,
+        source: out.source,
         cards,
         total: out.total,
         followups: ['Free only', 'Half-day options', 'Day-trips outside Medell\u00edn', 'Best for evening'],
