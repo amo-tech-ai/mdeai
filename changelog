@@ -1,5 +1,201 @@
 # Changelog — mdeai.co
 
+## 2026-05-14 — MASTRA-048: Maps enrichment phase 2 — mapsUrl + aiSummary on all 3 card types + geocode-missing.ts
+
+**Task:** `tasks/mastra/tasks/maps/048-mastra-maps-enrichment-phase2.md`
+**Score: 88/100**
+
+| File | Change |
+|------|--------|
+| `src/types/chat.ts` | **MOD** — added `mapsUrl?: string \| null` + `aiSummary?: string \| null` to `EventInlineListing`, `RestaurantInlineListing`, `AttractionInlineListing` |
+| `src/components/chat/embedded/RestaurantCardInline.tsx` | **MOD** — added "Open in Maps" link + aiSummary paragraph |
+| `src/components/chat/embedded/AttractionCardInline.tsx` | **MOD** — added "Open in Maps" link + aiSummary paragraph |
+| `src/components/chat/embedded/EventCardInline.tsx` | **MOD** — added "Open venue in Maps" link |
+| `my-mastra-app/src/mastra/tools/search-restaurants.ts` | **MOD** — writer now sends `placeId`, `mapsUrl`, `aiSummary` to chat SSE |
+| `my-mastra-app/src/mastra/tools/search-events.ts` | **MOD** — added `mapsUrl` to schema + DB mapping + writer |
+| `scripts/geocode-missing.ts` | **NEW** — geocoding backfill script for all 3 tables; idempotent; Medellín bounds bias |
+| `src/components/chat/embedded/RestaurantCardInline.test.tsx` | **NEW** — 16 Vitest tests (base rendering + MASTRA-048 enrichment fields) |
+| `src/components/chat/embedded/AttractionCardInline.test.tsx` | **NEW** — 16 Vitest tests (base rendering + MASTRA-048 enrichment fields) |
+| `src/components/chat/embedded/EventCardInline.test.tsx` | **MOD** — 3 MASTRA-048 tests added (mapsUrl renders, null, undefined) |
+
+**Evidence:**
+- `npm run test`: **152/152** (14 files), ↑35 from baseline
+- `npm run lint`: 0 errors
+- `npm run build`: exit 0 (4.34s)
+- `cd my-mastra-app && npm run test`: **50/50** (4 files)
+- `cd my-mastra-app && npm run typecheck`: exit 0
+
+---
+
+## 2026-05-15 — Events PRD v2 (Mastra + Maps + automation) + task index cross-links
+
+**Docs:** Added [`tasks/events/events-prd-v2-mastra-maps-automation.md`](tasks/events/events-prd-v2-mastra-maps-automation.md) — audit-driven strategy (ticketing gap, Mastra/maps sequencing, agent matrix, phased roadmap, testing). Updated [`tasks/events/index-events.md`](tasks/events/index-events.md), [`tasks/INDEX.md`](tasks/INDEX.md), [`tasks/todo.md`](tasks/todo.md), [`tasks/events/docs/events-prd.md`](tasks/events/docs/events-prd.md), [`tasks/events/events-prd.md`](tasks/events/events-prd.md), [`tasks/events/events-prdv2.md`](tasks/events/events-prdv2.md). **Link hygiene:** `tasks/mastra/tasks/advanced/103-*.md` (no bare `tasks/archive/` href), `tasks/mastra/tasks/maps/places/*` → `../../SKILL-REFERENCE.md`, [`tasks/mastra/progress-mastra.md`](tasks/mastra/progress-mastra.md) paths → `tasks/maps/places/*`.
+
+**Verify:** `npm run verify:mastra` exit **0**; `VERIFY_OFFICIAL_URLS=1 npm run verify:official-doc-refs` exit **0** (warnings only). `npm run floor` not run this session.
+
+---
+
+## 2026-05-14 — MASTRA-067: Places field mask lock — `googleMapsLinks` in all masks; `extractPlaceUri()` helper; 26 tests
+
+**Task:** `tasks/mastra/tasks/maps/067-mastra-places-field-mask-placeuri.md`
+**Score: 95/100**
+
+| File | Change |
+|------|--------|
+| `my-mastra-app/src/mastra/lib/google-places-client.ts` | **MOD** — added `extractPlaceUri()` helper; reads `place.googleMapsLinks.placeUri`; null-safe; rejects non-http values |
+| `my-mastra-app/src/mastra/lib/google-places-client.test.ts` | **NEW** — 26 Vitest tests: all 3 mask constants include `googleMapsLinks`; `extractPlaceUri` branches (8 cases); `PlacesConfigError`; page limits |
+
+**MCP verification (2026-05-14):**
+- `google-maps-code-assist` → `placeUri` = `https://maps.google.com/?cid=XXXXXXX` (CID-based, canonical)
+- Lat/lng URLs (`https://www.google.com/maps/search/?api=1&query=lat,lng`) give generic map view, not place details
+- Source: `developers.google.com/maps/documentation/places/web-service/maps-links`
+
+**Evidence:**
+| Check | Result |
+|-------|--------|
+| `cd my-mastra-app && npm run test` | **50/50** pass (↑26 new) |
+| `npm run test` (root) | **117/117** pass |
+| `npm run lint` | 0 errors |
+| `npm run build` | ✓ exit 0 |
+| `DEFAULT_TEXT_SEARCH_MASK` | includes `places.googleMapsLinks` ✅ |
+| `DEFAULT_NEARBY_SEARCH_MASK` | includes `places.googleMapsLinks` ✅ |
+| `DEFAULT_PLACE_DETAILS_MASK` | includes `googleMapsLinks` (flat path) ✅ |
+
+---
+
+## 2026-05-14 — MASTRA-068: Production Map ID — `getGoogleMapsMapId()` helper, 18 tests, no silent DEMO_MAP_ID in production
+
+**Task:** `tasks/mastra/tasks/maps/068-mastra-production-map-id.md`
+**Score: 93/100**
+
+| File | Change |
+|------|--------|
+| `src/lib/google-maps-map-id.ts` | **NEW** — `getGoogleMapsMapId()` helper + `DEMO_MAP_ID` const. Returns env var when set; DEMO_MAP_ID + warn in dev/test; undefined + error in production without env var. |
+| `src/lib/google-maps-map-id.test.ts` | **NEW** — 18 Vitest tests covering all branches |
+| `src/components/chat/ChatMap.tsx` | **MOD** — removed `const MAP_ID = … ?? 'DEMO_MAP_ID'`; uses `getGoogleMapsMapId()` in map init |
+| `src/components/map/MdeMap.tsx` | **MOD** — same fix |
+| `src/components/itinerary/GoogleMapView.tsx` | **MOD** — replaced hardcoded `"itinerary-map"` with `getGoogleMapsMapId()` |
+
+**MCP verification (2026-05-14):**
+- `google-maps-code-assist retrieve-google-maps-platform-docs` → "DEMO_MAP_ID is for testing only", "Advanced markers requires a map ID"
+- Source: `developers.google.com/maps/documentation/javascript/advanced-markers/start` (score 0.725)
+
+**Bug found & fixed:** All three map components used `?? 'DEMO_MAP_ID'` which would silently use the demo Map ID in production if `VITE_GOOGLE_MAPS_MAP_ID` is not configured in Vercel. Now fails clearly (undefined + console.error) in production.
+
+**Evidence:**
+| Check | Result |
+|-------|--------|
+| `npm run test` | **117/117** pass (↑18 new) |
+| `npm run lint` | 0 errors |
+| `npm run build` | ✓ exit 0, 4.38s |
+| `rg "itinerary-map" src/` | 0 runtime hits ✅ |
+| `rg 'VITE_GOOGLE_MAPS_MAP_ID\s*\?\?' src/` | 0 hits ✅ |
+
+**Remaining human step:** Create a real Map ID in [GCP Cloud Console](https://console.cloud.google.com/google/maps-apis/studio/maps) → set `VITE_GOOGLE_MAPS_MAP_ID` in Vercel Dashboard → Environment Variables.
+
+---
+
+## 2026-05-14 — MASTRA-066: GroundingAttribution component — MCP-verified, 20 tests, ToS compliant
+
+**Task:** `tasks/mastra/tasks/maps/066-mastra-grounding-attribution-component.md`
+**Score: 94/100** (post-completion re-score)
+
+| File | Change |
+|------|--------|
+| `src/components/maps/GroundingAttribution.tsx` | **NEW** — ToS-mandatory Google Maps attribution badge. MCP-verified via `google-maps-code-assist`. **Bug fixed:** `text-[12px]` → `text-[1rem]` per official GMP CSS spec. |
+| `src/components/maps/index.ts` | **NEW** — barrel export |
+| `src/components/maps/GroundingAttribution.test.tsx` | **NEW** — 20 Vitest tests covering all 14 ToS requirements |
+
+**MCP verification (2026-05-14):**
+- `google-maps-code-assist retrieve-google-maps-platform-docs` → official CSS: `font-size: 1rem`, `translate="no"`, `color: #5e5e5e`, `whitespace-nowrap`, `font-weight: 400`, `font-style: normal`
+- Source: `developers.google.com/maps/ai/grounding-lite/attribution` (score 0.784)
+
+**Evidence:**
+| Check | Result |
+|-------|--------|
+| `npm run test` | **99/99** pass (↑20 new from attribution tests) |
+| `npm run lint` | 0 errors |
+| `npm run build` | ✓ exit 0, 4.16s |
+| `npm run verify:mastra` | exit 0 |
+| Font-size compliance | Fixed 12px → 1rem (MCP verified) |
+
+---
+
+## 2026-05-15 — Mastra `tasks/` corpus: graded scores + verification proof (tracker + todo)
+
+Systematic pass over `tasks/mastra/tasks/**` YAML vs runtime; ran **root** `npm run test` (**79** passed, **10** files), **`npm run verify:mastra`** (exit **0**; includes `verify-task-links`, `verify-official-doc-refs` with **58** WARNs / **0** ERR when `VERIFY_OFFICIAL_URLS=1`), **`npm run floor`** (exit **0** — lint + typecheck + build + test + `verify:edge` + `verify:mastra`), and **`cd my-mastra-app && npm run typecheck && npm run test`** (**24** passed, **3** files; `tsc` OK).
+
+| Update | What changed |
+|--------|----------------|
+| [`tasks/mastra/progress-mastra.md`](tasks/mastra/progress-mastra.md) | **Last verified 2026-05-15**; §1 snapshot counts; **§1c** — per-task **0–100** implementation scores for completed maps tasks (**046, 047, 050, 053, 054, 056, 057, 073**); §2 inventory dots + YAML column synced (**047/050/054/073** were stale); §3/§4/§6 readiness; **§7** next-10 rewritten (048/049/066/068/062…); Grounding row notes **`maps-grounding-client.ts`** vs missing agent tool. |
+| [`tasks/todo.md`](tasks/todo.md) | Header **Last updated** + **§6C** (tracker date, **`npm run floor` OK**, next five **048→049→066→068→062**). |
+
+**Scoring rubric (§1c):** 90+ = strong automated tests + code match; 80–89 = shipped with doc/migration proof but weak runtime integration test; below 80 = migration-only or env-dependent without CI guard.
+
+---
+
+## 2026-05-14 — MASTRA-050 + MASTRA-054 completed (status drift closed)
+
+Both tasks were status-drifted (`Not Started` in YAML, code already present). Verified live and closed.
+
+| Task | Full name | Evidence |
+|------|-----------|---------|
+| **MASTRA-050** | Canonical model constants — `models.ts` (no more hardcoded strings) | All 7 agent files import `CONCIERGE_MODEL` / `REASONING_MODEL` / `PLANNING_MODEL` from `lib/models.ts`; `grep gemini-3 agents/ workflows/` → 0 hits; 24/24 `my-mastra-app` tests pass |
+| **MASTRA-054** | Wire search-attractions.ts to live Supabase (remove mock data) | commit `b80258a` — async `pg.Pool` query on `public.tourist_destinations`, four exported mapping helpers, error path returns `{results:[],total:0,error}` never throws; `verify:mastra` warn cleared; 24/24 tests |
+
+`000-index.md` **Completed tasks** table added. `todo.md` §6C next-five updated: MASTRA-048 (now unblocked) · MASTRA-059 · MASTRA-066 · MASTRA-068 · MASTRA-047.
+
+---
+
+## 2026-05-14 — Mastra + Maps progress tracker (tables)
+
+- **`tasks/mastra/progress-mastra.md`:** Replaced stale narrative (2026-05-11 prompts paths, 41-test headline) with **table-driven tracker**: verification snapshot (76/76 Vitest, deps in `my-mastra-app`, mock vs live attractions), **MASTRA-046/047/050/053/054/056/057/049/066/068** status, Google Maps / Grounding Lite slice, OpenClaw · Hermes · Paperclip · Postiz row, production readiness gates, **next 10 actions**, re-verify shell block. Links to [`tasks/mastra/tasks/000-index.md`](tasks/mastra/tasks/000-index.md), [`tasks/audit/33-mde-audit.md`](tasks/audit/33-mde-audit.md), maps PRDs.
+- **`tasks/todo.md`:** New **§6C** — pointer to `progress-mastra.md` + **five** Mastra/Maps next steps.
+
+---
+
+## 2026-05-14 — Audit follow-ups (legacy Mastra index, restaurants tool, tasks)
+
+- **`tasks/prompts/mastra/tasks/000-index.md`:** marked **Deprecated**; fixed **Source plans** links; execution-table links to **001 / 002 / 022 / 023 / 026–030** → **`../archive/`**; banner points to **`tasks/mastra/tasks/`**.
+- **`my-mastra-app`:** `search-restaurants.ts` now reads **`public.restaurants`** via Supabase; **fallback** list only when client missing, query error, or **zero DB rows**; `source` is `supabase` \| `fallback`. Added **`search-restaurants-logic.test.ts`**. `concierge-routing-workflow` awaits restaurant search; dispatch `source` schema includes `supabase` / `fallback` for events + restaurants.
+- **Tasks:** MASTRA-046 + MASTRA-053 marked **Completed** (with notes). New stubs **070–072**, **083** (optional integration tests), **103** (ticket edge fn **not** in `supabase/functions/` tree). **EVT-103** documents repo gap.
+- **`tasks/prompts/event_prompts`:** sponsor prompts renumbered **097–099** (was duplicate **060–062** prefixes); **100** / **101** links updated.
+- **`index.md`**, **`tasks/progress-tracker.md`**, **`tasks/todo.md`:** navigation / inventory updates.
+
+---
+
+## 2026-05-14 — Full-project forensic audit (Maps / Mastra / verticals)
+
+Added a **snapshot audit** (code + tasks + PRD v2 vs repo reality): narrative report, rolling progress table, and P0–P3 critical-fix checklist. Evidence includes `npm run lint|build|test|verify:edge`, `my-mastra-app` `typecheck`, and file-level findings (e.g. MASTRA-046 implemented while task YAML still said Not Started; no Grounding Lite transport under `my-mastra-app/src`; no `ticket-payment-webhook` under `supabase/functions/` in this tree).
+
+| File | Purpose |
+|------|---------|
+| `tasks/prompts/mastra/audits/full-project-forensic-audit-maps-mastra-ai.md` | Executive summary, sections 1–15, scorecard |
+| `tasks/prompts/mastra/audits/full-project-progress-tracker.md` | Rolling tracker table |
+| `tasks/prompts/mastra/audits/full-project-critical-fixes.md` | Checkbox checklist by severity |
+| `tasks/progress-tracker.md` | Short index → the three files above |
+
+---
+
+## 2026-05-14 — Mastra task prompts: skill reference matrix (docs)
+
+Added a **single derived index** for `tasks/mastra/tasks/*.md`: each row lists task ID, filename, the YAML `skill:` line, and resolved paths to `SKILL.md` under `.claude/skills/` or `.agents/skills/`. Source of truth remains each task file’s own `skill:` frontmatter; the table is for navigation only.
+
+### What changed
+
+| File | Change |
+|------|--------|
+| `tasks/mastra/tasks/SKILL-REFERENCE.md` | **New** — table of all Mastra task prompts → recommended skills + file paths |
+| `tasks/mastra/tasks/000-index.md` | `skill:` frontmatter; link to `SKILL-REFERENCE.md`; `last_updated` bumped |
+| `tasks/mastra/tasks/TASK-CITATION-TEMPLATE.md` | Internal skills table row pointing at `SKILL-REFERENCE.md` |
+| `tasks/mastra/tasks/102-MASTRA-TASK-FORENSIC-CHECKLIST.md` | Companion files list links to `SKILL-REFERENCE.md` |
+
+### Follow-up (optional)
+
+- Add a small script under `tasks/mastra/` to regenerate `SKILL-REFERENCE.md` from task YAML so the table cannot drift by hand.
+
+---
+
 ## 2026-05-10 — Migration chain repair (`main` branch)
 
 `supabase db reset` now exits 0 on a fresh clone. Build and tests confirmed clean after the fix.

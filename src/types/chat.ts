@@ -78,6 +78,8 @@ export interface EventInlineListing {
   sourceUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** MASTRA-048: Canonical Google Maps deep link (placeUri). Null until enrichment runs. */
+  mapsUrl?: string | null;
 }
 
 export interface RestaurantInlineListing {
@@ -93,6 +95,10 @@ export interface RestaurantInlineListing {
   sourceUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** MASTRA-048: Canonical Google Maps deep link (placeUri). Null until enrichment runs. */
+  mapsUrl?: string | null;
+  /** MASTRA-048: Gemini-generated 2-sentence venue description. Null until cache-ai-summaries runs. */
+  aiSummary?: string | null;
 }
 
 export interface AttractionInlineListing {
@@ -108,6 +114,10 @@ export interface AttractionInlineListing {
   sourceUrl?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** MASTRA-048: Canonical Google Maps deep link (placeUri). Null until enrichment runs. */
+  mapsUrl?: string | null;
+  /** MASTRA-048: Gemini-generated 2-sentence venue description. Null until cache-ai-summaries runs. */
+  aiSummary?: string | null;
 }
 
 export interface OpenEventResultsAction {

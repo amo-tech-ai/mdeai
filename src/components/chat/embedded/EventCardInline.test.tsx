@@ -100,4 +100,26 @@ describe('EventCardInline', () => {
     const dateText = screen.getByText(/May|16/);
     expect(dateText).toBeInTheDocument();
   });
+
+  // ── MASTRA-048: Maps deep link tests ────────────────────────────────────────
+
+  it('renders "Open venue in Maps" link when mapsUrl is provided', () => {
+    const mapsUrl = 'https://maps.google.com/?cid=123456789';
+    render(<EventCardInline event={make({ mapsUrl })} />);
+    const mapsLink = screen.getByText('Open venue in Maps').closest('a');
+    expect(mapsLink).toBeInTheDocument();
+    expect(mapsLink).toHaveAttribute('href', mapsUrl);
+    expect(mapsLink).toHaveAttribute('target', '_blank');
+    expect(mapsLink).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('does NOT render Maps link when mapsUrl is null', () => {
+    render(<EventCardInline event={make({ mapsUrl: null })} />);
+    expect(screen.queryByText('Open venue in Maps')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render Maps link when mapsUrl is undefined', () => {
+    render(<EventCardInline event={make({ mapsUrl: undefined })} />);
+    expect(screen.queryByText('Open venue in Maps')).not.toBeInTheDocument();
+  });
 });

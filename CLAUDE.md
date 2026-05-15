@@ -11,7 +11,7 @@
 3. **Contests + Voting** — Miss Elegance Colombia flagship, hybrid scoring, leaderboard (Phase 2)
 4. **Sponsorship Marketplace** — sponsor onboarding, ROI dashboard, AI brand-fit (Phase 3)
 
-**Status:** ~55% overall (42/76 tasks per prd.md). 259/259 tests passing. Build clean (~6s). Live at https://www.mdeai.co.
+**Status:** ~55% overall (42/76 tasks per prd.md). Ship gate: **`npm run floor`** (lint + build + Vitest + `verify:edge` + **`verify:mastra`**) — last verified **2026-05-14**: Vitest **117** tests (**12** files), edge **21** passed (**51** ignored). Build ~7s. Live at https://www.mdeai.co.
 
 **Vercel:** auto-deploys `main` to mdeai.co.
 
@@ -40,7 +40,7 @@ npm run test         # Vitest (run once)
 npm run test:watch   # Vitest (watch mode)
 ```
 
-Floor before shipping any change: `npm run floor` (lint + build + test + verify:edge).
+Floor before shipping any change: `npm run floor` (lint + build + test + verify:edge + verify:mastra).
 
 ## Project Structure
 
@@ -100,56 +100,15 @@ See `.claude/rules/supabase-patterns.md` and the seven Supabase-specific rules i
 
 See `.claude/rules/edge-function-patterns.md`.
 
-## Database
+## Database, AI integration, environment variables
 
-24+ tables in Supabase PostgreSQL with pgvector + PostGIS:
+Path-scoped — auto-loads when you open the relevant files:
 
-**Core:** `profiles`, `apartments`, `cars`, `restaurants`, `events`, `collections`
-**Bookings:** `bookings`, `saved_places`
-**Trips:** `trips`, `trip_items`
-**AI:** `conversations`, `messages`, `agent_jobs`, `ai_context`, `ai_runs`
-**System:** `notifications`
+- **Database tables (24+, pgvector + PostGIS)** — [.claude/skills/mde-supabase/references/tables-overview.md](.claude/skills/mde-supabase/references/tables-overview.md)
+- **AI integration (Gemini-only, 9 edge functions)** — [.claude/skills/mde-supabase/references/ai-edge-functions.md](.claude/skills/mde-supabase/references/ai-edge-functions.md)
+- **Environment variables (public + edge function secrets, Infisical source of truth)** — [.claude/skills/mde-infisical/references/env-vars-mdeai.md](.claude/skills/mde-infisical/references/env-vars-mdeai.md)
 
-## AI Integration
-
-All AI runs on **Google Gemini** via the OpenAI-compatible endpoint
-`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
-There is **no Anthropic / Claude API in production** — Claude is only used in dev tooling (Claude Code).
-
-| Edge Function | Model | Purpose |
-|--------------|-------|---------|
-| ai-router | `gemini-3.1-flash-lite-preview` | Intent classification |
-| ai-chat | `gemini-3-flash-preview` | Conversational AI + tool-calling |
-| ai-search | `gemini-3-flash-preview` | Semantic search (pgvector) |
-| ai-trip-planner | `gemini-3.1-pro-preview` | Multi-day itinerary generation |
-| ai-optimize-route | `gemini-3-flash-preview` | Route optimization |
-| rentals | `gemini-3.1-pro-preview` | Rental intake conversation |
-| ai-roi-explain (P3) | `gemini-3.1-pro-preview` | Sponsor ROI insight |
-| ai-creative-gen (P3) | `gemini-3.1-pro-preview` | Ad copy / image prompts |
-| ai-audience-match (P3) | `gemini-3.1-pro-preview` | Brand ↔ contest fit scoring |
-
-Auth: `GEMINI_API_KEY` secret in Supabase dashboard.
-
-## Environment Variables
-
-### Public (safe for frontend — in `.env`)
-```
-VITE_SUPABASE_PROJECT_ID
-VITE_SUPABASE_PUBLISHABLE_KEY
-VITE_SUPABASE_URL
-VITE_GOOGLE_MAPS_API_KEY
-VITE_USE_MASTRA_CHAT        # "true" to route chat through Mastra (must be set in Vercel)
-VITE_MASTRA_SERVER_URL      # Mastra server URL, e.g. https://my-mastra-app-beta.vercel.app
-```
-
-`.env` may only contain the `VITE_*` vars above. All other secrets live in **Infisical** (source of truth at `localhost:80`) and sync to Supabase / Vercel — never in `.env`.
-
-> **Mastra chat path:** If `VITE_USE_MASTRA_CHAT` is not set to `"true"` in Vercel, all chat traffic falls back to the legacy `ai-chat` Supabase edge function. `VITE_MASTRA_SERVER_URL` defaults to `http://localhost:4111` — this must be the deployed Mastra service URL in production.
-
-### Edge function secrets (Supabase dashboard)
-`GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY`, `INFOBIP_API_KEY`, `INFOBIP_BASE_URL`, `INFOBIP_PHONE_NUMBER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TICKET_CHECKOUT_KEY`, `STRIPE_TICKET_WEBHOOK_KEY`, `STRIPE_SPONSOR_CHECKOUT_KEY` (⚠ not yet set — blocks sponsor checkout), `STRIPE_SPONSOR_WEBHOOK_KEY`, `STAFF_LINK_SECRET`, `QR_SIGNING_SECRET`, `LEAD_REMINDER_CRON_SECRET`.
-
-> **Commerce / e-commerce is out of scope.** Do **not** add storefront variables, skills, or scaffolding to this repo.
+> Commerce / e-commerce is out of scope. Don't add storefront variables, skills, or scaffolding.
 
 ## .claude/ Architecture
 
@@ -211,15 +170,7 @@ Domain owner skills for active phases:
 
 ## Phase 1 Priorities (current — Events + Tickets MVP)
 
-Phase 1 build is **100% done**, gate is **not yet passed**. Five items block Phase 2:
-
-1. **Camila E2E** — buy ticket → email arrives → QR displayed (QA, not run)
-2. **Roberto E2E** — valid scan ✓ + rescan returns `ALREADY_USED` (QA, not run)
-3. **Staff link revocation** — scanner denied within 60s of revoke (QA, not run)
-4. **Load test** — 50 concurrent buyers → 0 oversell (Eng, not run)
-5. **Lighthouse a11y ≥ 90** on event listing, ticket buy, scanner, host dashboard (QA, not run)
-
-Until all 5 are green, no Phase 2 (contests/voting) work ships.
+Build is 100% done; **5 gate items block Phase 2**. Source of truth: [tasks/todo.md §1](tasks/todo.md) (Camila E2E · Roberto scan · staff link revocation · 50-buyer load test · Lighthouse a11y ≥ 90).
 
 ## Known Issues
 
@@ -231,6 +182,99 @@ Until all 5 are green, no Phase 2 (contests/voting) work ships.
 ## Communication & Response Style
 
 See `.claude/rules/communication.md` — plain English, lead with what changed, concrete numbers, no jargon without a one-line definition.
+
+## Verification Culture
+
+Prefer proof over claims. Evidence priority: (1) command output, (2) tests, (3) SQL results, (4) **localhost browser screenshot**, (5) logs, (6) code inspection only as fallback. Never call work "verified", "tested", "passed", "deployed", or "production-ready" without an evidence marker in the same message. The `stop-attribution-gate` hook enforces this.
+
+**Localhost is mandatory** — for any task that touches UI, API endpoints, edge functions, or maps, you must start the dev server and capture live browser proof (screenshot + console output) before declaring the task done. `npm run test` passing is not a substitute for the app actually running. See Step 5b below.
+
+## Mandatory Implementation Protocol (every task, no exceptions)
+
+**One task at a time.** Do not start the next task until the current one is 100% verified. Each task follows this checklist in order:
+
+### Step 1 — Read the skill
+Check `index-skills.md` → open the matching `SKILL.md` (e.g. `mde-maps`, `mde-supabase`, `testing`). Read before writing any code.
+
+### Step 2 — MCP verification (before writing code)
+For every task, call the relevant MCPs to verify official docs:
+
+| Task type | Required MCPs |
+|-----------|--------------|
+| Google Maps / Grounding / Places | `google-maps-code-assist retrieve-instructions` then `retrieve-google-maps-platform-docs` |
+| Gemini / AI | `gemini-api-docs-mcp search_docs` |
+| Mastra framework | `mastra searchMastraDocs` or `mastraDocs` |
+| Supabase schema / RLS | `mcp__ed3787fc-985d-4fc2-87ac-e09815d3583a__execute_sql` + `search_docs` |
+| General developer knowledge | `google-developer-knowledge answer_query` |
+
+**Never implement from offline knowledge alone.** If MCP returns a correction, fix the implementation before proceeding.
+
+### Step 3 — Implement
+Code the task. Follow the relevant `SKILL.md` + `CLAUDE.md` architecture rules.
+
+### Step 4 — Tests (required, not optional)
+- Write Vitest tests that mechanically prove every requirement (not just "it renders").
+- Tests must fail before the fix and pass after.
+- Minimum: cover every external contract (ToS attributes, API field masks, schema columns, env vars).
+
+### Step 5 — Run the full suite
+```bash
+npm run test        # all tests must pass, count must not regress
+npm run lint        # 0 errors
+npm run build       # exit 0
+```
+For Mastra changes: also `cd my-mastra-app && npm run test && npm run typecheck`.
+For Supabase changes: also `npm run verify:edge` and confirm RLS policies.
+
+### Step 5b — Localhost visual proof (mandatory for any UI, API, or maps change)
+
+**Type-check and tests passing is not enough — exercise the actual runtime path in a live browser.**
+
+**How:**
+1. Start the dev server if not already running: `npm run dev` (port 8080)
+2. Use **Claude Preview MCP** (`preview_start` → `preview_screenshot` → `preview_console_logs`) **or** **Chrome DevTools MCP** (`take_screenshot`, `list_console_messages`) to capture live proof
+3. Capture at minimum: (a) a screenshot of the feature rendered, and (b) console output at warn/error level
+
+**What to prove per change type:**
+
+| Change type | What to show |
+|-------------|-------------|
+| UI component | Screenshot of the rendered component on the correct route |
+| Public page | HTTP 200, page loads, no red console errors |
+| API / edge function | `preview_eval` fetch call with response body shown |
+| Maps / Map ID | Browser console shows `[mdeai/maps]` warn or the env-var path; screenshot of map panel |
+| Auth-gated page | Navigate to route → verify auth gate renders (not a blank screen or crash) |
+| Module logic | `import('/src/lib/module.ts')` in `preview_eval` → call the function, show return value |
+| Supabase RLS | SQL query output via Supabase MCP or `supabase db reset` exit 0 |
+
+**Evidence required in the task's final message:**
+- At least one browser screenshot from the running localhost
+- Console log snippet (warn/error level) — no unexpected crashes or 4xx/5xx
+- `preview_eval` result if the feature is behind auth or not yet wired to a public route
+
+### Step 6 — Update trackers
+Every completed task updates all three files in the same session:
+1. **Task YAML** — `status: Completed`, `completed_at`, DoD checkboxes filled with evidence
+2. **`tasks/mastra/tasks/000-index.md`** — add to Completed table with evidence column
+3. **`tasks/todo.md`** — update "Last updated" line + next-five list
+4. **`changelog`** — prepend entry with evidence table
+
+### Step 7 — Score the task
+Provide a production-readiness score (0–100) with breakdown:
+- Architecture alignment
+- Official docs compliance (MCP-verified)
+- Test coverage
+- Production readiness
+
+**Only suggest the next task after Step 7 is complete.**
+
+## Canonical Superskill Convention
+
+`mde-*` skills are the canonical orchestration entrypoints for mdeai work. Legacy / vendor / generic skills must redirect to the relevant superskill, not compete with it. Maps → `mde-maps`. Supabase → `mde-supabase`. Stripe → `mde-stripe`. Tasks → `mde-task-lifecycle`. Vercel → `mde-vercel`. Secrets → `mde-infisical`.
+
+## Progressive Disclosure Rule
+
+`SKILL.md` holds only: when to use, when not to use, quick routing, links to references, safety rules. Large operational content goes under `references/`. Never paste long docs directly into a SKILL.md body.
 
 ## Git Workflow & Shipping
 

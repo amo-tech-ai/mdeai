@@ -73,6 +73,19 @@ export function EventCardInline({ event }: EventCardInlineProps) {
               </span>
             )}
           </div>
+          {/* MASTRA-048: Maps deep link — placeUri from Places API (MASTRA-067) */}
+          {event.mapsUrl && (
+            <a
+              href={event.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 hover:text-emerald-900 mt-0.5 font-medium"
+            >
+              <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+              Open venue in Maps
+            </a>
+          )}
         </div>
       </div>
 

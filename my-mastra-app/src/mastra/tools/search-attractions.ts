@@ -30,6 +30,10 @@ const attractionSchema = z.object({
   sourceUrl: z.string(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  // MASTRA-048 enrichment fields (populated by scripts/enrich-places.ts)
+  placeId: z.string().nullable().optional().describe('Google Place ID — null until enriched'),
+  mapsUrl: z.string().nullable().optional().describe('Canonical Google Maps deep link (placeUri)'),
+  aiSummary: z.string().nullable().optional().describe('Gemini-generated 2-sentence venue description'),
 });
 
 export type Attraction = z.infer<typeof attractionSchema>;
@@ -175,7 +179,8 @@ async function searchAttractionsFromDB(
     SELECT id, name, category, subcategory, address, city,
            tags, best_for, entry_fee_amount, currency, rating,
            estimated_visit_duration, primary_image_url, website,
-           latitude, longitude
+           latitude, longitude,
+           google_place_id, maps_url, ai_summary
     FROM tourist_destinations
     WHERE ${conditions.join(' AND ')}
     ORDER BY rating DESC NULLS LAST, name ASC
@@ -199,6 +204,10 @@ async function searchAttractionsFromDB(
       sourceUrl: r.website ?? `https://mdeai.co/attractions/${r.id}`,
       latitude: r.latitude != null ? Number(r.latitude) : undefined,
       longitude: r.longitude != null ? Number(r.longitude) : undefined,
+      // MASTRA-048 enrichment fields — null until enrich-places.ts runs
+      placeId: r.google_place_id ?? null,
+      mapsUrl: r.maps_url ?? null,
+      aiSummary: r.ai_summary ?? null,
     }));
     return { results, total: results.length, source: 'supabase' };
   } catch (err) {
@@ -265,6 +274,9 @@ export const searchAttractionsTool = createTool({
           sourceUrl: a.sourceUrl,
           latitude: a.latitude ?? null,
           longitude: a.longitude ?? null,
+          placeId: a.placeId ?? null,
+          mapsUrl: a.mapsUrl ?? null,
+          aiSummary: a.aiSummary ?? null,
         })),
         source,
         ...(error ? { error } : {}),

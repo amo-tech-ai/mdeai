@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Star, UtensilsCrossed, ExternalLink } from 'lucide-react';
+import { Star, UtensilsCrossed, ExternalLink, MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { RestaurantInlineListing } from '@/types/chat';
@@ -69,6 +69,25 @@ export function RestaurantCardInline({ restaurant }: RestaurantCardInlineProps) 
             <p className="text-[10px] text-muted-foreground line-clamp-1">
               {restaurant.vibe.slice(0, 3).join(' · ')}
             </p>
+          )}
+          {/* MASTRA-048: ai_summary — Gemini-generated venue description */}
+          {restaurant.aiSummary && (
+            <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 italic">
+              {restaurant.aiSummary}
+            </p>
+          )}
+          {/* MASTRA-048: Maps deep link — placeUri from Places API (MASTRA-067) */}
+          {restaurant.mapsUrl && (
+            <a
+              href={restaurant.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 hover:text-emerald-900 mt-0.5 font-medium"
+            >
+              <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+              Open in Maps
+            </a>
           )}
         </div>
       </div>

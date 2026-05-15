@@ -26,6 +26,8 @@ const eventSchema = z.object({
   imageUrl: z.string(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  // MASTRA-048: enrichment fields (populated by scripts/enrich-places.ts)
+  mapsUrl: z.string().nullable().optional().describe('Canonical Google Maps deep link (placeUri)'),
 });
 
 export type EventCard = z.infer<typeof eventSchema>;
@@ -166,6 +168,8 @@ interface EventRow {
   primary_image_url: string | null;
   latitude: number | null;
   longitude: number | null;
+  // MASTRA-048 enrichment
+  maps_url: string | null;
 }
 
 function rowToCard(row: EventRow): EventCard {
@@ -181,6 +185,7 @@ function rowToCard(row: EventRow): EventCard {
     imageUrl: row.primary_image_url ?? '',
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
+    mapsUrl: row.maps_url ?? null,
   };
 }
 
@@ -207,7 +212,7 @@ export async function searchEvents(
 
   let q = client
     .from('events')
-    .select('id, name, event_type, address, city, event_start_time, ticket_price_min, currency, primary_image_url, latitude, longitude')
+    .select('id, name, event_type, address, city, event_start_time, ticket_price_min, currency, primary_image_url, latitude, longitude, maps_url')
     .eq('is_active', true)
     .eq('status', 'published')
     .order('event_start_time', { ascending: true })
@@ -293,6 +298,8 @@ export const searchEventsTool = createTool({
           sourceUrl: `https://mdeai.co/events/${e.id}`,
           latitude: e.latitude ?? null,
           longitude: e.longitude ?? null,
+          // MASTRA-048: enrichment — null until enrich-places.ts runs
+          mapsUrl: e.mapsUrl ?? null,
         })),
         source,
       },

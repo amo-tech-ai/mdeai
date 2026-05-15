@@ -79,6 +79,25 @@ export function AttractionCardInline({ attraction }: AttractionCardInlineProps) 
               <span className="font-medium text-foreground">${attraction.priceUsd}</span>
             )}
           </div>
+          {/* MASTRA-048: ai_summary — Gemini-generated venue description */}
+          {attraction.aiSummary && (
+            <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 italic">
+              {attraction.aiSummary}
+            </p>
+          )}
+          {/* MASTRA-048: Maps deep link — placeUri from Places API (MASTRA-067) */}
+          {attraction.mapsUrl && (
+            <a
+              href={attraction.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 hover:text-emerald-900 mt-0.5 font-medium"
+            >
+              <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+              Open in Maps
+            </a>
+          )}
         </div>
       </div>
 
