@@ -100,7 +100,7 @@ npx tsx scripts/outcomes/run-outcome.ts \
 ## Rules for writing new rubrics
 
 Before adding a new file here, verify it satisfies the meta-rubric in
-`.claude/docs/best-practices/01-outcomes-plan.md §9`:
+[`tasks/claude-code/01-outcomes-plan.md §9`](../../tasks/claude-code/01-outcomes-plan.md):
 
 - Every criterion is binary (pass / fail, not "looks good")
 - Every criterion requires evidence the grader can retrieve

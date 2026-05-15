@@ -450,3 +450,119 @@ Dashboard overall: stays at 89/100. Coverage is wider (5 rubrics now vs 4) but t
 - **Progress tracker:** https://github.com/amo-tech-ai/mde/blob/main/tasks/claude-code/progress-outcomes.md
 - **Previous audit commit:** `9b9bb9b3a32bdc0e166005d6db38e2b9de32edcf` (rubric audit)
 - **This commit:** `1ddb9e78dd30ae2a3d13e2588715d7216e163d05`
+
+---
+
+# Outcomes re-verification — 2026-05-14 (third audit pass)
+
+Strict re-audit of the Mastra + Maps outcomes rubrics against the live repo, official docs, and repo skills. Goal: surface red flags, blockers, and broken assumptions the prior two passes did not catch.
+
+## What was verified this pass
+
+| Probe | Command | Result |
+|---|---|---|
+| Mastra rubric scripts exist | `test -f my-mastra-app/scripts/{mastra-smoke.sh,verify-env-security.mjs,verify-grounding-runtime.mjs,verify-grounded-search.mjs,verify-grounding-fallback.mjs,verify-places-sdk.mjs}` | **6/6 PASS** (sizes 58–344 L) |
+| Mastra typecheck | `cd my-mastra-app && npm run typecheck` | exit 0 in **2.67 s** |
+| Mastra unit tests | `cd my-mastra-app && npm test` | **Tests 15 passed** in **0.73 s** |
+| Root typecheck | `npm run typecheck` | exit 0 in **0.23 s** (re-run 1.79 s) |
+| Root tests | `npm test` | **Tests 76 passed (9 files)** in **1.67 s** (re-run 4.24 s) |
+| Root lint | `npm run lint` | 0 errors / 155 warnings in **17.36 s** (pre-existing warnings) |
+| Root build | `npm run build` | bundle 454.5 KB / 128.2 KB gzip in **5.76 s** |
+| `verify:edge` | `npm run verify:edge` | 21 passed / 0 failed / 51 ignored in **1.74 s** |
+| `verify:mastra` | `npm run verify:mastra` | OK (5 scripts) in **0.60 s** |
+| C7 agents-no-DB-write | `grep -nE "supabase\.from\([^)]+\)\.(insert\|update\|delete\|upsert\|rpc)" my-mastra-app/src/mastra/agents/` | **empty (PASS)** |
+| C8 no raw SQL | `grep -nE "\.rpc\(['\"](exec_sql\|execute_sql\|raw)" my-mastra-app/src/mastra/{agents,workflows}/` | **empty (PASS)** |
+| C9 tenant isolation | `grep -nE "\.from\(['\"](apartments\|events\|tickets\|bookings\|conversations\|messages)['\"][^)]*\)\.select" my-mastra-app/src/mastra/` | **empty (PASS)** |
+| C5 env-security script | `node my-mastra-app/scripts/verify-env-security.mjs` | exit **2** — fails closed correctly. Issues: `MISSING SERVER ENV: GOOGLE_MAPS_API_KEY / GEMINI_API_KEY / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_URL` |
+| Rubric sanity grep | `grep -l "Modes:\|Forbidden shortcuts\|Output format" .claude/outcomes/*.md` | **5/5 rubrics have all three sections** |
+| `max_iterations` | rubric headers | `pr-review 3`, `supabase-migration 5`, `mastra-workflow 5`, `maps-grounding 5`, `events-ticketing 8` (matches README + rubric-selection) |
+| New `gen:types` script | `npm run gen:types` | exit 0 in **2.37 s** (writes to `src/integrations/supabase/types.ts`; local stack drift surfaces 1218 added / 75 removed lines — expected, not part of this audit) |
+| New `outcomes:verify` script | `npm run outcomes:verify` | exit 0 in **16.71 s** end-to-end |
+
+## New red flags caught this pass
+
+| # | Severity | Finding | Evidence | Fix shipped |
+|---|---|---|---|---|
+| **R1** | 🔴 high | **`.claude/worktrees/nervous-northcutt-7a51d0/.claude/settings.local.json.pre-sanitize.bak` contains three live secrets** — a Gemini API key (`AIzaSyCA…<redacted>`), a Maps preview-deploy key (`AIzaSyDL…<redacted>`), and a GitHub PAT (`ghp_<redacted>`). The file is untracked in git but lives in the working tree where any `git add -A` would scoop it. Real values intentionally not pasted here — see the actual file path to recover them for rotation. | `grep -RIE 'AIzaSy\|ghp_' .claude/worktrees/` returned 5 lines | Added `.claude/worktrees/` + `.claude/**/*.pre-sanitize.bak` + `.claude/settings.local.json` to `.gitignore`. Rotation still required — these three credentials are live and must be revoked. |
+| **R2** | 🟡 medium | **4 broken doc links** referencing `.claude/docs/best-practices/01-outcomes-plan.md` — the file is actually at `tasks/claude-code/01-outcomes-plan.md`. Affected: `.claude/outcomes/README.md`, `.claude/skills/outcomes/SKILL.md` (2 mentions), `.claude/skills/outcomes/references/rubric-selection.md` (2 mentions). | `grep -rn "docs/best-practices/01-outcomes-plan" .claude` returned 4 hits across 3 files | All four references rewritten to `tasks/claude-code/01-outcomes-plan.md` with correct relative path. |
+| **R3** | 🟡 medium | **`npm run gen:types` was missing** from root `package.json` — `supabase-migration.md` criterion 7 had a fallback (`supabase gen types --lang=typescript --local > …`), but no aliased script. | `node -e 'console.log(require("./package.json").scripts["gen:types"])'` → `undefined` | Added `gen:types` and `outcomes:verify` scripts. Both verified passing (2.37 s and 16.71 s). |
+| **R4** | 🟡 medium | **Mastra rubric prerequisite said `my-mastra-app/.env.local`** but only `my-mastra-app/.env` exists. Verifiers running `node --env-file=...` would silently see "no env loaded" and the criteria would all fail with a confusing "env missing" error. | `ls my-mastra-app/.env*` → only `.env` exists | Updated mastra-workflow.md prerequisites to accept either path + paste the path used. Added Node ≥ 22 requirement (smoke script uses `--env-file`). |
+| **R5** | 🟡 medium | **Exit-code semantics for `verify-env-security.mjs` and `verify-grounding-runtime.mjs` were ambiguous** — the rubric said "paste exit code + summary line" but didn't tell the grader that exit 2 (env-security), exit 3 (missing tools), or exit 4 (MCP connect fail) all mean "fail closed", not "script error". | Read scripts: env-security exits 2 on FAIL / 0 on OK; grounding-runtime exits 0/3/4 | Added an "Exit-code semantics" block to mastra-workflow.md immediately after the prerequisites. Grader now knows which non-zero exit ≠ script bug. |
+| **R6** | 🟢 info | `dist/assets/{ChatMap,TripDetail,index}-*.js` still contain 3 live `AIzaSy*` strings (Vite-inlined `VITE_GOOGLE_MAPS_API_KEY`). | `grep -RIE 'AIzaSy' dist/` → 3 files | No change — this is the known rotation queued in `secret-rotation-checklist-2026-05-14.md §1`. The dist-leak-scan hook will continue to block any deploy that bundles the old key, which is the intended behavior. |
+
+## Errors / failure points caught and fixed
+
+| File | Old | New |
+|---|---|---|
+| `package.json` | (no `gen:types`, no `outcomes:verify`) | + `gen:types`, + `outcomes:verify` |
+| `.gitignore` | `.claude/worktrees/` untracked but not ignored | now ignored; `.pre-sanitize.bak` and `settings.local.json` ignored too |
+| `.claude/outcomes/README.md` | broken `01-outcomes-plan.md` link | rewritten to `tasks/claude-code/01-outcomes-plan.md` |
+| `.claude/skills/outcomes/SKILL.md` | 2 broken `01-outcomes-plan.md` links | both rewritten with proper relative paths |
+| `.claude/skills/outcomes/references/rubric-selection.md` | 2 broken `01-outcomes-plan.md` links | both rewritten |
+| `.claude/outcomes/mastra-workflow.md` | `.env.local` only; no exit-code semantics | accepts `.env` OR `.env.local`; documents exit codes 2/3/4 of the verify scripts; Node ≥ 22 noted |
+
+## Blockers still standing (Phase 2 stays gated)
+
+| Blocker | Affects | Resolution |
+|---|---|---|
+| 0 / 3 real PR outcome loops at `satisfied` | every rubric | Run pr-review, supabase-migration, and maps-grounding rubrics against three real PRs (sprint plan documented earlier in this file) |
+| 3 live secrets in `.claude/worktrees/…/settings.local.json.pre-sanitize.bak` | security gate | **Rotate now:** revoke the Gemini key, Maps preview key, and GitHub PAT. They are gitignored now but live on disk; rotate before sharing the machine or backing it up |
+| `dist/assets/*.js` contains Vite-inlined Maps key | deploy gate | Rotate `VITE_GOOGLE_MAPS_API_KEY` + `npm run build` (per `secret-rotation-checklist-2026-05-14.md §1`) |
+| MASTRA-066 (`<GroundingAttribution>`) not built | `maps-grounding.md` #7 | Ship MASTRA-066 (Mastra tool + React badge component) |
+| Maps Grounding Lite API not enabled in test GCP | `maps-grounding.md` #8, #11 | Enable `mapstools.googleapis.com` in GCP Console |
+| `stripe` CLI not in PATH | `events-ticketing.md` #3 Path A | `brew install stripe/stripe-cli/stripe` or download from stripe.com/docs/stripe-cli — Path B (test-mode bypass) is the documented alternative |
+| Workflow-state-runtime task 012 not shipped | `mastra-workflow.md` C12 | Ship `tasks/mastra/tasks/012-workflow-state-runtime.md` first; rubric correctly flags the dependency |
+
+## Performance grade — third pass (out of 10 points)
+
+Strict scoring, no inflation:
+
+| Axis | Score | Reason |
+|---|--:|---|
+| Mechanical rubric quality | **9** | All 5 rubrics now have modes + prerequisites + forbidden shortcuts + output format; broken doc links repaired; exit-code semantics documented. −1 because there is still no recorded "known-good" baseline transcript for Mastra C11 (router intent multi-turn) — a verifier sees the rubric for the first time and must guess what `intent: rental_search` actually looks like in the response shape. |
+| Evidence discipline | **9** | Accepted-evidence table in README; per-criterion specific commands; mastra-workflow rubric now spells out exit-code meanings. −1 because verifiers still have to read `verify-env-security.mjs` source to learn that exit 2 is the load-bearing signal — a one-line "expected: exit 2 when env missing" snippet in the criterion body would close the gap. |
+| Architecture alignment | **10** | Mastra rubric 1:1 with `mastra-prd.md §1` boundary rules; Maps rubric 1:1 with `mde-maps` server/client split + `tasks/maps/06-maps-new-plan.md`; cross-references verified live this session. |
+| Repo executability today | **7** | **+1** vs prior audit: `gen:types` and `outcomes:verify` now exist as scripts; new probes run end-to-end. Still 7/12 Mastra criteria require live `mastra dev` + Supabase local. |
+| External-service handling | **9** | External-service blockers table in README + per-rubric prerequisite blocks + mastra-workflow `.env` path flexibility. −1 because no automated probe yet detects "is `mastra dev` running on 4111?" — graders still must remember to start it. |
+| Modes (Fast / Full / Locked) | **10** | Tagged everywhere; coverage matrix in README documents which criteria run in which mode. |
+| Tag clarity | **10** | Every criterion explicitly tagged. |
+| False-positive risk | **9** | Greps are tight. −1 because C7 still matches test fixtures if any are added under `agents/__tests__/` — a documented whitelist clause should be added once tests exist. |
+| Reproducibility | **10** | Every command is copy-paste-able; commit hashes + timestamps required in output format; new scripts use only stable CLIs (`supabase`, `node`, `tsc`). |
+| Production readiness | **6** | 5 rubrics + 3 hooks + new package scripts; floor green in 16.71 s. **−4 because 0 / 3 real PR loops** + 3 live secrets in the worktree backup still need rotation + MASTRA-066 + Maps Grounding Lite enablement all unresolved. |
+
+**Third-pass total: `9 + 9 + 10 + 7 + 9 + 10 + 10 + 9 + 10 + 6 = 89 / 100` → grade `8.9 / 10`** (up from `8.8 / 10` last pass).
+
+## Updated 100 % correctness gate
+
+| Condition | State |
+|---|---|
+| All 11 rubric / skill / hook files present | ✅ |
+| Hook syntax probes pass | ✅ 3/3 |
+| Rubric markdown structure (Modes, Forbidden shortcuts, Output format) | ✅ 5/5 |
+| Hook behavior probes (3 positive + 3 negative + 1 recursion guard) | ✅ 7/7 (from prior pass) |
+| Floor green (lint / typecheck / build / test / verify:edge / verify:mastra) | ✅ exit 0, **16.71 s** wall via new `npm run outcomes:verify` |
+| `gen:types` script present | ✅ **(fixed this pass)** |
+| `outcomes:verify` script present | ✅ **(added this pass)** |
+| `test:e2e` script present | ❌ still missing (Playwright config present, suite empty) |
+| Broken doc links to `01-outcomes-plan.md` repaired | ✅ **(fixed this pass — 4 references)** |
+| `dist/assets/*.js` free of leaked-shape secrets | ❌ 3 Vite-inlined hits — awaiting rotation + rebuild |
+| `.claude/worktrees/` live secret backup neutralized | 🟡 **gitignored this pass; rotation of the 3 keys still required** |
+| ≥ 3 real PR outcome loops reached `satisfied` | ❌ 0 / 3 |
+| ≥ 3 real Mastra PR outcome loops reached `satisfied` | ❌ 0 / 3 |
+
+**Result: `FAIL`** — Phase 2 still blocked, but the deterministic side of the system improved this pass (6 fixes landed, 0 regressions).
+
+## Phase 2 unblock checklist (after this audit)
+
+1. **Rotate the 3 leaked credentials in the worktree backup** (Gemini key, Maps preview key, GitHub PAT) — high priority, not gated on rubric changes.
+2. **Rotate `VITE_GOOGLE_MAPS_API_KEY`** + `npm run build` — clears the dist leak gate.
+3. **Run `pr-review.md` against this very PR** (the rubric refactor itself, this commit) in Fast mode — first real PR loop, count = 1 / 3.
+4. **Run `supabase-migration.md`** against the next migration PR — count = 2 / 3.
+5. **Run `maps-grounding.md`** against the next `src/**/*Map*` PR — count = 3 / 3 (expect MASTRA-066 sub-criterion to fail by definition; rubric ships when rendering sub-section passes).
+6. After 3 real PR loops reach `satisfied`, begin Phase 2 — `scripts/outcomes/run-outcome.ts` against the Managed Agents API with the `managed-agents-2026-04-01` beta header.
+
+## Commit reference (third audit)
+
+- **Previous audit commit (hash record):** `3368b9ee4a793eaf5d0b8bfc0ff49f334fb4eb3c`
+- **This audit commit:** (recorded after `git commit`)
+- **Progress tracker:** [`tasks/claude-code/progress-outcomes.md`](https://github.com/amo-tech-ai/mde/blob/main/tasks/claude-code/progress-outcomes.md)

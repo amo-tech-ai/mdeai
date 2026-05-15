@@ -43,3 +43,8 @@ my-mastra-app/.env
 my-mastra-app/.env.*
 my-mastra-app/node_modules/
 .vercel
+
+# Claude Code worktrees + sanitize backups may contain stale secrets
+.claude/worktrees/
+.claude/**/*.pre-sanitize.bak
+.claude/settings.local.json

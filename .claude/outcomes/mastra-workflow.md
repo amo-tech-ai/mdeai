@@ -15,7 +15,14 @@
 - Local Supabase running on `127.0.0.1:54322` (workflow state, `ai_runs`, tenant rows).
 - `MASTRA_PORT=4111` available (or override).
 - `GEMINI_API_KEY` set (every mdeai agent calls Gemini via the OpenAI-compatible endpoint).
+- Env file: this repo ships `my-mastra-app/.env` (gitignored). Scripts that take `--env-file=` will accept either `my-mastra-app/.env` or `my-mastra-app/.env.local` — use the file that exists on the verifier's machine and paste the path used. Both are gitignored.
+- Node ≥ 22 (the smoke script and verify-*.mjs use `--env-file` and top-level await).
 - For criterion 11 (router intent): the multi-turn fixture in `mastra-routing` skill is loadable.
+
+**Exit-code semantics (read this before grading):**
+- `verify-env-security.mjs` exits **2** when required server vars are missing or forbidden vars leak to the client bundle, and exits **0** with `OK — env-security gate passed.` only when both halves pass. Grader: paste the last 3 lines including the `FAIL`/`OK` marker — exit code alone is enough.
+- `verify-grounding-runtime.mjs` exits **3** if any required MCP tool is missing, **4** if MCP connect fails (typically a missing/invalid `GOOGLE_MAPS_API_KEY`), and **0** only when all expected tools are present. Grader: paste exit code + the `FAIL`/`OK` line.
+- Either non-zero exit means the criterion fails and the verifier should paste `BLOCKED — <env var name> missing` if the failure is env-driven, not code-driven.
 
 **Forbidden shortcuts:**
 - Do NOT pass criterion 3 (smoke) by reading `mastra-smoke.sh` — require the actual exit-0 line.

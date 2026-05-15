@@ -11,9 +11,18 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "verify:edge": "bash scripts/verify-edge-functions.sh",
     "verify:supabase": "bash scripts/verify-supabase.sh",
-    "floor": "npm run lint && npm run build && npm run test && npm run verify:edge"
+    "verify:mastra-skills": "node scripts/verify-mastra-skill-reference.mjs",
+    "verify:task-links": "node scripts/verify-task-links.mjs",
+    "verify:task-status-drift": "node scripts/verify-task-status-drift.mjs",
+    "verify:official-doc-refs": "node scripts/verify-official-doc-refs.mjs",
+    "verify:maps-task-alignment": "node scripts/verify-maps-task-alignment.mjs",
+    "verify:mastra": "node scripts/verify-mastra-all.mjs",
+    "gen:types": "supabase gen types --lang=typescript --local > src/integrations/supabase/types.ts",
+    "outcomes:verify": "npm run lint && npm run typecheck && npm run test -- --run && npm run build && npm run verify:edge && npm run verify:mastra",
+    "floor": "npm run lint && npm run typecheck && npm run build && npm run test && npm run verify:edge && npm run verify:mastra"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

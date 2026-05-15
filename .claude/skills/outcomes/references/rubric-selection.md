@@ -24,7 +24,7 @@ Default to Full. Use Fast only when the diff is mechanically trivial and the wri
 
 ## Iteration recommendations
 
-These mirror `.claude/docs/best-practices/01-outcomes-plan.md §3`:
+These mirror [`tasks/claude-code/01-outcomes-plan.md §3`](../../../../tasks/claude-code/01-outcomes-plan.md):
 
 | Rubric | `max_iterations` | Cost expectation |
 |---|---:|---|
@@ -50,7 +50,7 @@ Do not merge until all three reach `satisfied`. If any reach `max_iterations_rea
 
 ## Writing new rubrics
 
-Before adding a new file under `.claude/outcomes/`, verify it satisfies the meta-rubric in [`01-outcomes-plan.md §9`](../../../docs/best-practices/01-outcomes-plan.md):
+Before adding a new file under `.claude/outcomes/`, verify it satisfies the meta-rubric in [`tasks/claude-code/01-outcomes-plan.md §9`](../../../../tasks/claude-code/01-outcomes-plan.md):
 
 - Every criterion is binary (pass / fail, never "looks good").
 - Every criterion requires evidence the grader can fetch fresh.
