@@ -511,7 +511,7 @@ Strict re-audit of the Mastra + Maps outcomes rubrics against the live repo, off
 | MASTRA-066 (`<GroundingAttribution>`) not built | `maps-grounding.md` #7 | Ship MASTRA-066 (Mastra tool + React badge component) |
 | Maps Grounding Lite API not enabled in test GCP | `maps-grounding.md` #8, #11 | Enable `mapstools.googleapis.com` in GCP Console |
 | `stripe` CLI not in PATH | `events-ticketing.md` #3 Path A | `brew install stripe/stripe-cli/stripe` or download from stripe.com/docs/stripe-cli — Path B (test-mode bypass) is the documented alternative |
-| Workflow-state-runtime task 012 not shipped | `mastra-workflow.md` C12 | Ship `tasks/mastra/tasks/012-workflow-state-runtime.md` first; rubric correctly flags the dependency |
+| Workflow-state-runtime task 012 not shipped | `mastra-workflow.md` C12 | Ship `tasks/mastra/tasks/core/012-workflow-state-runtime.md` first; rubric correctly flags the dependency |
 
 ## Performance grade — third pass (out of 10 points)
 
@@ -566,3 +566,137 @@ Strict scoring, no inflation:
 - **Previous audit commit (hash record):** `3368b9ee4a793eaf5d0b8bfc0ff49f334fb4eb3c`
 - **This audit commit:** `74eeffc` (third audit pass — 6 fixes landed)
 - **Progress tracker:** [`tasks/claude-code/progress-outcomes.md`](https://github.com/amo-tech-ai/mde/blob/main/tasks/claude-code/progress-outcomes.md)
+
+---
+
+# Outcomes re-verification — 2026-05-14 (fourth audit pass)
+
+Focus: official-doc alignment, security rotation status, deterministic floor, real-PR validation sprint planning. No invented APIs; cite `.claude/docs/claude-code/outcomes.md` directly.
+
+## What was verified this pass
+
+| Probe | Command | Result |
+|---|---|---|
+| Official-doc alignment — beta header | `grep -n "managed-agents-2026-04-01" .claude/docs/claude-code/outcomes.md` | 5 hits — header matches the constant cited in our `outcomes/SKILL.md` and the Phase-2 plan |
+| Official-doc alignment — events | `grep -nE "span\.outcome_evaluation_(start\|ongoing\|end)\|user\.define_outcome" .claude/docs/claude-code/outcomes.md` | All four event types present in official docs; our rubrics + skill reference only these — **no invented events** |
+| Official-doc alignment — `max_iterations` | rubric headers vs `max_iterations: optional, default 3, max 20` | `pr-review 3`, `supabase-migration 5`, `mastra-workflow 5`, `maps-grounding 5`, `events-ticketing 8` — all ≤ 20 ✓ |
+| Gitignore covers worktrees | `git check-ignore .claude/worktrees/nervous-northcutt-7a51d0/.claude/settings.local.json.pre-sanitize.bak` | exit 0, path printed — **IGNORED** |
+| Leaked-credential lines in worktree backups | `grep -RIE 'AIzaSy\|ghp_' .claude/worktrees/ \| wc -l` | **16 lines** spread across `.claude/worktrees/nervous-northcutt-7a51d0/.claude/settings.local.json.pre-sanitize.bak` — still on disk, gitignored, **rotation required** |
+| `npm run outcomes:verify` end-to-end | `npm run outcomes:verify` | exit 0 in **17.14 s** |
+| Rubric structure — `Modes:` | `grep -l "Modes:" .claude/outcomes/*.md \| wc -l` | **5 / 5** rubrics |
+| Rubric structure — `Forbidden shortcuts` | `grep -l "Forbidden shortcuts" .claude/outcomes/*.md \| wc -l` | **6** (5 rubrics + README) |
+| Rubric structure — `Output format` | `grep -l "Output format" .claude/outcomes/*.md \| wc -l` | **6** (5 rubrics + README) |
+| `test:e2e` script | `node -e 'console.log(require("./package.json").scripts["test:e2e"] \|\| "(missing)")'` | **(missing)** — see decision below |
+| Playwright config | `playwright.config.ts` | Present — uses `lovable-agent-playwright-config` |
+| Playwright specs in `tests/` | `find tests/ -name "*.spec.ts"` | 2 specs in `tests/smoke/` (`mastra-056-057-localhost`, `mastra-chat-events-weekend`) — both Mastra-smoke specific, not main-app E2E |
+
+## Official-doc alignment — verdict
+
+Our rubrics, skill, and Phase 2 plan **do not invent any API surface**. Every event name, header value, and `max_iterations` bound cited in our files matches `.claude/docs/claude-code/outcomes.md` (which mirrors the public Anthropic docs). The only deferred surface — automatic grader provisioning over the `managed-agents-2026-04-01` beta header — is correctly tagged as Phase 2 and not exercised yet. **No corrections needed in this pass.**
+
+## Security cleanup — verification status
+
+| Item | Today | Action required |
+|---|---|---|
+| `.claude/worktrees/` in `.gitignore` | ✅ confirmed via `git check-ignore` | none |
+| `*.pre-sanitize.bak` in `.gitignore` | ✅ pattern present | none |
+| `.claude/settings.local.json` in `.gitignore` | ✅ pattern present | none |
+| Live secrets still on disk in working tree | ⚠ **yes** — gitignored but rotatable values still present in `.claude/worktrees/nervous-northcutt-7a51d0/.claude/settings.local.json.pre-sanitize.bak` | **rotate the 4 credential classes below** |
+
+### Leaked credential classes (values intentionally not listed)
+
+1. **Gemini API key** — `AIzaSy…` shape, used in a logged `curl` example against `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`. Rotation closes the Gemini billing leak risk.
+2. **Maps preview-deploy key** — `AIzaSy…` shape, used in `curl` against `maps.googleapis.com/maps/api/js` with a Vercel preview Referer header. Rotation closes the Maps quota / billing leak.
+3. **GitHub Personal Access Token** — `ghp_…` shape, used in a `git ls-remote https://x-access-token:…@github.com/...` URL. Rotation revokes any push/PR scope the token carries.
+4. **Production `VITE_GOOGLE_MAPS_API_KEY`** — same class as #2 but the **production** variant; inlined into `dist/assets/{ChatMap,TripDetail,index}-*.js` by Vite (3 files). Rotation + `npm run build` clears the dist-leak gate.
+
+### Rotation checklist (paste into Phase 2 PR body once done)
+
+| # | Step | Where | Done? |
+|---|---|---|---|
+| 1 | Revoke the Gemini key | Google AI Studio → API keys → delete the leaked key | ☐ |
+| 2 | Create a new Gemini key and update **Supabase secrets** (`supabase secrets set GEMINI_API_KEY=…`) — never put it in `.env` for the client | Supabase dashboard → Project settings → Edge function secrets | ☐ |
+| 3 | Revoke the Maps preview-deploy key | Google Cloud Console → APIs & Services → Credentials → delete the leaked key | ☐ |
+| 4 | Create a new Maps preview key with HTTP-referrer restriction to `https://*.vercel.app/*` | Google Cloud Console → Credentials → "Restrict key" | ☐ |
+| 5 | Revoke the GitHub PAT | github.com/settings/tokens → revoke the leaked token | ☐ |
+| 6 | If push automation needs the token, create a new fine-scoped PAT with the minimum scopes the workflow actually uses | GitHub settings → Personal access tokens (fine-grained) | ☐ |
+| 7 | Rotate `VITE_GOOGLE_MAPS_API_KEY` (production) | Google Cloud Console → Credentials → create new key with production referrer restrictions | ☐ |
+| 8 | Update Vercel env var | Vercel dashboard → Settings → Environment Variables → replace `VITE_GOOGLE_MAPS_API_KEY` | ☐ |
+| 9 | Local rebuild to clear stale key from `dist/` | `rm -rf dist && npm run build && grep -RIE 'AIzaSy' dist/` | ☐ — must list only the **new** key, zero hits matching the old value |
+| 10 | Delete the worktree backup file once the keys it lists are all revoked | `rm .claude/worktrees/nervous-northcutt-7a51d0/.claude/settings.local.json.pre-sanitize.bak` | ☐ — only after #1, #3, #5 all confirmed revoked |
+| 11 | (Recommended) Delete the entire `.claude/worktrees/nervous-northcutt-7a51d0/` tree if no in-progress work remains there | `rm -rf .claude/worktrees/nervous-northcutt-7a51d0` | ☐ — verify worktree is not active via `git worktree list` first |
+
+## Deterministic floor — fourth-pass evidence
+
+| Command | Wall time | Exit |
+|---|---:|---:|
+| `npm run outcomes:verify` (chains lint → typecheck → test → build → verify:edge → verify:mastra) | **17.14 s** | 0 |
+
+Compared with prior pass: 16.71 s → 17.14 s (+0.43 s — within noise; mostly lint warming).
+
+## test:e2e — decision: **explicitly defer**
+
+The repo has a Playwright config (`playwright.config.ts` using `lovable-agent-playwright-config`) but only **2 specs**, both under `tests/smoke/` and both Mastra-smoke specific (require live `mastra dev` on 4111 + Supabase local). Wiring `npm run test:e2e` today would either:
+
+- Run nothing (no specs in the configured `e2e/` directory), giving a false-green signal that masks real coverage gaps, **or**
+- Run the Mastra smoke specs, which already require external services to be up — duplicating `npm run smoke:runtime` in `my-mastra-app/`.
+
+**Decision:** do NOT add a hollow `test:e2e` alias. Document the deferral here; the gate flips from "missing script" to "documented N/A until real specs exist". When the first true mdeai E2E spec lands (Camila buy-ticket flow), wire `test:e2e` alongside it. This matches the Phase 1 gate's preference for real evidence over checkbox compliance.
+
+## Real PR validation sprint — created
+
+See [`outcomes-real-pr-validation-sprint.md`](./outcomes-real-pr-validation-sprint.md). Three required PR loops, each with exact commands, expected evidence, pass/fail criteria, rollback plan, and what counts as `satisfied`.
+
+## Errors found this pass
+
+| # | Severity | Finding |
+|---|---|---|
+| E1 | 🟡 med | `test:e2e` script absent **and** existing Playwright specs are Mastra-smoke only — adding the alias would be misleading. Documented as deferral (decision above), not a fix. |
+| E2 | 🟢 info | `.claude/worktrees/nervous-northcutt-7a51d0/playwright.config.ts` and worktree subtree contain spec copies. Not a leak (no secrets in spec files), but the worktree's existence is noise — clean up after rotation per checklist step 11. |
+
+No new red flags vs pass 3. The pass 3 fixes held.
+
+## Failure points — preserved
+
+| Flag | Affects | Status |
+|---|---|---|
+| 4 credential classes in worktree backup awaiting rotation | security gate | gitignored ✓ / rotation pending |
+| Vite-inlined Maps key in `dist/assets/*.js` | deploy gate (dist-leak hook) | rebuild required after key rotation |
+| MASTRA-066 not shipped | `maps-grounding.md` #7 | criterion correctly fails by definition |
+| Maps Grounding Lite API not enabled in test GCP | `maps-grounding.md` #8, #11 | Locked-only |
+| Workflow-state-runtime task 012 not shipped | `mastra-workflow.md` #12 | Locked-only |
+
+## Performance grade — fourth pass (strict 5-axis)
+
+| Axis | Score | Reason |
+|---|--:|---|
+| Mechanical correctness | **9** | All 5 rubrics have Modes / Forbidden shortcuts / Output format; broken doc links fixed pass 3; `gen:types` + `outcomes:verify` aliased; `test:e2e` explicitly deferred with rationale. −1 still pending the first real-PR loop. |
+| Evidence discipline | **9** | Exit-code semantics block in mastra-workflow; accepted-evidence table in README; per-criterion commands concrete. −1 because no recorded "known-good" baseline transcript for router intent multi-turn. |
+| Security readiness | **6** | Hooks block correctly; `.gitignore` covers worktrees + sanitize backups + settings.local; **but** 4 credential classes still live on disk awaiting rotation + dist still has Vite-inlined Maps key. Rotation checklist shipped this pass, execution pending. |
+| Runtime readiness | **6** | `outcomes:verify` floor green in 17.14 s; deterministic Mastra greps pass; **but** 7/12 Mastra criteria still require live `mastra dev` + Supabase local; `mastra dev` autostart probe still manual. |
+| Production readiness | **5** | Scaffolding correct; rotation checklist documented; PR validation sprint authored; **but** 0 / 3 real PR loops, 0 / 4 credentials rotated, 0 / 1 dist rebuild. |
+
+**Fourth-pass total: `9 + 9 + 6 + 6 + 5 = 35 / 50` → grade `7.0 / 10`** on the strict 5-axis production-readiness scale.
+
+> Note: the 10-axis rubric-quality score from pass 3 (`8.9 / 10`) and this 5-axis production-readiness score (`7.0 / 10`) measure different things. Rubric quality is stable; the production-readiness gap is real and reflected here.
+
+## Full 100 % certification
+
+**Result: `FAIL`.**
+
+Phase 2 stays blocked until **all** of these flip green:
+
+- [ ] PR 1, 2, 3 reach `satisfied` in their respective rubrics (currently 0 / 3)
+- [ ] Gemini key rotated
+- [ ] Maps preview key rotated
+- [ ] GitHub PAT revoked
+- [ ] `VITE_GOOGLE_MAPS_API_KEY` rotated + rebuild clears `dist/` of old key
+
+This pass shipped: rotation checklist, real-PR validation sprint plan, and the deferral decision for `test:e2e`. It did **not** push, did **not** rotate any keys, and did **not** grade any real PR — all four require explicit user authorization.
+
+## Commit reference (fourth audit)
+
+- **Previous audit commit:** `858ebe5` (pass 3 hash record)
+- **This audit commit:** recorded after `git commit`
+- **Pushed:** **No.** Local `main` stays local until you authorize `git push`.
+- **Sprint plan:** [`tasks/claude-code/outcomes-real-pr-validation-sprint.md`](./outcomes-real-pr-validation-sprint.md)
