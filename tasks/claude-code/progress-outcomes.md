@@ -700,3 +700,108 @@ This pass shipped: rotation checklist, real-PR validation sprint plan, and the d
 - **This audit commit:** `e55955f` (pass 4 sprint plan)
 - **Pushed:** **No.** Local `main` is 10 commits ahead of `origin/main` and stays local until you authorize `git push`.
 - **Sprint plan:** [`tasks/claude-code/outcomes-real-pr-validation-sprint.md`](./outcomes-real-pr-validation-sprint.md)
+
+---
+
+# Real PR outcome loop 1 — pr-review Fast — 2026-05-14
+
+**Verifier:** Claude Code (fresh-context grading the audit/cleanup commit range, not the writer's reasoning).
+**Rubric:** `.claude/outcomes/pr-review.md` ([commit `74eeffc`+ version](./outcomes-real-pr-validation-sprint.md)).
+**Mode:** Fast (criteria 1, 2, 4 + mandatory floor from README).
+**max_iterations:** 3 — used **1**.
+
+## Commit range graded
+
+```
+origin/main..HEAD  (10 commits, ed99e81 → 39ccaeb)
+  39ccaeb  Record outcomes audit pass 4 commit hash
+  e55955f  Plan real Outcomes PR validation sprint (audit pass 4)
+  858ebe5  Record outcomes audit pass 3 commit hash
+  74eeffc  Outcomes audit pass 3: fix broken links, add gen:types + outcomes:verify
+  3368b9e  Record mastra-rubric commit hash in progress tracker
+  1ddb9e7  Add mastra-workflow outcome rubric + record audit results
+  ef60530  Record rubric-audit commit hash in progress tracker
+  9b9bb9b  Improve outcomes rubrics and progress tracker
+  4bae3e6  Record commit hash in outcomes progress tracker
+  ed99e81  Update outcomes testing strategy and verification results
+```
+
+12 files changed; all consistent with "Outcomes rubric + skill + progress doc cleanup" scope.
+
+## Commands run
+
+```bash
+git status --short && git log --oneline origin/main..HEAD
+npm run build                    # criterion 1 [Fast]
+npm run lint                     # criterion 2 [Fast]
+npm run typecheck                # criterion 4 [Fast]
+npm run test -- --run            # mandatory floor (always required)
+git diff origin/main...HEAD | grep -nE "<rubric secret-shape regex>"  # criterion 5 always-on
+git diff --name-only origin/main...HEAD                                # criterion 8 scope check (informational in Fast)
+```
+
+## Evidence
+
+| Criterion | Mode tag | Result | Evidence |
+|---|---|---|---|
+| 1. Build green | `[Fast]` | ✅ PASS | `✓ built in 4.78s`, dist sizes: `index 454.50 kB / gzip 128.20 kB`, exit 0 (wall 5.24 s) |
+| 2. Lint green | `[Fast]` | ✅ PASS | `✖ 155 problems (0 errors, 155 warnings)`, exit 0 (warnings allowed per rubric) — wall 8.72 s |
+| 3. Tests vs baseline | `[Full]` | ⏸ N/A in Fast — but **mandatory floor** ran: **Tests 76 passed (9 files)** in 1.51 s, exit 0. Baseline comparison deferred to a Full-mode run on a future PR. |
+| 4. Typecheck green | `[Fast]` | ✅ PASS | `tsc --noEmit` exit 0 in 0.23 s, zero TS errors |
+| 5. No secrets in diff | `[Full]` (always-on per README) | ✅ PASS | 22 regex-literal mentions inside backticks (e.g. `` `sk_live` ``, `` `Bearer [A-Za-z0-9._-]{20,}` ``) — these are the rubric files describing what to scan for. **Tighter scan** for real-shape tokens (`AIzaSy[A-Za-z0-9_-]{30,}` etc.) returned **empty**. No actual credential values in the tracked diff. |
+| 6. No new console.log | `[Full]` | N/A — Fast mode, code-only criterion |
+| 7. No unsafe VITE_* | `[Full]` | N/A — Fast mode (no `src/**` touched in this range) |
+| 8. Scope match | `[Full]` (informational here) | ✅ PASS by inspection | 12 files, all under `.claude/outcomes/` (6), `.claude/skills/outcomes/` (2), `.gitignore`, `package.json` (gen:types + outcomes:verify), `tasks/claude-code/` (2). Aligns 1:1 with commit messages. |
+| 9. §9 DoD section | `[Full]` | N/A — atomic-commit branch, not a structured PR body. Commit messages include test evidence and grading rationale. Mark `N/A — Definition of Done lives in per-commit messages on this branch; will be required on a real GitHub PR.` |
+| 10. RLS not removed | `[Full]` | N/A — no `supabase/migrations/` files in this diff |
+
+## Secret-scan classification
+
+The diff secret-scan regex returned 22 hits. Each was inspected:
+
+| File | Hits | Classification |
+|---|---:|---|
+| `.claude/outcomes/pr-review.md` | 1 | Pattern literal in criterion 5 regex documentation |
+| `.claude/outcomes/supabase-migration.md` | 1 | Pattern literal in criterion 9 regex documentation |
+| `tasks/claude-code/outcomes-real-pr-validation-sprint.md` | 2 | Pattern literals copied into sprint commands for PR 1 |
+| `tasks/claude-code/progress-outcomes.md` | 18 | Pattern literals + ENV-VAR names (`SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_MAPS_API_KEY`) referenced in audit reports |
+
+**Zero real-shape credential values in the tracked diff.** Tighter scan `AIzaSy[A-Za-z0-9_-]{30,}\|ghp_[A-Za-z0-9]{30,}\|sk_live_[A-Za-z0-9]{20,}` returned empty over `git diff origin/main...HEAD`.
+
+The 16 leaked-credential lines previously found by `grep -RIE 'AIzaSy\|ghp_' .claude/worktrees/` are in **gitignored** files (`*.pre-sanitize.bak`), confirmed via `git check-ignore` — they are **not** in the tracked diff and would not ship via `git push`.
+
+## Output format (verifier verdict)
+
+```
+Mode: Fast. Pass 5/5 applicable criteria. Build, lint, typecheck, tests (mandatory floor), and secret-scan all green; criteria 3/6/7/8/9/10 are out-of-scope for Fast mode or N/A for this diff.
+```
+
+## Final outcome
+
+**`satisfied`** — single iteration, no `needs_revision`, no `max_iterations_reached`. The Outcomes Fast loop has been exercised end-to-end on a real mdeai commit range for the first time.
+
+## Real PR loop count
+
+**Before:** 0 / 3 · **After:** **1 / 3** ✅
+
+## Remaining Phase 2 blockers (after loop 1)
+
+| Blocker | Status | Action |
+|---|---|---|
+| PR 2 — `supabase-migration.md` Full on next migration PR | ❌ pending | Wait for a real migration PR to land or pick from `tasks/mastra/tasks/` |
+| PR 3 — `maps-grounding.md` OR `mastra-workflow.md` Full | ❌ pending | Wait for next qualifying PR |
+| Gemini key rotation (worktree backup) | ❌ pending | Manual user action |
+| Maps preview key rotation | ❌ pending | Manual user action |
+| GitHub PAT revocation | ❌ pending | Manual user action |
+| `VITE_GOOGLE_MAPS_API_KEY` rotation + dist rebuild | ❌ pending | Manual user action |
+| MASTRA-066 (`<GroundingAttribution>`) | ❌ not shipped | Domain work, separate task |
+| Maps Grounding Lite API enablement | ❌ not enabled | GCP Console — separate task |
+| Workflow-state-runtime task 012 | ❌ not shipped | Domain work, separate task |
+| `test:e2e` script | 🟡 deferred | Explicitly deferred until first real mdeai E2E spec lands |
+
+Phase 2 gate progress: **5 / 13** boxes green (rubric quality, hook tests, deterministic floor, first real loop, gitignore covering leaks).
+
+## Commit reference (loop 1)
+
+- **Loop 1 commit (this record):** recorded after `git commit`
+- **Pushed:** **No.** Local `main` will be 11+ commits ahead of `origin/main` after this commit. No `git push` performed.
