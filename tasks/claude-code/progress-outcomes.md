@@ -564,5 +564,5 @@ Strict scoring, no inflation:
 ## Commit reference (third audit)
 
 - **Previous audit commit (hash record):** `3368b9ee4a793eaf5d0b8bfc0ff49f334fb4eb3c`
-- **This audit commit:** (recorded after `git commit`)
+- **This audit commit:** `74eeffc` (third audit pass — 6 fixes landed)
 - **Progress tracker:** [`tasks/claude-code/progress-outcomes.md`](https://github.com/amo-tech-ai/mde/blob/main/tasks/claude-code/progress-outcomes.md)
