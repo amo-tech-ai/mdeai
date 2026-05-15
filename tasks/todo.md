@@ -12,7 +12,7 @@
 > - Source of truth for *why* each task matters: [prd.md](../prd.md) v5.1.
 > - Floor before any PR: `npm run lint && npm run build && npm run test`.
 
-**Last updated:** 2026-05-14 · **152/152** root Vitest (14 files, ↑35 from MASTRA-048 inline card tests) + **50/50** `my-mastra-app` Vitest + **`npm run build` exit 0** + **`npm run lint` 0 errors** · Mastra/maps tracker: [`tasks/mastra/progress-mastra.md`](./mastra/progress-mastra.md) §1c · live at https://www.mdeai.co · **MASTRA-048 Completed** (mapsUrl + aiSummary on all 3 card types, geocode-missing.ts script, 35 new tests)
+**Last updated:** 2026-05-14 · **152/152** root Vitest (14 files) + **50/50** `my-mastra-app` Vitest + **`npm run build` exit 0** + **`npm run lint` 0 errors** · Mastra/maps tracker: [`tasks/mastra/progress-mastra.md`](./mastra/progress-mastra.md) §1c · live at https://www.mdeai.co · **MASTRA-048 Finalized** (nested-a fixed, RLS split 4-policy, remote migration applied, DOM proof nestedAnchorCount=0)
 
 > **Migration chain fixed 2026-05-10** — `supabase db reset` now exits 0 on a clean clone. Removed 5 out-of-order `202601*` files, renamed restaurant seed to run after `remote_schema`, added missing `event_phase1` base migration, guarded `vote.entity_tally` trigger, changed pgvector operator to `operator(extensions.<=>)` for local compatibility.
 >

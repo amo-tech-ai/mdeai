@@ -1,5 +1,22 @@
 # Changelog — mdeai.co
 
+## 2026-05-14 — MASTRA-048 final: nested-a fix + RLS split + migration applied to remote
+
+**Fixes applied after initial commit:**
+- `RestaurantCardInline`, `AttractionCardInline`, `EventCardInline`: outer `<a>` → `div[role="link"]` + `tabIndex` + `aria-label` + keyboard handler. `nestedAnchorCount=0` confirmed via live DOM. Tests updated (role/tabindex/opacity-60 assertions).
+- Remote DB migration applied via Supabase MCP: `places_search_cache` + `place_details_cache` tables, 8 split RLS policies (SELECT/INSERT/UPDATE/DELETE × 2 tables), `maps_url` + `ai_summary` columns on restaurants/tourist_destinations/events, supporting indexes.
+- Commits: `5e1828c` (initial), `cd0059d` (nested-a fix)
+
+**DB state (remote, post-migration):**
+- restaurants: 47 rows, 0 enriched (enrich-places.ts not yet run)
+- tourist_destinations: 28 rows, 0 enriched
+- events: 49 rows, 0 enriched
+- RLS: 4 separate policies per table on both cache tables ✅
+
+**Pending (requires API keys):** run `scripts/enrich-places.ts` + `scripts/cache-ai-summaries.ts` + `scripts/geocode-missing.ts`
+
+---
+
 ## 2026-05-14 — MASTRA-048: Maps enrichment phase 2 — mapsUrl + aiSummary on all 3 card types + geocode-missing.ts
 
 **Task:** `tasks/mastra/tasks/maps/048-mastra-maps-enrichment-phase2.md`
