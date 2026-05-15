@@ -803,5 +803,5 @@ Phase 2 gate progress: **5 / 13** boxes green (rubric quality, hook tests, deter
 
 ## Commit reference (loop 1)
 
-- **Loop 1 commit (this record):** recorded after `git commit`
-- **Pushed:** **No.** Local `main` will be 11+ commits ahead of `origin/main` after this commit. No `git push` performed.
+- **Loop 1 commit (this record):** `d609d29`
+- **Pushed:** **No.** Local `main` is **11 commits ahead** of `origin/main`. No `git push` performed.
