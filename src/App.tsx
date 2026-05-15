@@ -93,7 +93,11 @@ function RouteFallback() {
  */
 function ConditionalFloatingChat() {
   const { pathname } = useLocation();
-  if (pathname === "/" || pathname.startsWith("/c/")) return null;
+  // Suppress on full-screen chat surfaces — ChatCanvas IS the chat UI there.
+  // "/" = marketing homepage (chat is inline hero)
+  // "/chat" = chat canvas (already has full chat + map right-panel)
+  // "/c/*" = future conversation deep-links
+  if (pathname === "/" || pathname === "/chat" || pathname.startsWith("/c/")) return null;
   return <FloatingChatWidget />;
 }
 

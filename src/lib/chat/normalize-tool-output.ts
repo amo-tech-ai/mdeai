@@ -200,10 +200,13 @@ export function normalizeToolOutput(toolName: string, raw: unknown): ChatAction 
   }
 
   const listings = result.data;
+  // Extract IDs so ChatActionBar can populate ?ids= in the "See all on the map" URL.
+  // All listing schemas define an `id` field; the cast is safe.
+  const listing_ids = listings.map((l) => (l as { id: string }).id);
 
   return {
     version: 1 as const,
     type: entry.actionType,
-    payload: { filters: {}, listings },
+    payload: { filters: {}, listings, listing_ids },
   } as ChatAction;
 }

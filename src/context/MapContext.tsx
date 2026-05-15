@@ -106,6 +106,15 @@ export function useMapContext(): MapContextValue {
 }
 
 /**
+ * Safe variant — returns null instead of throwing when used outside a
+ * MapProvider. Use this in components that may appear both inside and
+ * outside a map context (e.g. EmbeddedListings inside FloatingChatWidget).
+ */
+export function useSafeMapContext(): MapContextValue | null {
+  return useContext(MapContext) ?? null;
+}
+
+/**
  * Pin color config — single source of truth for both the map renderer and
  * the card badges. Adding a new category = one row.
  */

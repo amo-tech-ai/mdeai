@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MessageCircle, X, Sparkles, Maximize2, DollarSign, Heart, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +23,7 @@ export function FloatingChatWidget() {
   const [activeTab, setActiveTab] = useState<ChatTab>('concierge');
   const { user } = useAuth();
   const workspace = useWorkspace();
+  const navigate = useNavigate();
   const workspacePromptFiredRef = useRef(false);
 
   const {
@@ -87,7 +89,13 @@ export function FloatingChatWidget() {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Open full chat"
+                onClick={() => navigate('/chat')}
+              >
                 <Maximize2 className="w-4 h-4" />
               </Button>
               <Button 

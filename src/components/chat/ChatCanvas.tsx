@@ -32,7 +32,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet';
 import {
   clearPendingPrompt,
@@ -433,7 +432,9 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
         </div>
       </div>
 
-      {/* Tablet: 2-column (no map) */}
+      {/* Tablet: 2-column + floating Map button.
+          Map is not shown inline (no space), but a "Map N" pill in the
+          bottom-right opens the same Sheet drawer used on mobile. */}
       <div className="hidden md:flex lg:hidden h-screen">
         <div className="w-[200px] flex-shrink-0">
           <ChatLeftNav
@@ -481,11 +482,30 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
             />
           </div>
         </main>
+        {/* Floating Map pill — tablet only. Same Sheet as mobile. */}
+        <Button
+          size="sm"
+          onClick={() => setMobileMapOpen(true)}
+          className="fixed bottom-6 right-6 z-40 h-11 gap-2 rounded-full px-4 shadow-lg"
+          aria-label={
+            pins.length > 0
+              ? `Show map with ${pins.length} ${pins.length === 1 ? 'pin' : 'pins'}`
+              : 'Show map'
+          }
+        >
+          <MapIcon className="h-4 w-4" aria-hidden="true" />
+          <span>Map</span>
+          {pins.length > 0 && (
+            <span className="ml-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-xs leading-none">
+              {pins.length}
+            </span>
+          )}
+        </Button>
       </div>
 
       {/* Mobile: single column with floating map drawer.
           The desktop right-rail map is hidden here (no room); instead we
-          show a "🗺️ Map (N)" pill above the input that opens a Sheet
+          show a "🗺️ Map (N)" pill above MobileNav that opens a Sheet
           containing the same <ChatMap />. MapContext wraps the whole tree
           so pin state is shared automatically — the Sheet is just a
           different rendering surface for the same map. */}
@@ -525,58 +545,60 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
           </div>
         </main>
 
-        {/* Floating "Map" pill — sits above MobileNav (pb-20) and the chat
-            input. Only renders when there are pins to show OR the user is
-            in a conversation (so the empty WelcomeState stays clean). */}
-        <Sheet open={mobileMapOpen} onOpenChange={setMobileMapOpen}>
-          <SheetTrigger asChild>
-            <Button
-              size="sm"
-              className="fixed bottom-24 right-4 z-40 h-11 gap-2 rounded-full px-4 shadow-lg"
-              aria-label={
-                pins.length > 0
-                  ? `Show map with ${pins.length} ${pins.length === 1 ? 'pin' : 'pins'}`
-                  : 'Show map'
-              }
-            >
-              <MapIcon className="h-4 w-4" aria-hidden="true" />
-              <span>Map</span>
-              {pins.length > 0 && (
-                <span className="ml-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-xs leading-none">
-                  {pins.length}
-                </span>
-              )}
-            </Button>
-          </SheetTrigger>
-          <SheetContent
-            side="bottom"
-            className="flex h-[100dvh] flex-col p-0 gap-0"
-          >
-            <SheetHeader className="border-b border-border px-4 py-3 text-left">
-              <SheetTitle className="text-base">Map</SheetTitle>
-              <SheetDescription className="text-xs">
-                {pins.length > 0
-                  ? `${pins.length} ${pins.length === 1 ? 'place' : 'places'} from your conversation`
-                  : 'Pins appear as the AI finds places'}
-              </SheetDescription>
-            </SheetHeader>
-            <div className="min-h-0 flex-1">
-              <ChatMap
-                onViewportSearch={(payload) => {
-                  // Close the drawer first — otherwise the chat updates
-                  // behind a still-open Sheet which feels odd. The
-                  // sendMessage call inside handleViewportSearch will
-                  // populate fresh pins; user can re-open to see them.
-                  setMobileMapOpen(false);
-                  handleViewportSearch(payload);
-                }}
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
+        {/* Floating "Map" pill — sits above MobileNav (pb-20).
+            Plain button (no SheetTrigger wrapper) — opens the shared Sheet
+            below via setMobileMapOpen(true). */}
+        <Button
+          size="sm"
+          onClick={() => setMobileMapOpen(true)}
+          className="fixed bottom-24 right-4 z-40 h-11 gap-2 rounded-full px-4 shadow-lg"
+          aria-label={
+            pins.length > 0
+              ? `Show map with ${pins.length} ${pins.length === 1 ? 'pin' : 'pins'}`
+              : 'Show map'
+          }
+        >
+          <MapIcon className="h-4 w-4" aria-hidden="true" />
+          <span>Map</span>
+          {pins.length > 0 && (
+            <span className="ml-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-xs leading-none">
+              {pins.length}
+            </span>
+          )}
+        </Button>
 
         <MobileNav />
       </div>
+
+      {/* Shared map Sheet — used by both mobile + tablet Map pill buttons.
+          Rendered outside the layout-specific divs so it is always mounted
+          regardless of which layout is visible. Portal renders the sheet
+          content at document.body, so DOM nesting does not matter. */}
+      <Sheet open={mobileMapOpen} onOpenChange={setMobileMapOpen}>
+        <SheetContent
+          side="bottom"
+          className="flex h-[100dvh] flex-col p-0 gap-0"
+        >
+          <SheetHeader className="border-b border-border px-4 py-3 text-left">
+            <SheetTitle className="text-base">Map</SheetTitle>
+            <SheetDescription className="text-xs">
+              {pins.length > 0
+                ? `${pins.length} ${pins.length === 1 ? 'place' : 'places'} from your conversation`
+                : 'Pins appear as the AI finds places'}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1">
+            <ChatMap
+              onViewportSearch={(payload) => {
+                // Close the drawer first — otherwise the chat updates
+                // behind a still-open Sheet which feels odd.
+                setMobileMapOpen(false);
+                handleViewportSearch(payload);
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Anonymous-quota email gate — opens when the edge function returns
           402 ANON_LIMIT_EXCEEDED. Magic-link sign-in resumes the session. */}

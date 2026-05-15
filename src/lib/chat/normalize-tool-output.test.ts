@@ -260,4 +260,47 @@ describe('normalizeToolOutput', () => {
     expect(action?.payload.listings?.[0]?.name).toBe('Pizza');
     expect(action?.version).toBe(1);
   });
+
+  // ── listing_ids ("See all on the map" fix) ─────────────────────────────────
+
+  it('sets listing_ids on OPEN_RENTALS_RESULTS from listing ids', () => {
+    const action = normalizeToolOutput('searchRentalsTool', [
+      { id: 'apt-1', title: 'Loft A', nightly_price: 60 },
+      { id: 'apt-2', title: 'Loft B', nightly_price: 70 },
+      { id: 'apt-3', title: 'Loft C', nightly_price: 80 },
+    ]);
+    expect(action?.type).toBe('OPEN_RENTALS_RESULTS');
+    // listing_ids must be present and match exactly the returned IDs
+    expect((action?.payload as { listing_ids?: string[] }).listing_ids).toEqual([
+      'apt-1',
+      'apt-2',
+      'apt-3',
+    ]);
+  });
+
+  it('sets listing_ids on OPEN_EVENT_RESULTS from event ids', () => {
+    const action = normalizeToolOutput('searchEventsTool', [
+      { id: 'evt-10', title: 'Feria', venue: 'Centro', neighborhood: 'Centro', startsAt: '2026-06-01' },
+      { id: 'evt-11', title: 'Jazz', venue: 'Park', neighborhood: 'Poblado', startsAt: '2026-06-02' },
+    ]);
+    expect(action?.type).toBe('OPEN_EVENT_RESULTS');
+    expect((action?.payload as { listing_ids?: string[] }).listing_ids).toEqual(['evt-10', 'evt-11']);
+  });
+
+  it('sets empty listing_ids array when no listings returned', () => {
+    const action = normalizeToolOutput('searchRentalsTool', []);
+    expect(action?.type).toBe('OPEN_RENTALS_RESULTS');
+    expect((action?.payload as { listing_ids?: string[] }).listing_ids).toEqual([]);
+  });
+
+  it('listing_ids matches listings order and count', () => {
+    const raw = [
+      { id: 'r-a', title: 'A', nightly_price: 50 },
+      { id: 'r-b', title: 'B', nightly_price: 60 },
+    ];
+    const action = normalizeToolOutput('searchRentalsTool', raw);
+    const ids = (action?.payload as { listing_ids?: string[] }).listing_ids ?? [];
+    const listingIds = action?.payload.listings?.map((l) => l.id) ?? [];
+    expect(ids).toEqual(listingIds);
+  });
 });

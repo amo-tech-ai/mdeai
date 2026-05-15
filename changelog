@@ -1,5 +1,28 @@
 # Changelog — mdeai.co
 
+## 2026-05-15 — Chat→Map handoff: AdvancedMarker pins + 6 bug fixes
+
+**Root causes fixed:**
+1. `normalizeToolOutput` never set `listing_ids` → "See all on map" URL had no `ids=` (showed all apartments)
+2. `EmbeddedListings` rendered cards but never called `setPins` → map always empty even after results
+3. `FloatingChatWidget` appeared on `/chat` (double chat UI bug)
+4. Maximize2 button in `FloatingChatWidget` was dead (no navigate wired)
+5. Tablet layout (768–1023px) had no Map button
+6. Mobile Map button used `SheetTrigger asChild` — Sheet never opened
+
+**Files changed:** `normalize-tool-output.ts` · `EmbeddedListings.tsx` (4 pin-sync effects) · `MapContext.tsx` (useSafeMapContext) · `App.tsx` · `FloatingChatWidget.tsx` · `ChatCanvas.tsx`
+
+| Check | Result |
+|-------|--------|
+| `npm run test` | **216/216** pass |
+| `npm run build` | exit 0 |
+| `gmp-advanced-marker` in DOM | **3 elements** — Laureles pins with price labels |
+| Header | "3 on the map" ✓ |
+| `/apartments?ids=a,b,c&view=map` | "3 apartments on map" ✓ |
+| Double chat on `/chat` | Suppressed ✓ |
+
+---
+
 ## 2026-05-15 — EVT-069 (partial): checkout green + idempotency fix
 
 | Evidence | Result |

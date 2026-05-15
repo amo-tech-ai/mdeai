@@ -32,8 +32,13 @@ export function ChatActionBar({ actions, onActionDispatched }: ChatActionBarProp
               key={`${action.type}-${i}`}
               size="sm"
               onClick={() => {
-                const q = encodeURIComponent(JSON.stringify(action.payload.filters ?? {}));
-                navigate(`/apartments?q=${q}`);
+                const params = new URLSearchParams();
+                params.set('q', JSON.stringify(action.payload.filters ?? {}));
+                if (action.payload.listing_ids?.length) {
+                  params.set('ids', action.payload.listing_ids.join(','));
+                }
+                params.set('view', 'map');
+                navigate(`/apartments?${params.toString()}`);
                 onActionDispatched?.(action);
               }}
               className="rounded-full"
