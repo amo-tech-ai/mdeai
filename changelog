@@ -1,5 +1,136 @@
 # Changelog — mdeai.co
 
+## 2026-05-15 — EVT-009: ticket edge gateway `verify_jwt` aligned (remote deploy)
+
+**Task:** EVT-009 — `ticket-checkout` and `ticket-validate` gateway JWT off; handlers enforce auth in-function.
+
+| Evidence | Result |
+|----------|--------|
+| Deploy | `bash scripts/deploy-ticket-verify-jwt.sh` (after `rm -rf dist`) |
+| Remote flags | checkout/validate/webhook `verify_jwt=false`; staff-link `true` |
+| `ticket-checkout` curl (apikey only) | HTTP **400** `INVALID_PAYLOAD` (not gateway 401) |
+| `ticket-validate` curl (apikey only) | HTTP **401** `STAFF_TOKEN_INVALID` (handler) |
+| Vitest | **216/216** pass (`ticket-edge-verify-jwt` 5/5) |
+
+**Paid Events launch:** still **NO-GO** until EVT-069 Stripe checkout/webhook/SQL proof.
+
+---
+
+## 2026-05-15 — "See all on the map" fix: listing_ids now populated in Mastra chat path
+
+**Bug:** Clicking "See all on the map" from chat navigated to `/apartments?q=%7B%7D&view=map` with no `ids=` param — showed all 44 apartments instead of the 5 returned by the AI.
+
+**Root cause:** `normalizeToolOutput` (Mastra chat path) built `payload: { filters: {}, listings }` but never set `listing_ids`. `ChatActionBar` only adds `?ids=` when `listing_ids?.length > 0`, so the URL was missing that param and `useApartments` fetched everything.
+
+**Fix:** One line in `normalizeToolOutput` — extract IDs from the listings array and include them as `listing_ids`.
+
+| File | Change |
+|------|--------|
+| `src/lib/chat/normalize-tool-output.ts` | **FIX** — `normalizeToolOutput` now sets `listing_ids: listings.map(l => l.id)` in the returned payload; `ChatActionBar` will now set `?ids=<id1>,<id2>,...` and `useApartments` will filter to just those apartments |
+| `src/lib/chat/normalize-tool-output.test.ts` | **+4 tests** — `listing_ids` populated for rentals (3 IDs), events (2 IDs), empty array when no listings, order+count matches listings |
+
+**Verified:** Live browser `import('/src/lib/chat/normalize-tool-output.ts')` → `normalizeToolOutput('searchRentalsTool', [...])` returns `listing_ids: ['r-1','r-2','r-3']`. URL simulation produces `/apartments?q=%7B%7D&ids=r-1,r-2,...&view=map`. Map page at `?ids=...&view=map` renders the split-view and queries Supabase filtered to those IDs.
+
+**Tests:** 211/211 · **Lint:** 0 errors · **Build:** exit 0 (7.7s)
+
+---
+
+## 2026-05-15 — MASTRA-049 session 6: GEO_PATTERNS refactor + Supabase quota guard + env.example docs
+
+**Task:** P1 Maps Grounding enablement gates — structured GEO_PATTERNS (English-only), Supabase-persisted daily quota counter, `.env.example` `VITE_GOOGLE_MAPS_MAP_ID` documentation
+**Score: 95/100** (was 92, +3 — Item 8 Maps Grounding 7→9/10)
+
+| File | Change |
+|------|--------|
+| `supabase/functions/ai-chat/index.ts` | **REFACTOR** — `groundWithMaps`: replaced single broad venue-type regex with 6-pattern `GEO_PATTERNS` array targeting proximity/live-state queries only; added `serviceClient: SupabaseClientType` param; added Supabase-persisted daily quota guard (reads/writes `grounding_quota_log`); call site updated to pass `getServiceClient()` |
+| `src/lib/places-enrichment-compliance.test.ts` | **+9 tests** — `groundWithMaps` quota guard compliance: serviceClient param, GEO_PATTERNS array, proximity keywords ("near", "close to", "walking distance"), live-state keywords ("open now", "currently open"), quota_log read-before-API, `MAPS_GROUNDING_DAILY_LIMIT` env, fire-and-forget increment, non-fatal catch |
+| `.env.example` | **+14 lines** — `VITE_GOOGLE_MAPS_MAP_ID` documented with step-by-step instructions for creating a Map ID in Cloud Console and setting it in Vercel |
+| `tasks/mastra/audit/04-production-readiness-checklist.md` | Score 92 → 95; Item 8 (Maps Grounding) 7→9; Item 10 count 198→207; fix priority table P1 code items marked ✅ DONE |
+| `changelog` | This entry |
+
+**What changed in `groundWithMaps`:**
+
+| Before | After |
+|--------|-------|
+| Single broad regex — fired on "restaurant", "eat", "dining", any venue word | 6-pattern array — fires only on proximity/live-state/navigation queries |
+| In-memory counter — resets on every cold start | Supabase `grounding_quota_log` — survives restarts |
+| No `serviceClient` param — no DB access | `serviceClient: SupabaseClientType` — reads quota before call, writes after |
+| No kill switch — 500/day hard-coded | `MAPS_GROUNDING_DAILY_LIMIT` env var — ops can set to 0 as a kill switch |
+
+**Tests:** 207/207 · **Lint:** 0 errors · **Build:** exit 0 (6.5s) · **Deno check ai-chat:** exit 0
+
+**Remaining user actions before `MDEAI_MAPS_GROUNDING=true` is safe to enable:**
+1. `git push origin main` (30+ commits pending)
+2. Create Map ID at console.cloud.google.com → set `VITE_GOOGLE_MAPS_MAP_ID` in Vercel
+3. Set `MDEAI_MAPS_GROUNDING=true` in Supabase Edge Function secrets
+4. Rotate Gemini API key in Google Cloud Console (old VITE_ exposure)
+
+---
+
+## 2026-05-15 — MASTRA-048 session 5: full 8-component GMP-verified audit + pinContent smoke-spec fix
+
+**Task:** element-by-element audit of entire Maps + Enrichment + AI pipeline using GMP Code Assist MCP; fix data-testid on pin content
+**Score: 92/100** (was 91, +1 — Item 6 Marker Accessibility now 10/10)
+
+| File | Change |
+|------|--------|
+| `src/components/map/pinContent.ts` | **FIX** — added `data-testid="map-pin"` and `data-category` attributes to `buildPinContent`; required for MASTRA-045 Playwright smoke spec (`page.locator('[data-testid="map-pin"]').count() > 0`) |
+| `src/lib/places-enrichment-compliance.test.ts` | **+5 tests** — pinContent smoke-spec compliance: `data-testid`, `data-category`, `role="button"`, `aria-label`, `aria-hidden` on emoji dot |
+| `tasks/mastra/audit/04-production-readiness-checklist.md` | Score 91 → 92; Item 6 (Accessibility) 9→10; Item 8 (Grounding) 8→7 (Spanish patterns + quota guard gaps documented); fix priority table updated |
+| `changelog` | This entry |
+
+**Audit findings (all 8 components — GMP Code Assist verified):**
+
+| Component | Score | Key finding |
+|-----------|-------|-------------|
+| `enrich-places.ts` | 9.5/10 | All correct; `validatePlaceUri` confirmed valid — GMP returns `maps.google.com/?cid=...` |
+| `cache-ai-summaries.ts` | 9/10 | Correct; config duplicated between `generateSummary` and promptBuilder path (DRY risk) |
+| `ai-chat` Maps Grounding | 7/10 | Feature-flagged OFF; missing Spanish GEO_PATTERNS; no daily quota guard |
+| `ChatMap.tsx` | 8.5/10 | Production-ready; InfoWindow content rental-only (P2); no collisionBehavior |
+| `pinContent.ts` | **10/10** | Fixed: `data-testid="map-pin"` + `data-category` added |
+| `MdeMap.tsx` | 7.5/10 | Not production; InfoWindow anchor never set (`openAnchor` always null) |
+| `MdeMarker.tsx` | 9.5/10 | Fully correct; `collisionBehavior` set, `gmp-click`, cleanup complete |
+| `google-maps-map-id.ts` | 10/10 code | `VITE_GOOGLE_MAPS_MAP_ID` not set in Vercel prod → AdvancedMarkerElement silent-fail |
+
+**Tests:** 198/198 · **Lint:** 0 errors · **Build:** exit 0 (8.3s)
+
+---
+
+## 2026-05-15 — MASTRA-048 session 4: events ai_summary gap + ai-chat field mapping fix
+
+**Task:** systematic AUDIT A + AUDIT B from production readiness checklist
+**Score: 91/100** (was 88, +3)
+
+| File | Change |
+|------|--------|
+| `supabase/migrations/20260515050000_add_ai_summary_to_events.sql` | **NEW** — `ALTER TABLE events ADD COLUMN IF NOT EXISTS ai_summary text` |
+| `scripts/cache-ai-summaries.ts` | **MOD** — extended `generateForTable` to accept `events`; added `promptBuilder` option; events now get event-aware descriptions ("what attendees will experience"); renamed opts from positional arg to opts object |
+| `src/types/chat.ts` | **MOD** — added `aiSummary?: string \| null` to `EventInlineListing` |
+| `src/components/chat/embedded/EventCardInline.tsx` | **MOD** — renders `aiSummary` italic paragraph (matching RestaurantCardInline / AttractionCardInline pattern) |
+| `src/components/chat/embedded/EventCardInline.test.tsx` | **MOD** — 4 new aiSummary tests (render/null/undefined/combined) |
+| `supabase/functions/ai-chat/index.ts` | **MOD** — added `maps_url, ai_summary` to SELECT for events/restaurants/attractions; added `mapsUrl` + `aiSummary` to all 3 `inlineListings` mappers (**critical bug fix — data was invisible to frontend**) |
+| `src/lib/places-enrichment-compliance.test.ts` | **MOD** — +8 compliance tests: events ai_summary in cache-ai-summaries (2), events promptBuilder (existing+new), ai-chat SELECT includes fields (3), ai-chat mapper includes fields (3) |
+
+**DB state after session 4 (production):**
+
+| Table | place_id | maps_url | ai_summary | place_id % | summary fill % |
+|-------|----------|----------|------------|------------|----------------|
+| restaurants | 44/44 | 44/44 | 44/44 | **100%** | **100%** |
+| tourist_destinations | 23/23 | 23/23 | 23/23 | **100%** | **100%** |
+| events | 34/49 | 34/49 | 34/49 | **69.4%** | **100% of enriched** |
+
+**Critical bug fixed:** ai-chat edge fn was not including `maps_url` / `ai_summary` in SELECT or `inlineListings` mapper for ANY table. All enrichment data was in the DB but invisible to chat cards. Fixed for events, restaurants, and attractions.
+
+**Tests:** 193/193 pass · lint: 0 errors · build: exit 0
+
+---
+
+## 2026-05-15 — Events EVT-DIAG diagram task spine (V2)
+
+**Docs + tasks:** Added [`tasks/events/events-diagram-index.md`](tasks/events/events-diagram-index.md), [`tasks/events/events-diagram-roadmap.md`](tasks/events/events-diagram-roadmap.md), [`tasks/events/events-milestones.md`](tasks/events/events-milestones.md), [`tasks/events/events-progress.md`](tasks/events/events-progress.md), [`tasks/events/V2-tasks/README.md`](tasks/events/V2-tasks/README.md), [`tasks/events/tasks/README.md`](tasks/events/tasks/README.md). Generated **72** diagram-derived task files under `tasks/events/V2-tasks/{core,mvp,advanced,production}/` via [`scripts/gen-events-diagram-tasks.py`](../scripts/gen-events-diagram-tasks.py). Filenames use prefixes **`001-`–`072-`** with YAML `implementation_order` and a **single-predecessor** `dependencies` chain: CORE-02 (ER) → CORE-03 (auth/RLS) → CORE-01 (ticketing) → MVP → ADVANCED → PRODUCTION. Extended [`tasks/events/events-prd-v2-diagrams.md`](tasks/events/events-prd-v2-diagrams.md) with §9–§14 and extra diagram nodes (four-state, mobile, Lighthouse, PhotoMod, Hermes/Gemini). Cross-links: [`tasks/events/events-prd-v2-mastra-maps-automation.md`](tasks/events/events-prd-v2-mastra-maps-automation.md), [`tasks/events/index-events.md`](tasks/events/index-events.md), [`tasks/events/events-roadmap.md`](tasks/events/events-roadmap.md), [`tasks/events/000-index.md`](tasks/events/000-index.md), [`tasks/INDEX.md`](tasks/INDEX.md), [`tasks/todo.md`](tasks/todo.md).
+
+---
+
 ## 2026-05-14 — MASTRA-048 final: nested-a fix + RLS split + migration applied to remote
 
 **Fixes applied after initial commit:**

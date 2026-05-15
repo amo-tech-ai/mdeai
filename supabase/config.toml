@@ -1,5 +1,11 @@
 project_id = "zkwcbyxiwklihegjhuql"
 
+# Edge function JWT gateway (Supabase platform):
+# `verify_jwt = false` means **no automatic JWT validation at the edge** — each handler must
+# enforce auth (Bearer session), signed webhooks, or `apikey`+rate limits as documented in the function.
+# Do not set `verify_jwt = true` here until that function's first-line auth has been verified.
+# Public matrix (conceptual): webhook (Stripe, etc.) | anon+apikey (read-only AI) | user Bearer (mutations).
+
 [functions.ai-chat]
 enabled = true
 verify_jwt = false
@@ -44,3 +50,24 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
+[functions.chat-lead-capture]
+enabled = true
+verify_jwt = false
+
+# Events ticketing (EVT-057) — handler validates custom JWTs; gateway JWT off for checkout/validate/webhook.
+# Remote may still show verify_jwt=true until EVT-009; code comments expect false for checkout + validate.
+[functions.ticket-checkout]
+enabled = true
+verify_jwt = false
+
+[functions.ticket-payment-webhook]
+enabled = true
+verify_jwt = false
+
+[functions.ticket-validate]
+enabled = true
+verify_jwt = false
+
+[functions.event-staff-link-generator]
+enabled = true
+verify_jwt = true
