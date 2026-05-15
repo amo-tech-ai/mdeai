@@ -1031,5 +1031,5 @@ The user feedback that prompted this pass: *"Fast checks build/lint/typecheck on
 ## Commit reference (cleanup)
 
 - **Previous:** `94b955e` (Loop 1 Full re-grade + path drift)
-- **This commit:** recorded after `git commit`
-- **Pushed:** **No.** Local `main` will be **14 commits ahead** of `origin/main` after this commit.
+- **This commit:** `c8502ff`
+- **Pushed:** **No.** Local `main` is **14 commits ahead** of `origin/main`.
