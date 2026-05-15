@@ -142,16 +142,20 @@ Deno.serve(async (req) => {
   }
   // 4. Cache the (small) success response so retries within the 3-day window
   //    short-circuit at step 2.
-  await service.from("idempotency_keys").upsert({
-    key: idemKey,
-    endpoint: ENDPOINT,
-    response: {
-      success: true,
-      event_type: event.type,
+  const { error: idemWriteErr } = await service.from("idempotency_keys").upsert(
+    {
+      key: idemKey,
+      endpoint: ENDPOINT,
+      response: {
+        success: true,
+        event_type: event.type,
+      },
     },
-  }, {
-    onConflict: "key,endpoint",
-  });
+    { onConflict: "key" },
+  );
+  if (idemWriteErr) {
+    console.error("ticket-payment-webhook: idempotency_keys upsert failed", idemWriteErr);
+  }
   return jsonResponse(
     {
       success: true,

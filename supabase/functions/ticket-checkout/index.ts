@@ -180,6 +180,8 @@ Deno.serve(async (req) => {
   try {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
+      // Explicit card for COP — avoids dashboard "automatic methods" gaps in test/live.
+      payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
@@ -244,12 +246,16 @@ Deno.serve(async (req) => {
       access_token: accessToken,
     },
   };
-  await service.from("idempotency_keys").upsert({
-    key: body.idempotency_key,
-    endpoint: ENDPOINT,
-    response: result,
-  }, {
-    onConflict: "key,endpoint",
-  });
+  const { error: idemWriteErr } = await service.from("idempotency_keys").upsert(
+    {
+      key: body.idempotency_key,
+      endpoint: ENDPOINT,
+      response: result,
+    },
+    { onConflict: "key" },
+  );
+  if (idemWriteErr) {
+    console.error("ticket-checkout: idempotency_keys upsert failed", idemWriteErr);
+  }
   return jsonResponse(result, 200, req);
 });

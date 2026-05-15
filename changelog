@@ -1,5 +1,32 @@
 # Changelog — mdeai.co
 
+## 2026-05-15 — EVT-069 (partial): checkout green + idempotency fix
+
+| Evidence | Result |
+|----------|--------|
+| Deploy | `payment_method_types: ["card"]` + idempotency `onConflict: "key"` |
+| Checkout | HTTP **200**, `stripe_session_url` returned |
+| Idempotency | Same key → same `order_id` |
+| Webhook paid + replay | **Pending** — use Stripe **test** keys; do not pay `cs_live_*` in automation |
+| Deno | **6/6** `ticket_stripe_smoke_test.ts` |
+
+---
+
+## 2026-05-15 — EVT-069 (partial): Stripe smoke blocked on COP payment methods
+
+**Task:** EVT-069 — ticket checkout → webhook spine.
+
+| Step | Result |
+|------|--------|
+| `ticket-checkout` | Reaches Stripe; **502 STRIPE_ERROR** (no COP payment methods in Dashboard) |
+| Fix in repo | `payment_method_types: ["card"]` on Checkout Session create |
+| Deploy fix | Pending (`rm -rf dist` + `supabase functions deploy ticket-checkout`) |
+| `ticket-payment-webhook` | **400 BAD_SIGNATURE** without sig (handler OK) |
+| Deno contracts | **5/5** `ticket_stripe_smoke_test.ts` |
+| Script | `scripts/evt069-stripe-smoke.sh` + Mermaid journeys in task file |
+
+---
+
 ## 2026-05-15 — EVT-009: ticket edge gateway `verify_jwt` aligned (remote deploy)
 
 **Task:** EVT-009 — `ticket-checkout` and `ticket-validate` gateway JWT off; handlers enforce auth in-function.
