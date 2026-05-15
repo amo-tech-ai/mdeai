@@ -45,7 +45,7 @@ export function EmailGateModal({ open, onOpenChange, retryAfterSeconds }: EmailG
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;
