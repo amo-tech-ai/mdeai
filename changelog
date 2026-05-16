@@ -23,6 +23,18 @@
 
 ---
 
+## 2026-05-15 — EVT-069: Stripe smoke green (checkout + webhook + replay)
+
+| Evidence | Result |
+|----------|--------|
+| Checkout | `cs_test_` HTTP 200 |
+| Order | `115de368-…` → **paid** |
+| Attendees | 1× **active** + QR |
+| Webhook replay | `replayed:true`, no duplicate rows |
+| Scripts | `evt069-deliver-webhook.py`, `evt069-stripe-test-setup.sh` |
+
+---
+
 ## 2026-05-15 — EVT-069 (partial): checkout green + idempotency fix
 
 | Evidence | Result |

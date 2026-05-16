@@ -16,7 +16,7 @@ Roll-up: **Tasks** → **Diagrams** (all tasks for a `diagram_id` done) → **Ph
 
 | Phase | Diagrams complete | Tasks complete | Milestone status | Blockers | Next action |
 |-------|--------------------|----------------|------------------|----------|-------------|
-| CORE | 0 / 3 🟥 | 1 / 26 🟡 | EVT-MILESTONE-CORE 🟥 | EVT-009 gateway JWT ✅ remote; EVT-069 Stripe smoke next; frontend buy path missing | **EVT-069** Stripe test checkout → webhook → SQL proof |
+| CORE | 0 / 3 🟥 | 2 / 26 🟡 | EVT-MILESTONE-CORE 🟥 | EVT-009 + EVT-069 ✅; hosted Checkout pay path + UI next | **Checkout UI** on `/events/:id` (after optional hosted pay E2E) |
 | MVP | 0 / 3 🟥 | 0 / 12 🟥 | EVT-MILESTONE-MVP 🟥 | Blocked by CORE milestone | Defer UI hardening until spine green |
 | ADVANCED | 0 / 3 🟥 | 0 / 18 🟥 | EVT-MILESTONE-ADVANCED 🟥 | Maps train + MASTRA-041/007; OpenClaw gates | Follow `events-roadmap.md` Post-MVP train |
 | PRODUCTION | 0 / 2 🟥 | 0 / 16 🟥 | EVT-MILESTONE-PRODUCTION 🟥 | Audit 35 HIGH items; remote parity; Paperclip audit (EVT-064) | Treat EVT-057/059/064/068 as launch-blocking gates that move earlier when they block CORE/MVP safety |

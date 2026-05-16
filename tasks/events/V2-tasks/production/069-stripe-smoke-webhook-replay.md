@@ -206,12 +206,13 @@ sequenceDiagram
 
 | Check | Result |
 | --- | --- |
-| Complete Stripe test payment | **NOT RUN** — live session; requires manual pay or `sk_test_` in edge secrets |
-| `event_orders.status = paid` | **NOT VERIFIED** — sample order `57e13c92-…` remains `pending` (SQL) |
-| Attendees active + `qr_token` | **NOT VERIFIED** |
-| Checkout idempotency replay | ✅ Same `idempotency_key` → same `order_id` (post-fix) |
-| Webhook replay idempotent | **NOT RUN** — needs `payment_intent.succeeded` event |
-| Webhook reaches handler (no sig) | ✅ HTTP **400** `BAD_SIGNATURE` (not gateway 401) |
+| Complete Stripe test payment | ✅ `payment_intent.succeeded` via test PI + signed webhook delivery |
+| `event_orders.status = paid` | ✅ `115de368-1ec8-41a8-bb1f-4a93c9a26649` → `paid`, `pi_3TXrATFAkFMiToA10CXmmpMD` |
+| Attendees active + `qr_token` | ✅ 1× `active`, `qr_len=243` |
+| Checkout idempotency replay | ✅ Same `idempotency_key` → same `order_id` |
+| Webhook replay idempotent | ✅ 2× deliver → `{"replayed":true}`, still 1 active attendee |
+| Webhook reaches handler (no sig) | ✅ HTTP **400** `BAD_SIGNATURE` |
+| Dashboard `we_*` endpoint | ⚠️ **live mode only** — use `stripe listen` or `evt069-deliver-webhook.py` in test |
 
 ### Contract tests (no live Stripe)
 

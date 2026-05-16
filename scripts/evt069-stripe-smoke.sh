@@ -59,6 +59,15 @@ SESSION_URL=$(python3 -c "import json; d=json.load(open('/tmp/evt069-checkout.js
 echo "[evt069] order_id=${ORDER_ID}"
 echo "[evt069] stripe_session_url=${SESSION_URL:0:80}..."
 
+if [[ "$SESSION_URL" == *"cs_live_"* ]]; then
+  echo "[evt069] WARN: cs_live_ session — edge STRIPE_SECRET_KEY is LIVE." >&2
+  echo "  Use sk_test_ in Supabase secrets: bash scripts/evt069-stripe-test-setup.sh" >&2
+  echo "  (after copying test keys into .env.local)" >&2
+fi
+if [[ "$SESSION_URL" == *"cs_test_"* ]]; then
+  echo "[evt069] OK: cs_test_ session (test mode)"
+fi
+
 echo "[evt069] Step 2 — Complete payment in Stripe test mode (manual or Stripe CLI):"
 echo "  stripe checkout sessions retrieve <session_id>  # after paying with test card 4242..."
 echo "  Or open: ${SESSION_URL}"
