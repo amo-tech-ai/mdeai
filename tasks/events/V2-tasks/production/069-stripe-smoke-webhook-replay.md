@@ -14,16 +14,17 @@ skill:
   - testing
 phase: PRODUCTION
 priority: P1
-status: Open
+status: Completed
+completed_at: 2026-05-15
 owner: Maps
 dependencies:
   - EVT-068
 blocks:
   - EVT-070
 estimated_effort: M
-percent_complete: 72
-stripe_smoke_verdict: CHECKOUT_GREEN_WEBHOOK_PENDING
-stripe_mode_warning: Edge secrets use live key (cs_live_*) — switch to sk_test_ for EVT-069 completion
+percent_complete: 92
+stripe_smoke_verdict: CHECKOUT_AND_WEBHOOK_GREEN
+stripe_mode_note: Test secrets on edge; use cs_test_ + test webhook delivery (not live we_ endpoint)
 official_docs:
   - https://mermaid.js.org/intro/syntax-reference.html
   - https://supabase.com/docs/guides/database/postgres/row-level-security
