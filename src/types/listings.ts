@@ -24,6 +24,8 @@ export interface ApartmentFilters extends BaseListingFilters {
   wifiSpeedMin?: number;
   availableFrom?: string;
   amenities?: string[];
+  /** Filter to a specific set of IDs — used by the chat "See all on the map" hand-off. */
+  ids?: string[];
 }
 
 export interface Apartment {

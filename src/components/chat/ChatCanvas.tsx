@@ -280,8 +280,10 @@ function ChatCanvasInner({ defaultTab = 'concierge' }: ChatCanvasProps) {
         id: l.id,
         category: 'rental',
         title: l.title,
-        latitude: l.latitude ?? null,
-        longitude: l.longitude ?? null,
+        // Coerce to number: Supabase numeric columns arrive as strings via the edge
+        // function. Google Maps AdvancedMarkerElement requires numeric lat/lng.
+        latitude: l.latitude != null ? Number(l.latitude) : null,
+        longitude: l.longitude != null ? Number(l.longitude) : null,
         label: l.price_monthly ? `$${l.price_monthly}/mo` : undefined,
         meta,
       };

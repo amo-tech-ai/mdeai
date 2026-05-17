@@ -26,7 +26,14 @@ export function ChatActionBar({ actions, onActionDispatched }: ChatActionBarProp
     <div className="mt-2 flex flex-wrap gap-2">
       {actions.map((action, i) => {
         if (action.type === 'OPEN_RENTALS_RESULTS') {
-          const count = action.payload.listing_ids?.length ?? 0;
+          // Prefer listing_ids; fall back to IDs extracted from inline listings when
+          // listing_ids is absent (e.g. the SSE sidecar emitted listings but not the
+          // separate listing_ids array — both fields are optional in the payload type).
+          const resolvedIds =
+            action.payload.listing_ids?.length
+              ? action.payload.listing_ids
+              : (action.payload.listings ?? []).map((l) => l.id);
+          const count = resolvedIds.length;
           return (
             <Button
               key={`${action.type}-${i}`}
@@ -34,8 +41,8 @@ export function ChatActionBar({ actions, onActionDispatched }: ChatActionBarProp
               onClick={() => {
                 const params = new URLSearchParams();
                 params.set('q', JSON.stringify(action.payload.filters ?? {}));
-                if (action.payload.listing_ids?.length) {
-                  params.set('ids', action.payload.listing_ids.join(','));
+                if (resolvedIds.length) {
+                  params.set('ids', resolvedIds.join(','));
                 }
                 params.set('view', 'map');
                 navigate(`/apartments?${params.toString()}`);

@@ -413,7 +413,11 @@ export function ChatMap({ onViewportSearch }: ChatMapProps = {}) {
     const MarkerCtor = MarkerCtorRef.current;
     if (!MarkerCtor) return;
     const pinsWithCoords = pins.filter(
-      (p) => p.latitude != null && p.longitude != null,
+      (p) =>
+        p.latitude != null &&
+        p.longitude != null &&
+        !isNaN(p.latitude) &&
+        !isNaN(p.longitude),
     );
 
     const clusterer = clustererRef.current;

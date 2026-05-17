@@ -63,6 +63,11 @@ export function useApartments(filters: ApartmentFilters = {}) {
         query = query.lte("available_from", filters.availableFrom);
       }
 
+      // Apply ID filter — used by chat "See all on the map" hand-off
+      if (filters.ids?.length) {
+        query = query.in("id", filters.ids);
+      }
+
       // Apply sorting
       const sortBy = filters.sortBy || "created_at";
       const sortOrder = filters.sortOrder || "desc";

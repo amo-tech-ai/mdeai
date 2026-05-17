@@ -92,13 +92,18 @@ export function EmbeddedListings({ actions, conversationId }: EmbeddedListingsPr
   useEffect(() => {
     if (!mapCtx || rentals.length === 0) return;
     const pins: MapPin[] = rentals
-      .filter((l) => l.latitude != null && l.longitude != null)
+      .filter((l) => {
+        const lat = Number(l.latitude);
+        const lng = Number(l.longitude);
+        return l.latitude != null && l.longitude != null && !isNaN(lat) && !isNaN(lng);
+      })
       .map((l) => ({
         id: l.id,
         category: 'rental' as const,
         title: l.title,
-        latitude: l.latitude ?? null,
-        longitude: l.longitude ?? null,
+        // Coerce to number: Supabase numeric columns arrive as strings via the edge fn.
+        latitude: Number(l.latitude),
+        longitude: Number(l.longitude),
         label: l.price_monthly
           ? `$${l.price_monthly}/mo`
           : l.price_daily
