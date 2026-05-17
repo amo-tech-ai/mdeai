@@ -8,7 +8,7 @@ commerce_mvp: scanner deferred — see ../../events-progress.md
 
 # CORE phase audit (EVT-001–026)
 
-**Verdict:** **Not complete.** **EVT-001** + **EVT-009** **Completed** (2026-05-17). **~12/26** have substantial **code** in repo; **proof gaps** on RLS negatives, load test, email, auth matrix doc, abandoned-cart cron.
+**Verdict:** **Not complete.** **EVT-001**, **EVT-009**, **EVT-010** **Completed** (2026-05-17). **~12/26** have substantial **code** in repo; **proof gaps** on RLS negatives, load test, email, auth matrix doc, abandoned-cart cron.
 
 **Tests (2026-05-17):** `npm test` **228/228** · EVT-001 contract 6 tests · `verify:edge` 27 pass · **G4 not run** · **EVT-011 not run**
 
