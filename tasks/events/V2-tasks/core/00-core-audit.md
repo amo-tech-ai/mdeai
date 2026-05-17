@@ -8,9 +8,9 @@ commerce_mvp: scanner deferred — see ../../events-progress.md
 
 # CORE phase audit (EVT-001–026)
 
-**Verdict:** **Not complete.** **EVT-001**, **EVT-009**, **EVT-010** **Completed** (2026-05-17). **~12/26** have substantial **code** in repo; **proof gaps** on RLS negatives, load test, email, auth matrix doc, abandoned-cart cron.
+**Verdict:** **Not complete.** **EVT-001**, **EVT-009**, **EVT-010**, **EVT-011** **Completed** (2026-05-17). **~12/26** have substantial **code** in repo; **proof gaps** on RLS negatives, load test, email, auth matrix doc, abandoned-cart cron.
 
-**Tests (2026-05-17):** `npm test` **238/238** · EVT-001: 6 · EVT-010: 10 · `verify:edge` 27 pass · **G4 not run** · **EVT-011 not run**
+**Tests (2026-05-17):** `npm test` **247/247** · EVT-001: 6 · EVT-010: 10 · EVT-011: 9 (7 live) · `verify:edge` 27 pass · **G4 not run**
 
 ## Summary table
 
@@ -26,7 +26,7 @@ commerce_mvp: scanner deferred — see ../../events-progress.md
 | 008 | Auth matrix doc | Written rules per API | `config.toml` comments only | None | 35 | Open |
 | 009 | verify_jwt | Pay/scan APIs reachable | Deployed + config | Vitest 5/5 | 92 | **Completed** |
 | 010 | RLS review | Security review done | Matrix + phase1 policies | Vitest 10 | 100 | **Completed** |
-| 011 | RLS negatives | Hackers can't read others' tickets | Policies exist | **No negative suite** | 10 | Open |
+| 011 | RLS negatives | Hackers can't read others' tickets | Live anon suite | Vitest 9 (7 live) | 100 | **Completed** |
 | 012 | ticket-checkout | "Start payment" | `supabase/functions/ticket-checkout` | Smoke 6 tests | 88 | In Progress |
 | 013 | Capacity lock | No double-sell while paying | `qty_pending` + RPC | Smoke indirect | 85 | In Progress |
 | 014 | ticket-payment-webhook | Stripe says paid → ticket live | Full handler | Smoke | 88 | In Progress |
@@ -55,7 +55,7 @@ commerce_mvp: scanner deferred — see ../../events-progress.md
 
 | Metric | Value |
 |--------|------:|
-| YAML `Completed` | **1 / 26** |
+| YAML `Completed` | **4 / 26** |
 | Code ≥80% (estimate) | **~14 / 26** |
 | Core phase % (weighted) | **~62%** built · **~38%** verified |
 

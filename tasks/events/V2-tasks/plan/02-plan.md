@@ -124,8 +124,8 @@ EVT-001 core security path is **done on prod DB**; “100%” for the **whole co
 |------:|------|-------------------|
 | 1 | ~~Commit EVT-001 files~~ | **Done** |
 | 2 | ~~**EVT-010**~~ | **Done** 2026-05-17 |
-| 3 | **EVT-011** | Negative RLS suite — **start here** |
-| 4 | **EVT-026 / G4** | 50-buyer load |
+| 3 | ~~**EVT-011**~~ | **Done** 2026-05-17 |
+| 4 | **EVT-026 / G4** | 50-buyer load — **start here** |
 | 5 | **EVT-027–030** | Host publish (`status` + `organizer_id` UI) |
 
 ---
