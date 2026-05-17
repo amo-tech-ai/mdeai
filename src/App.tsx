@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Provider as GadgetProvider } from "@gadgetinc/react";
 import { gadgetApi } from "@/integrations/gadget/client";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -43,6 +43,8 @@ const Restaurants = lazy(() => import("./pages/Restaurants"));
 const RestaurantDetail = lazy(() => import("./pages/RestaurantDetail"));
 const Events = lazy(() => import("./pages/Events"));
 const EventDetail = lazy(() => import("./pages/EventDetail"));
+const MyTickets = lazy(() => import("./pages/MyTickets"));
+const TicketDetail = lazy(() => import("./pages/TicketDetail"));
 const PlaceDetail = lazy(() => import("./pages/PlaceDetail"));
 const Saved = lazy(() => import("./pages/Saved"));
 const Collections = lazy(() => import("./pages/Collections"));
@@ -50,7 +52,7 @@ const Trips = lazy(() => import("./pages/Trips"));
 const TripDetail = lazy(() => import("./pages/TripDetail"));
 const TripNew = lazy(() => import("./pages/TripNew"));
 const Bookings = lazy(() => import("./pages/Bookings"));
-const Concierge = lazy(() => import("./pages/Concierge"));
+// Concierge page retired — /concierge redirects to /chat (see Route below)
 const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -143,6 +145,8 @@ const App = () => (
             <Route path="/restaurants/:id" element={<RestaurantDetail />} />
             <Route path="/events" element={<Events />} />
             <Route path="/events/:id" element={<EventDetail />} />
+            <Route path="/me/tickets" element={<MyTickets />} />
+            <Route path="/me/tickets/:id" element={<TicketDetail />} />
             <Route path="/:type/:id" element={<PlaceDetail />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
@@ -204,7 +208,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/concierge" element={<Concierge />} />
+            <Route path="/concierge" element={<Navigate to="/chat" replace />} />
             <Route path="/sitemap" element={<Sitemap />} />
             {/* Admin Routes */}
             <Route path="/admin" element={<AdminDashboard />} />

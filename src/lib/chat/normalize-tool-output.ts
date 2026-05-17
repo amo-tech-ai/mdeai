@@ -138,17 +138,21 @@ const attractionListingSchema = z
     }),
   );
 
+// Mastra registers tools with their `id` field (e.g. 'search-events'), NOT the
+// variable name (e.g. 'searchEventsTool'). Both are supported here so the
+// tool-output-available handler works in both production (kebab-case id) and
+// in unit tests (camelCase name). See: my-mastra-app/src/mastra/tools/search-events.ts
 const TOOL_MAP = {
-  searchEventsTool: { schema: z.array(eventListingSchema), actionType: 'OPEN_EVENT_RESULTS' as const },
-  searchRentalsTool: { schema: z.array(rentalListingSchema), actionType: 'OPEN_RENTALS_RESULTS' as const },
-  searchRestaurantsTool: {
-    schema: z.array(restaurantListingSchema),
-    actionType: 'OPEN_RESTAURANT_RESULTS' as const,
-  },
-  searchAttractionsTool: {
-    schema: z.array(attractionListingSchema),
-    actionType: 'OPEN_ATTRACTION_RESULTS' as const,
-  },
+  // Production Mastra IDs (what the LLM and SSE stream actually use)
+  'search-events':      { schema: z.array(eventListingSchema),      actionType: 'OPEN_EVENT_RESULTS' as const },
+  'search-rentals':     { schema: z.array(rentalListingSchema),     actionType: 'OPEN_RENTALS_RESULTS' as const },
+  'search-restaurants': { schema: z.array(restaurantListingSchema), actionType: 'OPEN_RESTAURANT_RESULTS' as const },
+  'search-attractions': { schema: z.array(attractionListingSchema), actionType: 'OPEN_ATTRACTION_RESULTS' as const },
+  // Legacy camelCase variable names (used in existing unit tests — keep for backward compat)
+  searchEventsTool:      { schema: z.array(eventListingSchema),      actionType: 'OPEN_EVENT_RESULTS' as const },
+  searchRentalsTool:     { schema: z.array(rentalListingSchema),     actionType: 'OPEN_RENTALS_RESULTS' as const },
+  searchRestaurantsTool: { schema: z.array(restaurantListingSchema), actionType: 'OPEN_RESTAURANT_RESULTS' as const },
+  searchAttractionsTool: { schema: z.array(attractionListingSchema), actionType: 'OPEN_ATTRACTION_RESULTS' as const },
 } as const;
 
 export type MastraSearchToolName = keyof typeof TOOL_MAP;

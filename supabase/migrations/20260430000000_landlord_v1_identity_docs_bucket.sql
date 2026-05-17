@@ -71,7 +71,8 @@ CREATE POLICY identity_docs_service_role
   USING (bucket_id = 'identity-docs')
   WITH CHECK (bucket_id = 'identity-docs');
 
-COMMENT ON POLICY identity_docs_insert_own ON storage.objects IS
-  'V1 D3: landlord can upload only into their own auth.uid() folder.';
-COMMENT ON POLICY identity_docs_select_own ON storage.objects IS
-  'V1 D3: landlord reads own folder; admin reads all (founder verification review).';
+-- Do not use COMMENT ON POLICY on storage.objects. supabase db reset runs
+-- migrations as a role that is not owner of storage.objects; Postgres returns
+-- SQLSTATE 42501 (must be owner of relation objects) and aborts before later
+-- migrations (e.g. places_search_cache). Document policy intent in this file
+-- header and inline comments above each CREATE POLICY instead.

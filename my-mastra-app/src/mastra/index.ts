@@ -4,6 +4,7 @@ import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/obs
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 import { createPostgresStore } from './storage/config';
 import { workspace } from './workspaces';
+import { aiRunsMiddleware } from './lib/ai-runs-middleware';
 import { weatherWorkflow } from './workflows/weather-workflow';
 import { rentalSearchWorkflow } from './workflows/rental-search-workflow';
 import { eventDiscoveryWorkflow } from './workflows/event-discovery-workflow';
@@ -34,7 +35,12 @@ export const mastra = new Mastra({
   scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   storage,
   workspace,
-  ...(auth ? { server: { auth } } : {}),
+  // MASTRA-040: ai_runs logging middleware for the /chat endpoint.
+  // Always present so logging works even in unauthenticated dev mode.
+  server: {
+    ...(auth ? { auth } : {}),
+    middleware: [aiRunsMiddleware],
+  },
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',

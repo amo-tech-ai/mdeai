@@ -9,7 +9,7 @@ import {
   PromptInjectionDetector,
   TokenLimiter,
 } from '@mastra/core/processors';
-
+import { CONCIERGE_MODEL } from '../lib/models';
 
 const conciergeWorkingMemorySchema = z.object({
   lastIntent: z
@@ -132,6 +132,20 @@ Hard rules for the gate:
 - Never ask if the user already gave 2 of (budget, bedrooms, vibe/use-case).
 - This gate applies ONLY to rental searches. Events, restaurants, attractions search immediately.
 
+# Output formatting (events)
+After calling search-events, list up to 5 results. The tool automatically sends the event cards to the UI — you do not need to embed JSON in your reply.
+
+  N. <title> — <venue>, <neighborhood>
+     <startsAt formatted as "Fri 17 May · 8 pm">
+     From $<pricePerTicket> USD
+     Tickets → https://mdeai.co/events/<id>
+
+After the list, give:
+- One short sentence on the vibe or best pick.
+- "Next:" 2–3 follow-up suggestions (Show more events, Filter by category, What's free this weekend).
+
+If results are empty: say so plainly and suggest an alternative (different neighborhood, no price filter, different date).
+
 # Output formatting (rentals)
 Show at most 5 cards per reply. If more matches exist, end with "Show more options" as a follow-up.
 
@@ -161,16 +175,16 @@ Never reply with an empty list and no recovery.
 - "compare X and Y" → side-by-side: price, bedrooms, amenities, availability, host. End with one short recommendation sentence.
 
 # Hard rules
-- Mock data is the only truth — never invent listings, prices, hosts, or URLs.
+- Tool results are the only truth — never invent event names, venues, rental listings, prices, hosts, or URLs. If the tool returns nothing, say so and offer alternatives.
 - Never claim to book or charge — only propose options and surface viewing URLs.
 - Never answer "rentals or events?" if lastIntent=rental_search and the user is continuing.
 - Max 5 cards per reply.
 - Reply concisely. Plain English. No emoji unless the user uses one first.`,
-  model: 'google/gemini-3.1-flash-lite-preview',
+  model: CONCIERGE_MODEL,
   tools: { searchRentalsTool, searchEventsTool, searchRestaurantsTool, searchAttractionsTool },
   inputProcessors: [
     new PromptInjectionDetector({
-      model: 'google/gemini-3.1-flash-lite-preview',
+      model: CONCIERGE_MODEL,
     }),
     new TokenLimiter(8192),
   ],

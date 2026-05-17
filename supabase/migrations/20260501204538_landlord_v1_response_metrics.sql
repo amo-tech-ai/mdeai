@@ -128,22 +128,25 @@ $fn$;
 REVOKE EXECUTE ON FUNCTION public.snapshot_analytics_events_daily(date)
   FROM PUBLIC, anon, authenticated;
 
--- 3. pg_cron daily schedule
+-- 3. pg_cron daily schedule (guarded: pg_cron not available in local dev)
 DO $$
 BEGIN
-  IF EXISTS (
-    SELECT 1 FROM cron.job WHERE jobname = 'mdeai_analytics_daily_snapshot'
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname = 'pg_cron'
   ) THEN
+    RAISE NOTICE 'pg_cron not installed, skipping analytics cron schedule (local dev)';
+    RETURN;
+  END IF;
+  -- Remove existing schedule if present
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'mdeai_analytics_daily_snapshot') THEN
     PERFORM cron.unschedule('mdeai_analytics_daily_snapshot');
   END IF;
+  -- Create daily snapshot schedule
+  PERFORM cron.schedule(
+    'mdeai_analytics_daily_snapshot',
+    '10 3 * * *',
+    'SELECT public.snapshot_analytics_events_daily((current_date - 1));'
+  );
 END $$;
-
-SELECT cron.schedule(
-  'mdeai_analytics_daily_snapshot',
-  '10 3 * * *',
-  $cron$
-  SELECT public.snapshot_analytics_events_daily((current_date - 1));
-  $cron$
-);
 
 COMMIT;
