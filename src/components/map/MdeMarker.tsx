@@ -40,11 +40,15 @@ export function MdeMarker({ pin, isHighlighted, onClick, onMount, onMarkerClick 
   // Create marker once. Position + content updates are handled in a
   // separate effect so marker creation doesn't churn on every hover.
   useEffect(() => {
-    if (!pin.latitude || !pin.longitude) return;
+    // Use Number.isFinite (not truthy) so valid 0 coordinates aren't dropped
+    // and NaN / Infinity / null / undefined are all rejected uniformly.
+    const lat = Number(pin.latitude);
+    const lng = Number(pin.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
     const MarkerCtor = google.maps.marker.AdvancedMarkerElement;
     const marker = new MarkerCtor({
-      position: { lat: pin.latitude, lng: pin.longitude },
+      position: { lat, lng },
       content: buildPinContent(pin, false),
       // title is read by screen readers and shown as tooltip (WCAG compliance).
       // See: developers.google.com/maps/documentation/javascript/advanced-markers/accessible-markers
