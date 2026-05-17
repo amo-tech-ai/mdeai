@@ -10,7 +10,7 @@ commerce_mvp: scanner deferred — see ../../events-progress.md
 
 **Verdict:** **Not complete.** **EVT-001**, **EVT-009**, **EVT-010** **Completed** (2026-05-17). **~12/26** have substantial **code** in repo; **proof gaps** on RLS negatives, load test, email, auth matrix doc, abandoned-cart cron.
 
-**Tests (2026-05-17):** `npm test` **228/228** · EVT-001 contract 6 tests · `verify:edge` 27 pass · **G4 not run** · **EVT-011 not run**
+**Tests (2026-05-17):** `npm test` **238/238** · EVT-001: 6 · EVT-010: 10 · `verify:edge` 27 pass · **G4 not run** · **EVT-011 not run**
 
 ## Summary table
 
@@ -25,7 +25,7 @@ commerce_mvp: scanner deferred — see ../../events-progress.md
 | 007 | AI runs log | See when AI touched tickets | **Gap:** ticket edges don't log `ai_runs` | None | 15 | Open |
 | 008 | Auth matrix doc | Written rules per API | `config.toml` comments only | None | 35 | Open |
 | 009 | verify_jwt | Pay/scan APIs reachable | Deployed + config | Vitest 5/5 | 92 | **Completed** |
-| 010 | RLS review | Security review done | Policies in migration | None | 70 | In Progress |
+| 010 | RLS review | Security review done | Matrix + phase1 policies | Vitest 10 | 100 | **Completed** |
 | 011 | RLS negatives | Hackers can't read others' tickets | Policies exist | **No negative suite** | 10 | Open |
 | 012 | ticket-checkout | "Start payment" | `supabase/functions/ticket-checkout` | Smoke 6 tests | 88 | In Progress |
 | 013 | Capacity lock | No double-sell while paying | `qty_pending` + RPC | Smoke indirect | 85 | In Progress |
