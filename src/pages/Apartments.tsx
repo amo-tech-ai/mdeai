@@ -100,9 +100,9 @@ function ApartmentsMapInner({ filters }: { filters: ApartmentFilters }) {
   const apartments = data?.apartments ?? [];
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen min-h-0 flex-col overflow-hidden md:flex-row">
       {/* Left: apartment list */}
-      <div className="w-[400px] flex-shrink-0 flex flex-col border-r border-border bg-background">
+      <div className="flex h-[42vh] w-full flex-shrink-0 flex-col border-b border-border bg-background md:h-auto md:w-[400px] md:border-b-0 md:border-r">
         {/* Header */}
         <div className="p-4 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -195,8 +195,8 @@ function ApartmentsMapInner({ filters }: { filters: ApartmentFilters }) {
         </div>
       </div>
 
-      {/* Right: map fills remaining space */}
-      <div className="flex-1 relative">
+      {/* Right: map — min-h on mobile prevents .gm-style=0 */}
+      <div className="relative min-h-[50vh] flex-1 md:min-h-0">
         <ApartmentPinSync apartments={apartments} />
         <MdeMap />
       </div>
