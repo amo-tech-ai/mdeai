@@ -761,16 +761,26 @@ async function executeRentalsSearch(
     }
     
     const result = await response.json();
-    
+    const listings = result.results?.listings ?? [];
+    const listing_ids = listings.map((l: { id: string }) => l.id);
+
     // Format for chat display
     return {
       success: true,
       total_count: result.results?.total_count || 0,
-      listings: result.results?.listings?.slice(0, 5) || [],
+      listings: listings.slice(0, 5),
       filters_applied: params,
-      actions: [
-        { type: "OPEN_RENTALS_RESULTS", payload: { listings: result.results?.listings, map_pins: result.map_data?.pins } }
-      ],
+      actions: listings.length > 0
+        ? [{
+            type: "OPEN_RENTALS_RESULTS",
+            payload: {
+              filters: params,
+              listings,
+              listing_ids,
+              map_pins: result.map_data?.pins,
+            },
+          }]
+        : [],
       message: result.results?.total_count > 0 
         ? `Found ${result.results.total_count} apartments matching your criteria.`
         : "No apartments found matching your criteria. Try adjusting your filters."
@@ -1200,20 +1210,10 @@ Deno.serve(async (req) => {
       `AI Chat request - Tab: ${tab}, Messages: ${messages.length}, User: ${userId || "anonymous"}`,
     );
 
-    // Force the right tool when the user's last message contains clear keywords.
-    // Gemini's "auto" mode consistently skips search_events / search_attractions
-    // even with strong system prompt instructions, so we override here.
+    // Force the right tool when keywords are unambiguous (rentals before events — see chat-tool-choice.ts).
     const lastUserContent = (messages[messages.length - 1]?.content ?? "") as string;
-    let toolChoice: unknown = "auto";
-    if (/\b(event|events|concert|festival|nightlife|party|parties|things to do|what.*happen|show|gig|performance)\b/i.test(lastUserContent)) {
-      toolChoice = { type: "function", function: { name: "search_events" } };
-    } else if (/\b(restaurant|food|eat|eating|dining|lunch|dinner|brunch|cafe|café|coffee|where.*eat)\b/i.test(lastUserContent)) {
-      toolChoice = { type: "function", function: { name: "search_restaurants" } };
-    } else if (/\b(attraction|attractions|museum|tour|tours|park|sightseeing|cable car|things to see|tourist|activity|activities)\b/i.test(lastUserContent)) {
-      toolChoice = { type: "function", function: { name: "search_attractions" } };
-    } else if (/\b(apartment|rental|rent|housing|flat|place to stay|accommodation)\b/i.test(lastUserContent)) {
-      toolChoice = { type: "function", function: { name: "search_apartments" } };
-    }
+    const { buildToolChoice } = await import("../_shared/chat-tool-choice.ts");
+    const toolChoice = buildToolChoice(lastUserContent);
 
     // Maps Grounding pre-pass (MDEAI_MAPS_GROUNDING=true — off by default).
     // Runs BEFORE fetchGemini; injects live Maps context into the system prompt.

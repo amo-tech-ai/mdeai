@@ -8,10 +8,19 @@ import { createClient } from '@supabase/supabase-js';
 export type AgentType =
   | 'event_curator'
   | 'local_scout'
-  | 'trip_planner'
+  | 'dining_orchestrator'
+  | 'itinerary_optimizer'
+  | 'budget_guardian'
+  | 'booking_assistant'
   | 'general_concierge'
-  | 'real_estate_agent'
-  | 'restaurant_scout';
+  | 'concierge'
+  | 'mia'
+  | 'luna'
+  | 'carlos'
+  | 'alex'
+  | 'diego'
+  | 'roberto'
+  | 'sponsor';
 
 export interface MastraRunRecord {
   user_id: string | null;
@@ -20,11 +29,15 @@ export interface MastraRunRecord {
   input_data?: Record<string, unknown>;
   output_data?: Record<string, unknown>;
   status: 'success' | 'error' | 'timeout';
+  error_message?: string | null;
+  /** Backward-compatible alias for older task docs/callers; stored as error_message. */
   error_code?: string | null;
   input_tokens?: number;
   output_tokens?: number;
+  total_tokens?: number;
   duration_ms?: number;
   model_name?: string;
+  metadata?: Record<string, unknown>;
 }
 
 let _client: ReturnType<typeof createClient> | null = null;
@@ -60,11 +73,13 @@ export async function recordMastraRun(record: MastraRunRecord): Promise<void> {
       input_data: record.input_data ?? {},
       output_data: record.output_data ?? {},
       status: record.status,
-      error_code: record.error_code ?? null,
+      error_message: record.error_message ?? record.error_code ?? null,
       input_tokens: record.input_tokens ?? 0,
       output_tokens: record.output_tokens ?? 0,
+      total_tokens: record.total_tokens ?? (record.input_tokens ?? 0) + (record.output_tokens ?? 0),
       duration_ms: record.duration_ms ?? 0,
       model_name: record.model_name ?? null,
+      metadata: record.metadata ?? null,
     }), deadline]);
     if (error) {
       console.error('[ai-runs] insert failed:', error.message);

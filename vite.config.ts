@@ -67,7 +67,10 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "::",
-      port: 8080,
+      // Maps browser key allows localhost:8080 — do not silently fall back to 8082.
+      // Override only via PORT=8080 npm run dev (see package.json).
+      port: process.env.PORT ? parseInt(process.env.PORT, 10) : 8080,
+      strictPort: true,
       hmr: {
         overlay: false,
       },
