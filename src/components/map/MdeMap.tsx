@@ -33,7 +33,7 @@ export interface MdeMapProps {
  * Key differences from ChatMap.tsx:
  * - Per-category clusterers: each MapPinCategory gets its own MdeMarkerCluster,
  *   so MASTRA-047 pin accumulation works without extra filtering at the map level.
- * - InfoWindow state is React state (openPin) rather than an imperative ref.
+ * - InfoWindow state is React state (openPin + openAnchor) rather than imperative refs.
  * - useFitBounds extracted — bounds / search-pill logic lives in its own hook.
  */
 export function MdeMap({ onViewportSearch }: MdeMapProps = {}) {
@@ -136,10 +136,19 @@ export function MdeMap({ onViewportSearch }: MdeMapProps = {}) {
         navigateToPin(pin, true);
         return;
       }
-      // Store the pin for InfoWindow; anchor is set by onMarkerClick below.
+      // Store the pin for InfoWindow; anchor arrives via handleMarkerAnchor below.
       setOpenPin(pin);
     },
     [setHighlightedPinId, navigateToPin],
+  );
+
+  // Receives the AdvancedMarkerElement from MdeMarker on click so we can
+  // pass it as the InfoWindow anchor. Called in the same event as handlePinClick.
+  const handleMarkerAnchor = useCallback(
+    (_pin: MapPin, marker: google.maps.marker.AdvancedMarkerElement) => {
+      setOpenAnchor(marker);
+    },
+    [],
   );
 
   // Split pins by category so each gets its own clusterer.
@@ -229,6 +238,7 @@ export function MdeMap({ onViewportSearch }: MdeMapProps = {}) {
               pins={categoryPins}
               highlightedPinId={highlightedPinId}
               onPinClick={handlePinClick}
+              onMarkerClick={handleMarkerAnchor}
             />
           ))}
           <MdeInfoWindow

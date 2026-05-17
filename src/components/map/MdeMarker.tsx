@@ -17,6 +17,11 @@ export interface MdeMarkerProps {
    * register it. The returned cleanup function is called on unmount.
    */
   onMount: (marker: google.maps.marker.AdvancedMarkerElement) => () => void;
+  /**
+   * Called on every click with the pin and its AdvancedMarkerElement so the
+   * parent can use the element as an InfoWindow anchor.
+   */
+  onMarkerClick?: (pin: MapPin, marker: google.maps.marker.AdvancedMarkerElement) => void;
 }
 
 /**
@@ -28,7 +33,7 @@ export interface MdeMarkerProps {
  * Do NOT pass a `map` prop to the underlying AdvancedMarkerElement — the
  * clusterer manages that; double-assignment leaks markers behind clusters.
  */
-export function MdeMarker({ pin, isHighlighted, onClick, onMount }: MdeMarkerProps) {
+export function MdeMarker({ pin, isHighlighted, onClick, onMount, onMarkerClick }: MdeMarkerProps) {
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const clickHandlerRef = useRef<EventListener | null>(null);
 
@@ -63,6 +68,7 @@ export function MdeMarker({ pin, isHighlighted, onClick, onMount }: MdeMarkerPro
       );
       trackMapEvent({ kind: 'pin_click', pinId: pin.id, viaKeyboard, newTab: openInNewTab });
       onClick(pin, openInNewTab);
+      onMarkerClick?.(pin, marker);
     };
     clickHandlerRef.current = clickHandler;
     marker.addEventListener('gmp-click', clickHandler);

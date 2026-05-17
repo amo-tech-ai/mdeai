@@ -10,6 +10,8 @@ export interface MdeMarkerClusterProps {
   pins: MapPin[];
   highlightedPinId: string | null;
   onPinClick: (pin: MapPin, openInNewTab: boolean) => void;
+  /** Called when a marker is clicked, passing both the pin and its DOM element so the parent can anchor an InfoWindow. */
+  onMarkerClick?: (pin: MapPin, marker: google.maps.marker.AdvancedMarkerElement) => void;
 }
 
 /**
@@ -28,6 +30,7 @@ export function MdeMarkerCluster({
   pins,
   highlightedPinId,
   onPinClick,
+  onMarkerClick,
 }: MdeMarkerClusterProps) {
   const clustererRef = useRef<MarkerClusterer | null>(null);
 
@@ -76,6 +79,7 @@ export function MdeMarkerCluster({
           isHighlighted={pin.id === highlightedPinId}
           onClick={onPinClick}
           onMount={handleMarkerMount}
+          onMarkerClick={onMarkerClick}
         />
       ))}
     </>
