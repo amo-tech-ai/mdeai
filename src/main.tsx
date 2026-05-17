@@ -14,6 +14,28 @@ import { initPostHog } from "@/lib/posthog";
 initPostHog();
 initSentry();
 
+// Stale-chunk recovery. When a new deploy rolls out, the browser may still
+// have the old `index.html` cached and try to lazy-load chunk hashes that
+// no longer exist. The asset URL now correctly 404s (vercel.json excludes
+// /assets/* from the SPA fallback), which surfaces as `vite:preloadError`.
+// Force a hard reload once so the browser fetches the new index.html with
+// the current chunk hashes. The sessionStorage guard prevents an infinite
+// reload loop if the failure is for a different reason (e.g. real 5xx).
+window.addEventListener("vite:preloadError", (event) => {
+  const RELOAD_FLAG = "mdeai:chunk-reload-attempted";
+  if (sessionStorage.getItem(RELOAD_FLAG) === "1") {
+    // Already tried reloading once; let the error propagate to the boundary.
+    return;
+  }
+  event.preventDefault();
+  sessionStorage.setItem(RELOAD_FLAG, "1");
+  window.location.reload();
+});
+// Clear the flag on successful load so a future stale-chunk error can recover.
+window.addEventListener("load", () => {
+  sessionStorage.removeItem("mdeai:chunk-reload-attempted");
+});
+
 createRoot(document.getElementById("root")!).render(
   <SentryErrorBoundary
     fallback={({ error, resetError }) => (
