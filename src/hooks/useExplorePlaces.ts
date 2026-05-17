@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { PUBLIC_EVENT_STATUSES } from "@/lib/events-catalog";
 import { supabase } from "@/integrations/supabase/client";
 import type { ExplorePlaceResult, ExploreCategory, ExploreFilters } from "@/types/explore";
 
@@ -149,7 +150,7 @@ export function useExplorePlaces(filters: ExploreFilters) {
         let query = supabase
           .from("events")
           .select("*")
-          .eq("is_active", true)
+          .in("status", [...PUBLIC_EVENT_STATUSES])
           .gte("event_start_time", new Date().toISOString())
           .order("event_start_time", { ascending: true })
           .limit(20);
@@ -236,7 +237,7 @@ export function useExploreCounts(filters: Omit<ExploreFilters, 'category'>) {
         supabase
           .from("events")
           .select("id", { count: "exact", head: true })
-          .eq("is_active", true)
+          .in("status", [...PUBLIC_EVENT_STATUSES])
           .gte("event_start_time", new Date().toISOString())
           .then(({ count }) => count || 0),
       ]);

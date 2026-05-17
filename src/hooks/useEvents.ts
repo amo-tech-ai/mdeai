@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { PUBLIC_EVENT_STATUSES } from "@/lib/events-catalog";
 import type { Event, EventFilters } from "@/types/event";
 
 export function useEvents(filters: EventFilters = {}) {
@@ -9,7 +10,7 @@ export function useEvents(filters: EventFilters = {}) {
       let query = supabase
         .from("events")
         .select("*")
-        .eq("is_active", true)
+        .in("status", [...PUBLIC_EVENT_STATUSES])
         .order("event_start_time", { ascending: true });
 
       // Apply filters
@@ -79,7 +80,7 @@ export function useFeaturedEvents(limit = 4) {
       const { data, error } = await supabase
         .from("events")
         .select("*")
-        .eq("is_active", true)
+        .in("status", [...PUBLIC_EVENT_STATUSES])
         .gte("event_start_time", new Date().toISOString())
         .order("event_start_time", { ascending: true })
         .limit(limit);
@@ -97,7 +98,7 @@ export function useUpcomingEvents(limit = 5) {
       const { data, error } = await supabase
         .from("events")
         .select("*")
-        .eq("is_active", true)
+        .in("status", [...PUBLIC_EVENT_STATUSES])
         .gte("event_start_time", new Date().toISOString())
         .order("event_start_time", { ascending: true })
         .limit(limit);

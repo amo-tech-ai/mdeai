@@ -236,7 +236,15 @@ export function useToggleListingStatus(type: ListingType) {
           return data;
         }
         case "events": {
-          const { data, error } = await supabase.from("events").update({ is_active: isActive }).eq("id", id).select().single();
+          const { data, error } = await supabase
+            .from("events")
+            .update({
+              is_active: isActive,
+              status: isActive ? "published" : "draft",
+            })
+            .eq("id", id)
+            .select()
+            .single();
           if (error) throw error;
           return data;
         }
