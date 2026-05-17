@@ -1,7 +1,7 @@
 # Mastra + Maps — Progress Task Tracker
 
 > **Role:** Systems architect · detective reviewer  
-> **Last verified:** 2026-05-16 (evening) — **`npm run floor` exit 0** (lint + build + Vitest + `verify:edge` + `verify:mastra`); `npm run test` **222/222** (18 files); `cd my-mastra-app && npm run test` **56/56** (4 files) · Sprint shipped: W5 (supabase db reset exits 0), C5 (/concierge → /chat redirect), C7 (OPEN_EVENT_RESULTS tool-id fix + event format instructions), MASTRA-040 (ai_runs middleware) · commit 9316e39
+> **Last verified:** 2026-05-17 (evening) — **`npm run test` 222/222 (18 files)**; `my-mastra-app tsc --noEmit` clean; `my-mastra-app npm run build` clean · Sprint shipped: W5 (supabase db reset exits 0), C5 (/concierge → /chat redirect), C7 (OPEN_EVENT_RESULTS tool-id fix + event format instructions), MASTRA-040 (ai_runs middleware) · commit 9316e39 · **2026-05-17 evening:** **Gap A FIXED** — `cardSchema` lat/lng added to all 4 branches + `source: out.source` override removed; **MASTRA-050 FIXED** — model IDs corrected to `google/gemini-2.5-flash` / `google/gemini-2.5-pro`
 > **Canonical task tree:** `tasks/mastra/tasks/` (meta at root; specs in `core/`, `mvp/`, `advanced/`, and `maps/`) · index [`000-index.md`](./tasks/000-index.md) · skills matrix [`SKILL-REFERENCE.md`](./tasks/SKILL-REFERENCE.md)  
 > **Forensic audits:** [`tasks/audit/33-mde-audit.md`](../audit/33-mde-audit.md) · [`tasks/mastra/audit/05-audit-tasks.md`](./audit/05-audit-tasks.md)  
 > **Legacy prompts pack (deprecated):** `tasks/prompts/mastra/tasks/` — do not use for execution order
@@ -33,7 +33,7 @@
 | `search-attractions` | **Live `tourist_destinations` (pg Pool)** | `DATABASE_URL` + `search-attractions.ts`; YAML **MASTRA-054** = **Completed**; helper Vitest in `my-mastra-app` |
 | `@modelcontextprotocol/sdk` | **Present** | `my-mastra-app/package.json` |
 | `@googlemaps/places` | **Present** | `my-mastra-app/package.json` |
-| `lib/models.ts` (**MASTRA-050**) | **Completed (YAML + runtime)** | `my-mastra-app/src/mastra/lib/models.ts`; agents import canonical model IDs |
+| `lib/models.ts` (**MASTRA-050**) | **✅ FIXED 2026-05-17** | `google/gemini-2.5-flash` + `google/gemini-2.5-pro`; `tsc --noEmit` + `npm run build` clean |
 | `verify-task-deps.mjs` | **Shipped** | `scripts/verify-task-deps.mjs` in `npm run verify:mastra` (DAG check) |
 | Grounding Lite MCP | **Partial** | `my-mastra-app/src/mastra/lib/maps-grounding-client.ts` ships MCP client plumbing; **no** `searchGroundedPlaces` agent tool (**MASTRA-049** open) |
 | Map ID env (**MASTRA-068**) | **✅ FIXED 2026-05-16** | `VITE_GOOGLE_MAPS_MAP_ID=e50ffcd09fd436de96a02ad2` in Vercel prod; `getGoogleMapsMapId()` in `src/lib/google-maps-map-id.ts`; prod bundle confirmed clean |
@@ -41,7 +41,7 @@
 | `grounding_quota_log` migration | Shipped | `supabase/migrations/20260513103000_grounding_quota_log.sql` (**057**) |
 | `places-mask-checklist.md` (**MASTRA-073**) | **v1 shipped** | `tasks/maps/places-mask-checklist.md` — call-site CI grep (**081**) optional |
 | `maps_url` + `ai_summary` cols | **Migration shipped** | `supabase/migrations/20260514000100_places_cache_schema.sql` adds cols to `restaurants`, `tourist_destinations`, `events` (**048/067**) |
-| `ai_runs` Mastra logger | **✅ Wired** | `ai-runs-middleware.ts` path-scoped to `/chat`; fires after every concierge turn; 500ms cap; no-throw (**040** complete commit 9316e39) |
+| `ai_runs` Mastra logger | **✅ Wired** | `ai-runs-middleware.ts` path-scoped to `/chat`; fires after every concierge turn; 500ms cap; no-throw (**040** complete commit 9316e39). §2 inventory mistakenly shows 🔴 — corrected below. |
 | `VITE_USE_MASTRA_CHAT` prod | **true** | Bundle confirms `USE_MASTRA_CHAT:"true"` — authenticated users route to Mastra; anon falls through to legacy `ai-chat` |
 | Mastra server health | **✅ Live** | `https://my-mastra-app-beta.vercel.app/health` → `{"success":true}` (2026-05-16) |
 | EmbeddedListings → map pins | **✅ Wired** | `EmbeddedListings.tsx` 4 useEffects push pins to MapContext; `useSafeMapContext()` null-safe; `mergePinsByCategory` confirmed (**046/047**) |
@@ -87,88 +87,99 @@ Scores reflect **repo tests + code inspection + production verification** on **2
 
 ## 2. Full inventory — every spec in `tasks/mastra/tasks/core/`, `tasks/mastra/tasks/mvp/`, `tasks/mastra/tasks/advanced/`, and `tasks/mastra/tasks/maps/`
 
-> **74** markdown files with `task_id` or narrative/reference frontmatter (excludes index, PRD, roadmap, forensic checklist, citation template, source inventory). Dot column blends **YAML `status`** with **spot runtime** (§1) — not a substitute for each task’s DoD.
+> **74** markdown files with `task_id` or narrative/reference frontmatter. **Verified 2026-05-17** against actual code files, Mastra MCP (`mastraDocs`), and Google Maps MCP. Dot column is authoritative runtime truth — not YAML status alone.
 
-<!-- inventory: n=74; YAML sync spot-check 2026-05-15 — 8 MASTRA maps rows Completed/Complete (046,047,050,053,054,056,057,073) -->
+<!-- dot-audit: 2026-05-17 — verified every row against: file existence, code grep, Mastra MCP model registry, mde-maps skill, RLS SQL -->
 
-| ID | Task file | Dot | % | YAML `status` | Title |
-|----|-----------|-----|---|---------------|-------|
-| **MASTRA-003** | [`003-mastra-tool-audit-control-events.md`](./tasks/core/003-mastra-tool-audit-control-events.md) | 🔴 | 0% | Not Started | Mastra Tool Audit And Control Events |
-| **MASTRA-004** | [`004-mastra-hybrid-search-tools.md`](./tasks/core/004-mastra-hybrid-search-tools.md) | 🔴 | 0% | Not Started | Mastra Hybrid Search Tools |
-| **MASTRA-005** | [`005-mastra-chat-router-concierge.md`](./tasks/mvp/005-mastra-chat-router-concierge.md) | 🔴 | 0% | Not Started | Mastra Chat Router And Concierge MVP |
-| **MASTRA-006** | [`006-mastra-real-estate-mvp-agents.md`](./tasks/mvp/006-mastra-real-estate-mvp-agents.md) | 🔴 | 0% | Not Started | Mastra Real Estate MVP Agents |
-| **MASTRA-007** | [`007-mastra-events-mvp-runtime.md`](./tasks/mvp/007-mastra-events-mvp-runtime.md) | 🔴 | 0% | Not Started | Mastra Events MVP Runtime |
-| **MASTRA-008** | [`008-mastra-restaurants-mvp-discovery.md`](./tasks/mvp/008-mastra-restaurants-mvp-discovery.md) | 🔴 | 0% | Not Started | Mastra Restaurants MVP Discovery |
-| **MASTRA-009** | [`009-mastra-ui-dojo-chat-frontend.md`](./tasks/mvp/009-mastra-ui-dojo-chat-frontend.md) | 🔴 | 0% | Not Started | Mastra UI Dojo Chat Frontend — Reference Patterns Only |
-| **MASTRA-010** | [`010-mastra-memory-rag-mvp.md`](./tasks/mvp/010-mastra-memory-rag-mvp.md) | 🔴 | 0% | Not Started | Mastra Memory And RAG MVP |
-| **MASTRA-011** | [`011-mastra-observability-evals-guardrails.md`](./tasks/mvp/011-mastra-observability-evals-guardrails.md) | 🔴 | 0% | Not Started | Mastra Observability Evals And Guardrails |
-| **MASTRA-012** | [`012-mastra-workflow-state-runtime.md`](./tasks/core/012-mastra-workflow-state-runtime.md) | 🔴 | 0% | Not Started | Mastra Workflow State Runtime Supabase Backed MVP |
-| **MASTRA-013** | [`013-mastra-tenant-isolation.md`](./tasks/core/013-mastra-tenant-isolation.md) | 🔴 | 0% | Not Started | Mastra Tenant And Organization Isolation |
-| **MASTRA-014** | [`014-mastra-ai-rate-limits.md`](./tasks/core/014-mastra-ai-rate-limits.md) | 🔴 | 0% | Not Started | Mastra AI Rate Limits Tokens And Cost Controls |
-| **MASTRA-015** | [`015-mastra-tool-registry-system.md`](./tasks/core/015-mastra-tool-registry-system.md) | 🔴 | 0% | Not Started | Mastra Shared Tool Registry And Audit Wrapper |
-| **MASTRA-016** | [`016-mastra-streaming-ui-state.md`](./tasks/mvp/016-mastra-streaming-ui-state.md) | 🔴 | 0% | Not Started | Mastra Streaming UI State Contracts |
-| **MASTRA-017** | [`017-mastra-workflow-recovery.md`](./tasks/mvp/017-mastra-workflow-recovery.md) | 🔴 | 0% | Not Started | Mastra Workflow Recovery And Dead Letter Handling |
-| **MASTRA-018** | [`018-mastra-human-handoff-runtime.md`](./tasks/mvp/018-mastra-human-handoff-runtime.md) | 🔴 | 0% | Not Started | Mastra Human Handoff Runtime |
-| **MASTRA-019** | [`019-mastra-client-sdk-integration.md`](./tasks/mvp/019-mastra-client-sdk-integration.md) | 🟡 | 60% | In Progress — 019A ✅ done, 019B ✅ done, 019C ✅ done (production deploy | Mastra Client SDK Integration Layer |
-| **MASTRA-020** | [`020-mastra-paperclip-approval-bridge.md`](./tasks/mvp/020-mastra-paperclip-approval-bridge.md) | 🔴 | 0% | Not Started | Mastra Paperclip Approval Bridge |
-| **MASTRA-021** | [`021-mastra-vdb-local-remote-reconciliation.md`](./tasks/core/021-mastra-vdb-local-remote-reconciliation.md) | 🔴 | 0% | Not Started | Mastra VDB Local Remote Reconciliation |
-| **MASTRA-024** | [`024-mastra-env-secret-boundary.md`](./tasks/core/024-mastra-env-secret-boundary.md) | 🔴 | 0% | Not Started | Mastra Env And Secret Boundary |
-| **MASTRA-025** | [`025-mastra-dependency-alias-map.md`](./tasks/core/025-mastra-dependency-alias-map.md) | 🔴 | 0% | Not Started | Mastra Dependency Alias Map |
-| **MASTRA-031** | [`031-mastra-editor-prompt-architecture.md`](./tasks/advanced/031-mastra-editor-prompt-architecture.md) | 🔴 | 0% | Not Started | Mastra Editor Prompt Architecture For mdeAI |
-| **MASTRA-032** | [`032-mastra-editor-prompt-block-library.md`](./tasks/advanced/032-mastra-editor-prompt-block-library.md) | 🔴 | 0% | Not Started | mdeAI Mastra Prompt Block Library |
-| **MASTRA-033** | [`033-mastra-editor-seeding-and-versioning.md`](./tasks/advanced/033-mastra-editor-seeding-and-versioning.md) | 🔴 | 0% | Not Started | Mastra Editor Prompt Seeding And Versioning |
-| **MASTRA-034** | [`034-mastra-editor-runtime-preview-and-context.md`](./tasks/advanced/034-mastra-editor-runtime-preview-and-context.md) | 🔴 | 0% | Not Started | Mastra Editor Runtime Preview And Request Context |
-| **MASTRA-035** | [`035-mastra-editor-prompt-qa-studio-workflow.md`](./tasks/advanced/035-mastra-editor-prompt-qa-studio-workflow.md) | 🔴 | 0% | Not Started | Mastra Editor Prompt QA And Studio Workflow |
-| **MASTRA-036** | [`036-gemini-structured-output-helper.md`](./tasks/advanced/036-gemini-structured-output-helper.md) | 🟡 | 60% | In Progress | Gemini structured-output helper (`callGeminiStructured`) + unblock P3 sponsor functions |
-| **MASTRA-037** | [`037-verify-edge-floor-integration.md`](./tasks/advanced/037-verify-edge-floor-integration.md) | 🟡 | 70% | In Review | Wire `verify:edge` into the floor -- fail PRs on edge-function type errors |
-| **MASTRA-038** | [`038-mastra-chat-live-smoke-timezone.md`](./tasks/advanced/038-mastra-chat-live-smoke-timezone.md) | 🔴 | 0% | Not Started | Mastra chat Preview smoke — prove the events weekend timezone fix end-to-end |
-| **MASTRA-039** | [`039-mastra-chat-production-rollout.md`](./tasks/advanced/039-mastra-chat-production-rollout.md) | 🟥 | 0% | Blocked (depends on MASTRA-038) | Mastra chat Production rollout — flip the flag for real users |
-| **MASTRA-040** | [`040-mastra-ai-runs-logging.md`](./tasks/advanced/040-mastra-ai-runs-logging.md) | 🔴 | 0% | Not Started | Mastra agents must write `ai_runs` rows on every invocation |
-| **MASTRA-041** | [`041-mastra-search-events-supabase.md`](./tasks/advanced/041-mastra-search-events-supabase.md) | 🟢 | 90% | Functionally Complete — YAML drift (YAML still "Not Started") | Replace `search-events` mock with Supabase-backed query (Bogotá-local-time boundaries) — ✅ shipped in `search-events.ts`; YAML not yet updated |
-| **MASTRA-042** | [`042-sponsor-gemini-structured-functions.md`](./tasks/advanced/042-sponsor-gemini-structured-functions.md) | 🟥 | 0% | Blocked — sponsor schema incomplete | Land Gemini structured-output helper foundation (sponsor consumers blocked on schema) |
-| **MASTRA-043** | [`043-mastra-geo-production-plan.md`](./tasks/maps/043-mastra-geo-production-plan.md) | 🟡 | 40% | Active | Geo-Chat Production Plan — cards + pins + map sync (master roadmap) |
-| **MASTRA-044** | [`044-mastra-deploy-verification.md`](./tasks/advanced/044-mastra-deploy-verification.md) | 🔴 | 0% | Not Started | Deploy Mastra beta — verification checklist |
-| **MASTRA-045** | [`045-mastra-smoke-hardening.md`](./tasks/advanced/045-mastra-smoke-hardening.md) | 🔴 | 0% | Not Started | Smoke spec hardening — known-event assertion + pin count + ai_runs check |
-| **MASTRA-046** | [`046-mastra-action-schema-validation.md`](./tasks/maps/046-mastra-action-schema-validation.md) | 🟢 | 100% | Completed | normalizeToolOutput — Zod safeParse before ChatAction dispatch |
-| **MASTRA-047** | [`047-mastra-map-pin-merge-versioning.md`](./tasks/maps/047-mastra-map-pin-merge-versioning.md) | 🟢 | 100% | Completed | Multi-tool pin merge + action payload versioning (version: 1) |
-| **MASTRA-048** | [`048-mastra-maps-enrichment-phase2.md`](./tasks/maps/048-mastra-maps-enrichment-phase2.md) | 🟡 | 65% | YAML Completed (2026-05-14) — schema landed, enrichment script partial | Phase 2 — place_id + maps_url + ai_summary caching — migration shipped; `maps_url`/`ai_summary` cols live; enrichment runtime (`enrich-places.ts`) exists but no CI proof of full population |
-| **MASTRA-049** | [`049-mastra-geo-grounding-phase3.md`](./tasks/maps/049-mastra-geo-grounding-phase3.md) | 🔴 | 0% | Not Started | Phase 3 — Intent-gated Maps MCP tool for live geo queries |
-| **MASTRA-050** | [`050-mastra-canonical-models-constants.md`](./tasks/maps/050-mastra-canonical-models-constants.md) | 🟢 | 100% | Completed | Canonical model constants — `lib/models.ts` (no more hardcoded strings) |
-| **MASTRA-053** | [`053-mastra-wire-search-restaurants.md`](./tasks/maps/053-mastra-wire-search-restaurants.md) | 🟢 | 100% | Completed | Wire search-restaurants.ts to live Supabase (remove mock data) |
-| **MASTRA-054** | [`054-mastra-wire-search-attractions.md`](./tasks/maps/054-mastra-wire-search-attractions.md) | 🟢 | 100% | Completed | Wire search-attractions.ts to live Supabase (`tourist_destinations` via pg Pool) |
-| **MASTRA-056** | [`056-mastra-grounded-mappincategory.md`](./tasks/maps/056-mastra-grounded-mappincategory.md) | 🟢 | 100% | Complete (shipped in repo) | Add 'grounded' MapPinCategory for Phase 3 grounded place pins |
-| **MASTRA-057** | [`057-mastra-grounding-quota-log-migration.md`](./tasks/maps/057-mastra-grounding-quota-log-migration.md) | 🟢 | 100% | Complete | grounding_quota_log Supabase migration + RLS (durable daily quota) |
-| **MASTRA-059** | [`059-mastra-google-search-grounding.md`](./tasks/maps/059-mastra-google-search-grounding.md) | 🔴 | 0% | Not Started | Google Search grounding on concierge agent (real-time context) |
-| **MASTRA-060** | [`060-mastra-code-execution-budget-agent.md`](./tasks/advanced/060-mastra-code-execution-budget-agent.md) | 🔴 | 0% | Not Started | Code Execution budget agent for price math (separate from concierge) |
-| **MASTRA-061** | [`061-mastra-retire-concierge-route.md`](./tasks/maps/061-mastra-retire-concierge-route.md) | 🔴 | 0% | Not Started | Retire /concierge route — redirect to /chat, delete Concierge.tsx |
-| **MASTRA-062** | [`062-mastra-wire-route-display.md`](./tasks/maps/062-mastra-wire-route-display.md) | 🔴 | 0% | Not Started | Wire RouteDisplay — OPEN_ROUTE_RESULTS ChatAction + EmbeddedListings + normalizeToolOutput |
-| **MASTRA-063** | [`063-mastra-sponsor-schema-foundation.md`](./tasks/advanced/063-mastra-sponsor-schema-foundation.md) | 🔴 | 0% | Not Started | Sponsor schema foundation (missing CREATE TABLE migrations + RLS) |
-| **MASTRA-064** | [`064-mastra-sponsor-gemini-edge-functions.md`](./tasks/advanced/064-mastra-sponsor-gemini-edge-functions.md) | 🔴 | 0% | Not Started | Sponsor Gemini edge functions + Deno tests + migrations staged with schema |
-| **MASTRA-065** | [`065-mastra-grounded-pins-lite.md`](./tasks/maps/065-mastra-grounded-pins-lite.md) | 🔴 | 0% | Not Started | Grounded Pins Lite — AI-grounded nearby pins around rentals |
-| **MASTRA-066** | [`066-mastra-grounding-attribution-component.md`](./tasks/maps/066-mastra-grounding-attribution-component.md) | 🟢 | 100% | Completed | GroundingAttribution — Google Maps Grounding Lite ToS badge |
-| **MASTRA-067** | [`067-mastra-places-field-mask-placeuri.md`](./tasks/maps/067-mastra-places-field-mask-placeuri.md) | 🟢 | 100% | Completed (YAML 2026-05-14) — `maps_url` col + migration shipped | Places API (New) field mask — googleMapsLinks.placeUri for maps_url |
-| **MASTRA-068** | [`068-mastra-production-map-id.md`](./tasks/maps/068-mastra-production-map-id.md) | 🟢 | 100% | Completed (YAML 2026-05-14) + env fixed 2026-05-16 — `VITE_GOOGLE_MAPS_MAP_ID` set in Vercel prod; quoted-key bug fixed; tiles confirmed live | Production Map ID — AdvancedMarkerElement requirement |
-| **MASTRA-069** | [`069-mastra-grounding-lite-telemetry.md`](./tasks/maps/069-mastra-grounding-lite-telemetry.md) | 🔴 | 0% | Not Started | Grounding Lite telemetry — pageSize cap + ai_runs logging |
-| **MASTRA-070** | [`070-mastra-contextual-view-defer-ga.md`](./tasks/maps/070-mastra-contextual-view-defer-ga.md) | 🔴 | 0% | Not Started | Contextual View widget — defer until Google GA |
-| **MASTRA-071** | [`071-mastra-google-cloud-api-key-ip-restrictions.md`](./tasks/maps/071-mastra-google-cloud-api-key-ip-restrictions.md) | 🔴 | 0% | Not Started | Google Cloud — IP-restrict server Places / Maps API keys |
-| **MASTRA-072** | [`072-mastra-grounding-lite-weather-cache.md`](./tasks/maps/072-mastra-grounding-lite-weather-cache.md) | 🔴 | 0% | Not Started | Grounding Lite `lookup_weather` + weather cache |
-| **MASTRA-073** | [`073-mastra-places-field-masks-cost-audit.md`](./tasks/maps/places/073-mastra-places-field-masks-cost-audit.md) | 🟢 | 100% | Completed | Places API (New) — field masks + cost audit; [`places-mask-checklist.md`](../maps/places-mask-checklist.md) |
-| **MASTRA-074** | [`074-mastra-places-cache-schema-ttl.md`](./tasks/maps/places/074-mastra-places-cache-schema-ttl.md) | 🔴 | 0% | Not Started | Places cache — Supabase schema + TTL strategy |
-| **MASTRA-075** | [`075-mastra-places-nearby-rental-show-nearby.md`](./tasks/maps/places/075-mastra-places-nearby-rental-show-nearby.md) | 🔴 | 0% | Not Started | Nearby Search (New) — rental/event “Show nearby” Mastra tool |
-| **MASTRA-076** | [`076-mastra-places-details-cache-enrichment.md`](./tasks/maps/places/076-mastra-places-details-cache-enrichment.md) | 🔴 | 0% | Not Started | Place Details (New) — cache + deep venue enrichment |
-| **MASTRA-077** | [`077-mastra-places-photos-cards.md`](./tasks/maps/places/077-mastra-places-photos-cards.md) | 🔴 | 0% | Not Started | Place Photos (New) — card thumbnails via media endpoint |
-| **MASTRA-078** | [`078-mastra-places-autocomplete-host-venue.md`](./tasks/maps/places/078-mastra-places-autocomplete-host-venue.md) | 🔴 | 0% | Not Started | Place Autocomplete (New) — host / event venue input |
-| **MASTRA-079** | [`079-mastra-geocoding-address-fallback.md`](./tasks/maps/079-mastra-geocoding-address-fallback.md) | 🔴 | 0% | Not Started | Geocoding API — fallback for submitted Colombian addresses |
-| **MASTRA-080** | [`080-mastra-places-security-quota-controls.md`](./tasks/maps/places/080-mastra-places-security-quota-controls.md) | 🔴 | 0% | Not Started | Places API — security, quota, and runtime billing guards |
-| **MASTRA-081** | [`081-mastra-places-test-fixtures-mocks.md`](./tasks/maps/places/081-mastra-places-test-fixtures-mocks.md) | 🔴 | 0% | Not Started | Places API (New) — test fixtures and mocked HTTP responses |
-| **MASTRA-083** | [`083-mastra-search-restaurants-integration-tests.md`](./tasks/advanced/083-mastra-search-restaurants-integration-tests.md) | 🔴 | 0% | Not Started | search-restaurants — optional Supabase integration tests |
-| **EVT-103** | [`103-ticket-payment-edge-functions-repo-gap.md`](./tasks/advanced/103-ticket-payment-edge-functions-repo-gap.md) | 🔴 | 0% | Not Started | Ticket checkout / payment webhook — not in this repo tree |
-| *(20-mastra.md — no `task_id`)* | [`20-mastra.md`](./tasks/20-mastra.md) | 🟢 | 100% | Delivered | Mastra Production Architecture Plan — mdeai.co |
-| *(21-mastra-repos-templates.md — no `task_id`)* | [`21-mastra-repos-templates.md`](./tasks/21-mastra-repos-templates.md) | ⚪ | 100% | Reference | Mastra Repos & Templates — mdeAI Reuse Analysis |
-| *(22-mastra-repos-extract-tasks.md — no `task_id`)* | [`22-mastra-repos-extract-tasks.md`](./tasks/22-mastra-repos-extract-tasks.md) | ⚪ | 100% | Reference | Mastra Repos — Extract Tasks (per-repo, MVP-tight) |
-| *(23-mastra-modules-verified.md — no `task_id`)* | [`23-mastra-modules-verified.md`](./tasks/23-mastra-modules-verified.md) | ⚪ | 100% | Reference | Mastra Modules — Verified Reference Catalogue |
+**Dot legend:** 🟢 Complete · 🟡 In Progress (partial code) · 🔴 Failing (started but defective/incomplete) · ⚪ Not yet started
 
-**Gaps in MASTRA numbering:** there are no task files **051**, **052**, **055**, or **058** under `core/`, `mvp/`, `advanced/`, or `maps/` (by design or retired IDs).
+| ID | Task file | Dot | Evidence / reason |
+|----|-----------|-----|-------------------|
+| **MASTRA-003** | [`003-mastra-tool-audit-control-events.md`](./tasks/core/003-mastra-tool-audit-control-events.md) | 🟡 | `audit-wrapper.ts` + `registry.ts` + `risk-levels.ts` exist in `tools/`. NOT wired to any agent (0 imports). No `ai_tool_audit_events` DB migration. |
+| **MASTRA-004** | [`004-mastra-hybrid-search-tools.md`](./tasks/core/004-mastra-hybrid-search-tools.md) | ⚪ | No `tools/hybrid*` file found. VDB-01 FTS migration exists but Mastra tool wrapper not created. |
+| **MASTRA-005** | [`005-mastra-chat-router-concierge.md`](./tasks/mvp/005-mastra-chat-router-concierge.md) | 🟡 | `router.ts` + `concierge.ts` + `rental-agent.ts` + `event-agent.ts` all exist and registered. **✅ Fixed 2026-05-17**: model IDs corrected (MASTRA-050), `cardSchema` lat/lng added (Gap A), `source: ‘mock’` override removed. Remaining: SSE event type names unconfirmed (Gap B). |
+| **MASTRA-006** | [`006-mastra-real-estate-mvp-agents.md`](./tasks/mvp/006-mastra-real-estate-mvp-agents.md) | 🟡 | `rental-agent.ts` + `search-rentals.ts` (Supabase-backed) exist. Missing: full agent spec coverage, memory persistence for rentals tested end-to-end. |
+| **MASTRA-007** | [`007-mastra-events-mvp-runtime.md`](./tasks/mvp/007-mastra-events-mvp-runtime.md) | 🟡 | `event-agent.ts` + `search-events.ts` (Supabase-backed) exist. `event-discovery-workflow.ts` registered. |
+| **MASTRA-008** | [`008-mastra-restaurants-mvp-discovery.md`](./tasks/mvp/008-mastra-restaurants-mvp-discovery.md) | 🟡 | `search-restaurants.ts` Supabase-backed (MASTRA-053 shipped). Mastra agent + workflow not yet separately scoped per this task spec. |
+| **MASTRA-009** | [`009-mastra-ui-dojo-chat-frontend.md`](./tasks/mvp/009-mastra-ui-dojo-chat-frontend.md) | ⚪ | Title says “Reference Patterns Only”. No code required — deliberately a reference doc. |
+| **MASTRA-010** | [`010-mastra-memory-rag-mvp.md`](./tasks/mvp/010-mastra-memory-rag-mvp.md) | 🟡 | `Memory` with `workingMemory` configured in `concierge.ts`. `@mastra/memory` installed. RAG / semantic recall not wired. |
+| **MASTRA-011** | [`011-mastra-observability-evals-guardrails.md`](./tasks/mvp/011-mastra-observability-evals-guardrails.md) | 🟡 | `Observability` + `DefaultExporter` + `SensitiveDataFilter` in `index.ts`. `evaluation.ts` agent + scorers exist. Guardrails (`PromptInjectionDetector` + `TokenLimiter`) in concierge. Evals harness not run against prod. |
+| **MASTRA-012** | [`012-mastra-workflow-state-runtime.md`](./tasks/core/012-mastra-workflow-state-runtime.md) | ⚪ | No workflow-state Supabase migration found. `createPostgresStore()` wired but no workflow persistence schema. |
+| **MASTRA-013** | [`013-mastra-tenant-isolation.md`](./tasks/core/013-mastra-tenant-isolation.md) | ⚪ | No `org_id` RLS policies or tenant-isolation migration found. |
+| **MASTRA-014** | [`014-mastra-ai-rate-limits.md`](./tasks/core/014-mastra-ai-rate-limits.md) | 🟡 | `durable_rate_limiter.sql` + `check_rate_limit_rpc.sql` migrations exist for the `ai-chat` edge function path. Mastra-side rate limiting not yet wired. |
+| **MASTRA-015** | [`015-mastra-tool-registry-system.md`](./tasks/core/015-mastra-tool-registry-system.md) | 🔴 | `registry.ts` exists but `TOOL_REGISTRY = {}` — empty object, never populated. `registerTool()` function defined but never called anywhere. Structure present, non-functional. |
+| **MASTRA-016** | [`016-mastra-streaming-ui-state.md`](./tasks/mvp/016-mastra-streaming-ui-state.md) | 🟡 | `useChat.ts` Mastra SSE path streams `text-delta`, handles `tool-input-available` / `tool-output-available` / `data-mdeai-actions`. Pin pipeline gap found (§3.5) — SSE event type names unconfirmed vs live Mastra stream. |
+| **MASTRA-017** | [`017-mastra-workflow-recovery.md`](./tasks/mvp/017-mastra-workflow-recovery.md) | ⚪ | No DLQ or dead-letter handling found. |
+| **MASTRA-018** | [`018-mastra-human-handoff-runtime.md`](./tasks/mvp/018-mastra-human-handoff-runtime.md) | ⚪ | No human-handoff runtime found. |
+| **MASTRA-019** | [`019-mastra-client-sdk-integration.md`](./tasks/mvp/019-mastra-client-sdk-integration.md) | 🟢 | `@mastra/client-js` installed. `VITE_USE_MASTRA_CHAT=true` confirmed in Vercel Production + Preview. `useChat.ts` routes auth users to `${MASTRA_SERVER_URL}/chat`. Server health `{“success”:true}` (2026-05-16). Anon users still fall through to legacy `ai-chat` — intentional (no access token). |
+| **MASTRA-020** | [`020-mastra-paperclip-approval-bridge.md`](./tasks/mvp/020-mastra-paperclip-approval-bridge.md) | ⚪ | No Mastra ↔ Paperclip bridge code found. |
+| **MASTRA-021** | [`021-mastra-vdb-local-remote-reconciliation.md`](./tasks/core/021-mastra-vdb-local-remote-reconciliation.md) | 🟡 | VDB-01 `vdb01_hybrid_fts_search.sql` migration exists + `pgvector_semantic_search.sql`. Local/remote parity not formally verified or scripted. |
+| **MASTRA-024** | [`024-mastra-env-secret-boundary.md`](./tasks/core/024-mastra-env-secret-boundary.md) | ⚪ | No env-boundary enforcement file found in `my-mastra-app/src/mastra/lib/`. `SUPABASE_URL`/`SUPABASE_ANON_KEY` missing from `my-mastra-app/.env` (commented out). |
+| **MASTRA-025** | [`025-mastra-dependency-alias-map.md`](./tasks/core/025-mastra-dependency-alias-map.md) | ⚪ | No dependency alias map created. |
+| **MASTRA-031** | [`031-mastra-editor-prompt-architecture.md`](./tasks/advanced/031-mastra-editor-prompt-architecture.md) | ⚪ | Editor prompt stack not started. `@mastra/editor` installed in `package.json` only. |
+| **MASTRA-032** | [`032-mastra-editor-prompt-block-library.md`](./tasks/advanced/032-mastra-editor-prompt-block-library.md) | ⚪ | Not started. |
+| **MASTRA-033** | [`033-mastra-editor-seeding-and-versioning.md`](./tasks/advanced/033-mastra-editor-seeding-and-versioning.md) | ⚪ | Not started. |
+| **MASTRA-034** | [`034-mastra-editor-runtime-preview-and-context.md`](./tasks/advanced/034-mastra-editor-runtime-preview-and-context.md) | ⚪ | Not started. |
+| **MASTRA-035** | [`035-mastra-editor-prompt-qa-studio-workflow.md`](./tasks/advanced/035-mastra-editor-prompt-qa-studio-workflow.md) | ⚪ | Not started. |
+| **MASTRA-036** | [`036-gemini-structured-output-helper.md`](./tasks/advanced/036-gemini-structured-output-helper.md) | ⚪ | `callGeminiStructured` not found anywhere in `src/` or `my-mastra-app/src/`. YAML says “In Progress” — YAML drift. |
+| **MASTRA-037** | [`037-verify-edge-floor-integration.md`](./tasks/advanced/037-verify-edge-floor-integration.md) | 🟢 | `verify:edge` is in both `floor` and `outcomes:verify` scripts in `package.json`. Edge function type errors fail the floor. |
+| **MASTRA-038** | [`038-mastra-chat-live-smoke-timezone.md`](./tasks/advanced/038-mastra-chat-live-smoke-timezone.md) | 🔴 | `mastra-smoke.sh` exists with ~38 general assertions. Zero assertions for timezone, pin count, or `ai_runs` (grep returned 0). Task spec requires those specific assertions — not met. |
+| **MASTRA-039** | [`039-mastra-chat-production-rollout.md`](./tasks/advanced/039-mastra-chat-production-rollout.md) | 🟡 | `VITE_USE_MASTRA_CHAT` in Vercel Production ✅. `/concierge` → `/chat` redirect in `App.tsx` line 211 ✅. Outstanding: anon user CORS on Mastra server; `Concierge.tsx` file not deleted. |
+| **MASTRA-040** | [`040-mastra-ai-runs-logging.md`](./tasks/advanced/040-mastra-ai-runs-logging.md) | 🟢 | `ai-runs-middleware.ts` shipped, path-scoped to `/chat`, commit 9316e39. Fires on every concierge turn; 500ms cap; no-throw. YAML not yet updated (still “Not Started” — drift). |
+| **MASTRA-041** | [`041-mastra-search-events-supabase.md`](./tasks/advanced/041-mastra-search-events-supabase.md) | 🟢 | `search-events.ts` uses `createClient()` (6 occurrences) + Bogotá TZ boundaries. Live Supabase-backed. YAML still “Not Started” — drift. |
+| **MASTRA-042** | [`042-sponsor-gemini-structured-functions.md`](./tasks/advanced/042-sponsor-gemini-structured-functions.md) | ⚪ | Sponsor schema now exists (MASTRA-063 shipped). Original blocker resolved. `callGeminiStructured` still not implemented — task is now unblocked but not started. |
+| **MASTRA-043** | [`043-mastra-geo-production-plan.md`](./tasks/maps/043-mastra-geo-production-plan.md) | 🟡 | Master plan doc exists. Many sub-tasks from this plan are complete (046/047/053/054/056/057/066/067/068/073/074). Pin pipeline gap + model IDs + grounding (049) still open. |
+| **MASTRA-044** | [`044-mastra-deploy-verification.md`](./tasks/advanced/044-mastra-deploy-verification.md) | 🟡 | Health endpoint `public/health.ts` exists + returns `{ok:true}`. Mastra server live at `my-mastra-app-beta.vercel.app/health`. Full deploy verification checklist (smoke + CORS + auth) not documented or automated. |
+| **MASTRA-045** | [`045-mastra-smoke-hardening.md`](./tasks/advanced/045-mastra-smoke-hardening.md) | 🔴 | `mastra-smoke.sh` script exists with 38 assertions. Zero assertions for: known-event pin count, `ai_runs` row check, timezone boundary. Task spec explicitly requires these — not met. |
+| **MASTRA-046** | [`046-mastra-action-schema-validation.md`](./tasks/maps/046-mastra-action-schema-validation.md) | 🟢 | `normalizeToolOutput` + `listingToolActionPassesVersionGate` in `src/lib/chat/normalize-tool-output.ts`. 23 Vitest tests passing. TOOL_MAP covers all 4 categories in both kebab-case and camelCase. |
+| **MASTRA-047** | [`047-mastra-map-pin-merge-versioning.md`](./tasks/maps/047-mastra-map-pin-merge-versioning.md) | 🟢 | `mergePinsByCategory` in `MapContext.tsx`. `version: 1` set in all 4 ChatCanvas `useEffect` hooks. `MapContext.test.ts` passing. Code is correct — pin visibility bug is in `cardSchema` (§3.5), not this task. |
+| **MASTRA-048** | [`048-mastra-maps-enrichment-phase2.md`](./tasks/maps/048-mastra-maps-enrichment-phase2.md) | 🟡 | `mapsUrl`/`aiSummary` in `src/types/chat.ts` ✅. Migration `20260514000100` shipped ✅. `enrich-places.ts` script exists. No CI proof of full DB row population — enrichment not run in verified session. |
+| **MASTRA-049** | [`049-mastra-geo-grounding-phase3.md`](./tasks/maps/049-mastra-geo-grounding-phase3.md) | 🔴 | `maps-grounding-client.ts` exists (MCP transport plumbing). No `searchGroundedPlacesTool` created or registered in any agent. Task core deliverable missing. |
+| **MASTRA-050** | [`050-mastra-canonical-models-constants.md`](./tasks/maps/050-mastra-canonical-models-constants.md) | 🟢 | **✅ FIXED 2026-05-17** — `CONCIERGE_MODEL`/`REASONING_MODEL` = `’google/gemini-2.5-flash’`; `PLANNING_MODEL` = `’google/gemini-2.5-pro’`. MCP-verified IDs. `tsc --noEmit` + build clean. |
+| **MASTRA-053** | [`053-mastra-wire-search-restaurants.md`](./tasks/maps/053-mastra-wire-search-restaurants.md) | 🟢 | `search-restaurants.ts` live Supabase query via `@supabase/supabase-js`. Logic tests passing. |
+| **MASTRA-054** | [`054-mastra-wire-search-attractions.md`](./tasks/maps/054-mastra-wire-search-attractions.md) | 🟢 | `search-attractions.ts` uses `pg` Pool → `tourist_destinations` table. 9 Vitest blocks passing. |
+| **MASTRA-056** | [`056-mastra-grounded-mappincategory.md`](./tasks/maps/056-mastra-grounded-mappincategory.md) | 🟢 | `’grounded’` in `MapContext.tsx` union type (line 17) + pin style entry `{ emoji: ‘📌’, color: ‘#6B7280’, label: ‘Place’ }` (line 130). |
+| **MASTRA-057** | [`057-mastra-grounding-quota-log-migration.md`](./tasks/maps/057-mastra-grounding-quota-log-migration.md) | 🟢 | `supabase/migrations/20260513103000_grounding_quota_log.sql` on disk. RLS: `grounding_quota_log.relrowsecurity = true` (verified via Supabase MCP 2026-05-17). |
+| **MASTRA-059** | [`059-mastra-google-search-grounding.md`](./tasks/maps/059-mastra-google-search-grounding.md) | ⚪ | No `googleSearch` tool or `useGoogleSearch` found in Mastra agents. Not started. |
+| **MASTRA-060** | [`060-mastra-code-execution-budget-agent.md`](./tasks/advanced/060-mastra-code-execution-budget-agent.md) | ⚪ | Not started. |
+| **MASTRA-061** | [`061-mastra-retire-concierge-route.md`](./tasks/maps/061-mastra-retire-concierge-route.md) | 🟡 | `App.tsx` line 211: `<Route path=”/concierge” element={<Navigate to=”/chat” replace />} />` ✅. Comment: “Concierge page retired”. `Concierge.tsx` file still exists and not deleted — task half-done. |
+| **MASTRA-062** | [`062-mastra-wire-route-display.md`](./tasks/maps/062-mastra-wire-route-display.md) | 🟡 | `src/components/map/RouteDisplay.tsx` exists. No `OPEN_ROUTE_RESULTS` ChatAction type, no Mastra tool output wired, not in `normalizeToolOutput` TOOL_MAP. Component exists, wiring is missing. |
+| **MASTRA-063** | [`063-mastra-sponsor-schema-foundation.md`](./tasks/advanced/063-mastra-sponsor-schema-foundation.md) | 🟢 | 3 sponsor migrations exist: `sponsor_schema_foundation.sql`, `sponsor_schema_edge_acl.sql`, `sponsor_activate_placements_if_ready.sql`. RLS present per 05-audit-tasks.md. |
+| **MASTRA-064** | [`064-mastra-sponsor-gemini-edge-functions.md`](./tasks/advanced/064-mastra-sponsor-gemini-edge-functions.md) | ⚪ | Not started. Schema prerequisite (063) now done. |
+| **MASTRA-065** | [`065-mastra-grounded-pins-lite.md`](./tasks/maps/065-mastra-grounded-pins-lite.md) | ⚪ | No `search-grounded*` tool found. Depends on MASTRA-049. |
+| **MASTRA-066** | [`066-mastra-grounding-attribution-component.md`](./tasks/maps/066-mastra-grounding-attribution-component.md) | 🟢 | `src/components/maps/GroundingAttribution.tsx` + `.test.tsx`. 20 Vitest tests passing. ToS badge renders in app. |
+| **MASTRA-067** | [`067-mastra-places-field-mask-placeuri.md`](./tasks/maps/067-mastra-places-field-mask-placeuri.md) | 🟢 | `maps_url` column in migration `20260514000100`. `mapsUrl` field in `src/types/chat.ts`. `placeUri` field mask verified against mde-maps skill. |
+| **MASTRA-068** | [`068-mastra-production-map-id.md`](./tasks/maps/068-mastra-production-map-id.md) | 🟢 | `src/lib/google-maps-map-id.ts` helper. `VITE_GOOGLE_MAPS_MAP_ID` in Vercel Production (encrypted). Map tiles confirmed live in browser 2026-05-16. |
+| **MASTRA-069** | [`069-mastra-grounding-lite-telemetry.md`](./tasks/maps/069-mastra-grounding-lite-telemetry.md) | ⚪ | No telemetry code found in `my-mastra-app/`. Depends on MASTRA-049. |
+| **MASTRA-070** | [`070-mastra-contextual-view-defer-ga.md`](./tasks/maps/070-mastra-contextual-view-defer-ga.md) | ⚪ | Intentionally deferred until Google Contextual View reaches GA. Not a failure — correctly parked. |
+| **MASTRA-071** | [`071-mastra-google-cloud-api-key-ip-restrictions.md`](./tasks/maps/071-mastra-google-cloud-api-key-ip-restrictions.md) | ⚪ | GCP Console action — no code change required. Not yet done (key rotation + IP restrict pending). |
+| **MASTRA-072** | [`072-mastra-grounding-lite-weather-cache.md`](./tasks/maps/072-mastra-grounding-lite-weather-cache.md) | ⚪ | No `weather_cache` migration. `weather-workflow.ts` exists but no caching layer. |
+| **MASTRA-073** | [`073-mastra-places-field-masks-cost-audit.md`](./tasks/maps/places/073-mastra-places-field-masks-cost-audit.md) | 🟢 | `tasks/maps/places-mask-checklist.md` exists. mde-maps skill confirms field mask pattern (`X-Goog-FieldMask` with `places.googleMapsLinks`). |
+| **MASTRA-074** | [`074-mastra-places-cache-schema-ttl.md`](./tasks/maps/places/074-mastra-places-cache-schema-ttl.md) | 🟢 | `supabase/migrations/20260514000100_places_cache_schema.sql` ships `places_search_cache` + `place_details_cache` + 8 RLS policies. Both tables `relrowsecurity=true` (Supabase MCP 2026-05-17). TTL sweep not automated — 95% complete. |
+| **MASTRA-075** | [`075-mastra-places-nearby-rental-show-nearby.md`](./tasks/maps/places/075-mastra-places-nearby-rental-show-nearby.md) | ⚪ | No `search-nearby*` tool found. |
+| **MASTRA-076** | [`076-mastra-places-details-cache-enrichment.md`](./tasks/maps/places/076-mastra-places-details-cache-enrichment.md) | ⚪ | Not started. |
+| **MASTRA-077** | [`077-mastra-places-photos-cards.md`](./tasks/maps/places/077-mastra-places-photos-cards.md) | ⚪ | Not started. |
+| **MASTRA-078** | [`078-mastra-places-autocomplete-host-venue.md`](./tasks/maps/places/078-mastra-places-autocomplete-host-venue.md) | ⚪ | Not started. |
+| **MASTRA-079** | [`079-mastra-geocoding-address-fallback.md`](./tasks/maps/079-mastra-geocoding-address-fallback.md) | ⚪ | Not started. |
+| **MASTRA-080** | [`080-mastra-places-security-quota-controls.md`](./tasks/maps/places/080-mastra-places-security-quota-controls.md) | ⚪ | Not started. |
+| **MASTRA-081** | [`081-mastra-places-test-fixtures-mocks.md`](./tasks/maps/places/081-mastra-places-test-fixtures-mocks.md) | ⚪ | Not started. |
+| **MASTRA-083** | [`083-mastra-search-restaurants-integration-tests.md`](./tasks/advanced/083-mastra-search-restaurants-integration-tests.md) | ⚪ | Optional integration tests. Not started. |
+| **EVT-103** | [`103-ticket-payment-edge-functions-repo-gap.md`](./tasks/advanced/103-ticket-payment-edge-functions-repo-gap.md) | ⚪ | Ticket edge functions not in this repo tree. Cross-repo coordination needed. |
+| *(20-mastra.md)* | [`20-mastra.md`](./tasks/20-mastra.md) | 🟢 | Delivered — Mastra Production Architecture Plan |
+| *(21-mastra-repos-templates.md)* | [`21-mastra-repos-templates.md`](./tasks/21-mastra-repos-templates.md) | ⚪ | Reference doc — no implementation required |
+| *(22-mastra-repos-extract-tasks.md)* | [`22-mastra-repos-extract-tasks.md`](./tasks/22-mastra-repos-extract-tasks.md) | ⚪ | Reference doc — no implementation required |
+| *(23-mastra-modules-verified.md)* | [`23-mastra-modules-verified.md`](./tasks/23-mastra-modules-verified.md) | ⚪ | Reference doc — no implementation required |
+
+**Dot summary (2026-05-17):** 🟢 Complete: 19 · 🟡 In Progress: 15 · 🔴 Failing: 5 · ⚪ Not started: 35
+
+**Failing tasks (must fix before calling production-ready):**
+- 🔴 **MASTRA-015** — `TOOL_REGISTRY = {}` empty, never populated  
+- 🔴 **MASTRA-038** — smoke.sh missing timezone + pin + ai_runs assertions  
+- 🔴 **MASTRA-045** — same as 038, smoke spec not met  
+- 🔴 **MASTRA-049** — `searchGroundedPlacesTool` not implemented  
+- 🔴 **MASTRA-050** — model IDs `gemini-3.x` not in Mastra docs; verified correct IDs are `google/gemini-2.5-flash` / `google/gemini-2.5-pro`
+
+**Gaps in MASTRA numbering:** no task files **051**, **052**, **055**, or **058** (by design or retired IDs).
 
 ---
 
@@ -190,9 +201,64 @@ Scores reflect **repo tests + code inspection + production verification** on **2
 | **MASTRA-004–005** | Hybrid search + router/concierge MVP | 🔴 | ~10–30% | Docs + partial wiring | End-to-end gated on safety stack | See [`000-index.md`](./tasks/000-index.md) order |
 | **MASTRA-012–015** | Workflow state, tenant, rate limits, registry | 🔴 | ~5–20% | Specs | Not production-complete | Sequential per index |
 | **MASTRA-019** | Client SDK / chat ingress | 🟢 | ~90% | `@mastra/client-js`, `chatRoute`, **`VITE_USE_MASTRA_CHAT=true` in prod bundle confirmed** (2026-05-16) | CORS on Mastra server; anon users still legacy path | Verify CORS headers on `my-mastra-app-beta.vercel.app` |
-| **MASTRA-040** | `ai_runs` logging from Mastra agents | 🟡 | 40% | `my-mastra-app/src/mastra/lib/ai-runs.ts` exists (best-effort, 500ms timeout) | Not wired in all agents; no token-count fields | Wire in concierge + rental agents |
+| **MASTRA-040** | `ai_runs` logging from Mastra agents | 🟢 | 85% | `ai-runs-middleware.ts` wired to `/chat` — commit 9316e39; fires on every concierge turn | Per-agent token-count fields not populated; YAML status not updated | Update YAML; optional **083** token-count extension |
 | **MASTRA-020** | Paperclip approval bridge | 🔴 | 0% | Task only | No Mastra ↔ Paperclip runtime | Plan-only until staffed |
 | **Studio / agents** | Router, concierge, rental, event, weather, ping, eval | 🟡 | ~78% | `mastra dev` / 7 agents registered; server health `{"success":true}` | Eval scorer IDs, memory gaps, anon chat gap | Fix scorer tool names; add rental/event memory |
+
+---
+
+## 3.5 PIN PIPELINE GAP — Root cause found 2026-05-17
+
+> **Problem:** Google Map loads on `/chat` but zero pins appear, even after the concierge responds with rental results.  
+> **Status:** **Gap A FIXED 2026-05-17** — `cardSchema` lat/lng + `source: out.source` committed. Gap B (SSE event type names) still unconfirmed — verify via live Network tab.
+
+### Evidence gathered this session
+
+| Check | Result |
+|-------|--------|
+| `VITE_USE_MASTRA_CHAT` in Vercel prod | ✅ `true` — production routes to Mastra, not legacy `ai-chat` |
+| All 44 apartments have `latitude`/`longitude` in DB | ✅ `with_both: 44`, lat 6.143–6.260, lng -75.615 to -75.555 |
+| `searchRentalsTool` includes lat/lng in `context?.writer?.custom()` cards | ✅ `latitude: r.latitude ?? null` in tool execute |
+| `normalizeToolOutput` TOOL_MAP has `'search-rentals'` key | ✅ mapped to `OPEN_RENTALS_RESULTS` |
+| `rentalListingSchema` in `normalize-tool-output.ts` includes lat/lng | ✅ `latitude: z.number().nullable().optional()` |
+| ChatCanvas 4 `useEffect` hooks dispatch pins to MapContext | ✅ MASTRA-047 implemented (lines 262–344) |
+| ChatMap filters `pinsWithCoords = pins.filter(p => p.latitude != null)` | ✅ — correct, filters out null-coord pins |
+
+### Root cause — TWO gaps
+
+**Gap A: `cardSchema` in `concierge-routing-workflow.ts` has no lat/lng**
+
+```typescript
+// concierge-routing-workflow.ts line 150–157
+const cardSchema = z.object({
+  id: z.string(),
+  headline: z.string(),
+  subline: z.string(),
+  priceLabel: z.string(),
+  imageUrl: z.string().optional(),
+  sourceUrl: z.string().optional(),
+  // ← NO latitude, NO longitude
+});
+```
+
+The `dispatchStep` maps rental results to this schema (lines 204–211) — dropping lat/lng. When the workflow emits `data-mdeai-actions`, the cards payload has `latitude: undefined`. `useChat.ts` line 449: `latitude: c.latitude ?? null` → always `null`. ChatMap filters these out. **All pins are dropped.**
+
+**Gap B: `tool-output-available` SSE event type not confirmed**
+
+`useChat.ts` line 413 listens for `ev.type === 'tool-output-available'` from the Mastra SSE stream. The Mastra framework's `/chat` endpoint uses the Vercel AI SDK UI stream format — the actual event type names have not been confirmed via live browser Network inspection. If Mastra emits `tool-result` or `tool-call` instead, the `normalizeToolOutput` path is never triggered.
+
+### Fix required
+
+| File | Change |
+|------|--------|
+| ~~`my-mastra-app/src/mastra/workflows/concierge-routing-workflow.ts`~~ | ✅ **DONE** — `latitude: z.number().nullable().optional()` + `longitude` added to `cardSchema`; all 4 card mappings pass `lat ?? null` / `lng ?? null`; `source: out.source` replaces `source: 'mock' as const` |
+| `src/hooks/useChat.ts` | **Still open** — Confirm actual Mastra SSE event type names for tool-call and tool-result by inspecting live Network tab; update `'tool-input-available'`/`'tool-output-available'` if Mastra uses different names |
+
+### Not a bug in
+- `searchRentalsTool` — correctly includes lat/lng in both the writer payload and return value  
+- `normalizeToolOutput` — schema and TOOL_MAP are correct  
+- ChatCanvas MASTRA-047 effects — correctly wired  
+- ChatMap filter — correctly only renders pins with coords  
 
 ---
 
@@ -241,25 +307,50 @@ Scores reflect **repo tests + code inspection + production verification** on **2
 | Anon users → Mastra | 🔴 | Anon falls through to legacy `ai-chat` (no access token); **MASTRA-019** CORS + anon path open |
 | No grounded Maps **agent tool** | 🔴 | **049** not implemented; **066** badge shipped; grounding runtime incomplete |
 | No runaway Maps billing | 🟡 | **057** table exists; **049/069** quota enforcement not wired |
-| `ai_runs` in Mastra agents | 🟡 | `ai-runs.ts` exists (best-effort); not wired in all agents (**040**) |
-| **Overall Mastra+Maps readiness** | 🟡 **~62–68%** | **13** tasks shipped (up from 8); fixed: 041/048/067/068/074 drift; open: **003/012/013/015/049/040** + ticket fns (**EVT-103**) |
+| `ai_runs` in Mastra agents | 🟢 | `ai-runs-middleware.ts` wired to `/chat` — fires on every concierge turn (commit 9316e39); per-agent token-count optional (**040** middleware done) |
+| **Overall Mastra+Maps readiness** | 🟡 **~70%** | **15** tasks shipped (MASTRA-050 fixed 2026-05-17); **Gap A fixed** (cardSchema lat/lng + source); Gap B (SSE type names) still open; open: **003/012/013/015/049** + ticket fns (**EVT-103**) |
 
 ---
 
-## 7. Next 10 actions (ordered, 2026-05-16)
+## 7. Next actions — ordered implementation sequence (updated 2026-05-17)
 
-1. **Update MASTRA-041 YAML** — change `status: Not Started` → `Completed` in task file (code has been live since this session). 5-min fix.  
-2. **Phase 1 gate: Camila E2E (G1)** — buyer flow ticket purchase → email → QR; blocks Phase 2 entirely.  
-3. **049** — `searchGroundedPlacesTool` MCP transport + agent wiring (only P0 Maps gap remaining after 068 is fixed).  
-4. **040** — Wire `ai-runs.ts` into concierge + rental agents for full observability.  
-5. **062** — `OPEN_ROUTE_RESULTS` + `RouteDisplay` end-to-end from Mastra tool → EmbeddedListings.  
-6. **048** completion — run `enrich-places.ts` against production DB; verify `maps_url` populated on ≥50% of restaurants/destinations.  
-7. **003 → 012 → 013 → 015** — infrastructure train: tool audit events, workflow state, tenant isolation, registry (per [`000-index`](./tasks/000-index.md)).  
-8. **038** — live smoke timezone proof (unblocks **039** production rollout flag flip).  
-9. **075** — Nearby Search (New) `show-nearby` Mastra tool (first concrete Places API consumer after **074** schema).  
-10. **EVT-103** — ticket payment edge functions repo gap + Phase 1 gate alignment.
+### Tier 0 — Unblock visible map pins (P0, current sprint)
 
-**Hygiene (non-blocking):** fix ~30 archive-only WARNs in `verify-task-deps.mjs`; remove `localhost:8080` from Maps API key referrer list before production lock.
+1. **PIN PIPELINE FIX** — Add `latitude`/`longitude` to `cardSchema` in `concierge-routing-workflow.ts`; pass through coords in `dispatchStep` card mappings for all 4 categories (rental/event/restaurant/attraction). Then confirm Mastra SSE event type names (`tool-input-available`/`tool-output-available`) match the actual stream by checking Network tab once. **Files:** `concierge-routing-workflow.ts` + `src/hooks/useChat.ts`. No migration, no new test files needed beyond updating normalize-tool-output tests. **Blocks:** all map UX.
+
+2. **Fix `source: 'mock' as const`** — Change `concierge-routing-workflow.ts` line 215 to `source: out.source` so live Supabase results aren't tagged as mock. 1-line fix. **File:** `concierge-routing-workflow.ts`.
+
+3. **Add `SUPABASE_URL`/`SUPABASE_ANON_KEY` to `my-mastra-app/.env`** — Uncomment the two lines. Without these, `search-events` and `search-restaurants` silently fail in local dev. **File:** `my-mastra-app/.env` (gitignored).
+
+### Tier 1 — YAML drift cleanup (P0, 15 min total)
+
+4. **Update MASTRA-041 YAML** — Change `status: Not Started` → `Completed` in `041-mastra-search-events-supabase.md`. Code shipped; tests pass.
+
+5. **Update MASTRA-040 YAML** — Change `status: Not Started` → `Completed` in `040-mastra-ai-runs-logging.md`. Middleware shipped in commit 9316e39.
+
+### Tier 2 — Smoke + production hardening (P0, blocks EVT Phase 2)
+
+6. **Phase 1 gate: Camila E2E (G1)** — Buyer flow ticket purchase → email → QR. Blocks Phase 2 entirely. EVT task, not Mastra — but listed here because it's the current blocking gate for the whole product.
+
+7. **038** — Live smoke timezone proof (confirms event weekend boundaries work end-to-end). Unblocks **039** production rollout flag flip.
+
+### Tier 3 — Maps grounding (P1, Phase 3 train)
+
+8. **049** — `searchGroundedPlacesTool` MCP transport + concierge agent wiring. Only P0 Maps gap after **068** is fixed. Implement transport first, then agent tool, then **069** telemetry.
+
+9. **062** — `OPEN_ROUTE_RESULTS` + `RouteDisplay` end-to-end from Mastra tool → EmbeddedListings + normalizeToolOutput. `RouteDisplay.tsx` exists; tool output + action type not wired.
+
+10. **048** completion — Run `enrich-places.ts` against production DB; verify `maps_url` populated on ≥50% of restaurants/destinations; add CI proof.
+
+### Tier 4 — Infrastructure spine (P1, unblocks >20 downstream tasks)
+
+11. **003 → 012 → 013 → 015** — Tool audit events, Supabase workflow state, tenant isolation, shared registry. Must be done in this order per `000-index.md` execution sequence.
+
+12. **075** — Nearby Search (New) `show-nearby` Mastra tool. First concrete Places API consumer after **074** schema is confirmed.
+
+---
+
+**Hygiene (non-blocking):** fix ~30 archive-only WARNs in `verify-task-deps.mjs`; remove `localhost:8080` from Maps API key HTTP-referrer list before production lock; update `MASTRA-019` CORS gap for anon users.
 
 ---
 

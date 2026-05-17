@@ -154,6 +154,9 @@ const cardSchema = z.object({
   priceLabel: z.string(),
   imageUrl: z.string().optional(),
   sourceUrl: z.string().optional(),
+  // MASTRA-047: lat/lng required so ChatMap can render pins
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
 });
 
 const dispatchOutputSchema = z.object({
@@ -208,11 +211,13 @@ const dispatchStep = createStep({
         priceLabel: `$${r.nightly_price}/night`,
         imageUrl: r.image,
         sourceUrl: r.source_url,
+        latitude: r.latitude ?? null,
+        longitude: r.longitude ?? null,
       }));
       return {
         intent,
         confidence,
-        source: 'mock' as const,
+        source: out.source,
         cards,
         total: out.total,
         followups: ['Show cheaper', 'Show 2BR only', 'Schedule viewing for #1', 'Compare 1 and 3'],
@@ -238,6 +243,8 @@ const dispatchStep = createStep({
         subline: `${e.venue} \u00b7 ${e.neighborhood} \u00b7 ${e.startsAt}`,
         priceLabel: `$${e.pricePerTicket}/ticket`,
         imageUrl: e.imageUrl,
+        latitude: e.latitude ?? null,
+        longitude: e.longitude ?? null,
       }));
       return {
         intent,
@@ -272,6 +279,8 @@ const dispatchStep = createStep({
         priceLabel: `${r.priceTier} (~$${r.avgPricePerPerson}/person)`,
         imageUrl: r.imageUrl,
         sourceUrl: r.sourceUrl,
+        latitude: r.latitude ?? null,
+        longitude: r.longitude ?? null,
       }));
       return {
         intent,
@@ -305,6 +314,8 @@ const dispatchStep = createStep({
         priceLabel: a.priceUsd === 0 ? 'Free' : `$${a.priceUsd}`,
         imageUrl: a.imageUrl,
         sourceUrl: a.sourceUrl,
+        latitude: a.latitude ?? null,
+        longitude: a.longitude ?? null,
       }));
       return {
         intent,
