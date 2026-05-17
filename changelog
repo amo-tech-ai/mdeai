@@ -1,5 +1,32 @@
 # Changelog — mdeai.co
 
+## 2026-05-16 — Systematic sprint: db reset, /concierge retire, event cards, ai_runs
+
+**Commit:** 9316e39 · **Floor:** 222/222 root · 56/56 Mastra · 0 lint errors · build clean
+
+| Task | Fix | Evidence |
+|------|-----|---------|
+| W5 — `supabase db reset` | Commented out 3 broken migration blocks: `COMMENT ON POLICY storage.objects` (no ownership), `landlord_inbox_events` / `verification_requests` indexes (tables never created), `cron.job` schedule (pg_cron not local). Added `20260430140000_landlord_v1_base_tables_stub.sql` for 3 missing landlord tables. | `supabase db reset --local` → `Finished supabase db reset on branch main` |
+| C5 — retire `/concierge` | `<Navigate to="/chat" replace />` in App.tsx; removed lazy Concierge import | Build exit 0; route now redirects to /chat |
+| C7 — `OPEN_EVENT_RESULTS` fix | Added kebab-case IDs (`search-events`, `search-rentals`, …) to `TOOL_MAP` in `normalize-tool-output.ts` — Mastra uses `tool.id` not variable name; `tool-output-available` events now match. Added event output format section to concierge instructions. | 23/23 normalize-tool-output tests pass |
+| MASTRA-040 — `ai_runs` | Created `ai-runs-middleware.ts` (path-scoped to `/chat`); extracts user_id from JWT, captures turn timing, fires `recordMastraRun` after each concierge turn. Wired via `server.middleware` in `index.ts`. | Mastra build exit 0; 56/56 Mastra tests |
+
+---
+
+## 2026-05-16 — RLS audit: 3 critical gaps patched + 2 indexes added
+
+**Commit:** f93a9a6 · `supabase/migrations/20260516120000_rls_audit_fixes.sql`
+
+| Gap | Fix |
+|-----|-----|
+| `outbound_clicks` — zero policies | `service_role` ALL + `authenticated` SELECT/INSERT + btree index on `user_id` |
+| `proactive_suggestions` — `{public}` service workaround | Dropped; added proper `service_role` + `authenticated` SELECT/UPDATE/INSERT |
+| `agent_jobs` — unindexed FK | btree index on `user_id` |
+
+Floor: 222/222 · 56/56 · build clean
+
+---
+
 ## 2026-05-15 — Chat→Map handoff: AdvancedMarker pins + 6 bug fixes
 
 **Root causes fixed:**
