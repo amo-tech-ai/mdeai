@@ -71,6 +71,7 @@ fi
 echo "[evt069] Step 2 — Complete payment in Stripe test mode (manual or Stripe CLI):"
 echo "  stripe checkout sessions retrieve <session_id>  # after paying with test card 4242..."
 echo "  Or open: ${SESSION_URL}"
+echo "[evt069] Dashboard webhook must include: checkout.session.completed, checkout.session.expired, payment_intent.succeeded"
 
 if [[ -z "${STRIPE_SECRET_KEY:-}" ]]; then
   echo "[evt069] STRIPE_SECRET_KEY not in shell — skip auto payment_intent trigger"

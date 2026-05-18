@@ -23,20 +23,30 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useEvent } from "@/hooks/useEvents";
+import { useEventTicketTiers } from "@/hooks/useEventTicketTiers";
 import { useIsSaved, useToggleSave } from "@/hooks/useSavedPlaces";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import eventPlaceholder from "@/assets/event-1.jpg";
 import { EventBookingWizardPremium } from "@/components/bookings/EventBookingWizardPremium";
+import { EventTicketCheckout } from "@/components/events/EventTicketCheckout";
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: event, isLoading, error } = useEvent(id);
+  const {
+    data: ticketTiers = [],
+    isLoading: ticketTiersLoading,
+    isError: ticketTiersError,
+    error: ticketTiersErrorObj,
+    refetch: refetchTicketTiers,
+  } = useEventTicketTiers(id);
   const { user } = useAuth();
   const { data: isSaved = false } = useIsSaved(id || "", "event");
   const toggleSave = useToggleSave();
   const [showBookingWizard, setShowBookingWizard] = useState(false);
+  const hasV2TicketTiers = ticketTiers.length > 0;
 
   const handleSave = () => {
     if (event && user) {
@@ -49,6 +59,7 @@ export default function EventDetail() {
   };
 
   const handleGetTickets = () => {
+    if (hasV2TicketTiers) return;
     if (!user) return;
     setShowBookingWizard(true);
   };
@@ -107,9 +118,9 @@ export default function EventDetail() {
             <Share2 className="w-4 h-4 mr-2" />
             Share Event
           </Button>
-          <Button className="w-full" onClick={handleGetTickets}>
+          <Button className="w-full" onClick={handleGetTickets} disabled={hasV2TicketTiers}>
             <Ticket className="w-4 h-4 mr-2" />
-            Get Tickets
+            {hasV2TicketTiers ? "Use Buy Ticket" : "Legacy Tickets"}
           </Button>
         </CardContent>
       </Card>
@@ -290,6 +301,61 @@ export default function EventDetail() {
 
         <Separator />
 
+        {ticketTiersError ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Ticket className="h-5 w-5" />
+                Tickets unavailable
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {ticketTiersErrorObj instanceof Error
+                  ? ticketTiersErrorObj.message
+                  : "Ticket tiers could not be loaded."}
+              </p>
+              <Button variant="outline" onClick={() => void refetchTicketTiers()}>
+                Retry tickets
+              </Button>
+            </CardContent>
+          </Card>
+        ) : ticketTiersLoading ? (
+          <Card>
+            <CardContent className="space-y-3 py-6">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        ) : hasV2TicketTiers ? (
+          <EventTicketCheckout event={event} tiers={ticketTiers} />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Ticket className="h-5 w-5" />
+                Tickets unavailable
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Tickets are not currently available for this event.
+              </p>
+              <Button variant="outline" onClick={handleGetTickets} disabled={!user}>
+                Legacy booking fallback
+              </Button>
+              {!user && (
+                <p className="text-xs text-muted-foreground">
+                  Sign in to use the legacy booking fallback.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <Separator />
+
         {/* Description */}
         {event.description && (
           <div className="space-y-3">
@@ -362,9 +428,9 @@ export default function EventDetail() {
                 </a>
               </Button>
             )}
-            <Button className="justify-start" onClick={handleGetTickets}>
+            <Button className="justify-start" onClick={handleGetTickets} disabled={hasV2TicketTiers}>
               <Ticket className="w-4 h-4 mr-2" />
-              Book Tickets
+              {hasV2TicketTiers ? "Use Buy Ticket above" : "Legacy booking fallback"}
             </Button>
           </div>
         </div>

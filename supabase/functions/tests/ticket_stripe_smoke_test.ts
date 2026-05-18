@@ -30,6 +30,20 @@ Deno.test("ticket-checkout: payment_intent metadata only order_id (B1)", () => {
   );
 });
 
+Deno.test("ticket-checkout: Stripe idempotency key on sessions.create", () => {
+  assertEquals(
+    CHECKOUT_SRC.includes("idempotencyKey: body.idempotency_key"),
+    true,
+  );
+});
+
+Deno.test("ticket-checkout: pinned Stripe API version (mde-stripe)", () => {
+  assertEquals(
+    CHECKOUT_SRC.includes('apiVersion: "2026-04-22.dahlia"'),
+    true,
+  );
+});
+
 Deno.test("ticket-payment-webhook: raw body before constructEventAsync", () => {
   assertEquals(WEBHOOK_SRC.includes("await req.text()"), true);
   assertEquals(
@@ -50,6 +64,21 @@ Deno.test("ticket-checkout: idempotency upsert uses PK column key only", () => {
   );
 });
 
-Deno.test("ticket-payment-webhook: finalize RPC on payment_intent.succeeded", () => {
+Deno.test("ticket-payment-webhook: checkout.session.completed fulfillment", () => {
+  assertEquals(WEBHOOK_SRC.includes("checkout.session.completed"), true);
+  assertEquals(WEBHOOK_SRC.includes("handleCheckoutSessionPaid"), true);
+});
+
+Deno.test("ticket-payment-webhook: checkout.session.expired cancels pending order", () => {
+  assertEquals(WEBHOOK_SRC.includes("checkout.session.expired"), true);
+  assertEquals(WEBHOOK_SRC.includes("ticket_checkout_cancel"), true);
+});
+
+Deno.test("ticket-payment-webhook: shared finalizePaidOrder (duplicate-safe)", () => {
+  assertEquals(WEBHOOK_SRC.includes("finalizePaidOrder"), true);
   assertEquals(WEBHOOK_SRC.includes("ticket_payment_finalize"), true);
+});
+
+Deno.test("ticket-payment-webhook: payment_intent.succeeded retained", () => {
+  assertEquals(WEBHOOK_SRC.includes("payment_intent.succeeded"), true);
 });

@@ -26,6 +26,7 @@
  * `event_check_ins` for forensic review and oversell post-mortems.
  */
 import { z } from "https://esm.sh/zod@3.23.8";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { errorBody, getCorsHeaders, jsonResponse } from "../_shared/http.ts";
 import { getServiceClient } from "../_shared/supabase-clients.ts";
 import { verifyJwtHs256 } from "../_shared/jwt.ts";
@@ -47,7 +48,26 @@ const HUMAN_REASONS = {
 // We always return HTTP 200 for these app-level outcomes so the scanner can
 // branch on the JSON body's error.code without conflating with transport errors.
 const APP_LEVEL_HTTP = 200;
-function getClientIp(req) {
+
+type HumanReasonCode = keyof typeof HUMAN_REASONS;
+
+interface TicketValidateRpcData {
+  result: HumanReasonCode;
+  details?: Record<string, unknown> | null;
+}
+
+type CheckInLogRow = {
+  event_id: string;
+  qr_token: string;
+  attendee_id?: unknown;
+  scanned_by?: unknown;
+  scanner_device?: string | null;
+  ip_address?: string | null;
+  result: string;
+  details?: Record<string, unknown> | null;
+};
+
+function getClientIp(req: Request) {
   const fwd = req.headers.get("x-forwarded-for");
   if (fwd) return fwd.split(",")[0].trim();
   return req.headers.get("cf-connecting-ip") ?? null;
@@ -237,7 +257,7 @@ Deno.serve(async (req) => {
       req,
     );
   }
-  const rpcData = rpcDataRaw;
+  const rpcData = rpcDataRaw as TicketValidateRpcData;
   const attendeeId = qrPayload.attendee_id ?? null;
   // 8. Audit log every outcome (forensic + oversell post-mortem).
   await safeLogScan(service, {
@@ -270,7 +290,7 @@ Deno.serve(async (req) => {
       success: false,
       error: {
         code: rpcData.result.toUpperCase(),
-        message: HUMAN_REASONS[rpcData.result],
+        message: HUMAN_REASONS[rpcData.result] ?? rpcData.result,
         details: rpcData.details,
       },
     },
@@ -278,7 +298,7 @@ Deno.serve(async (req) => {
     req,
   );
 });
-async function safeLogScan(service, row) {
+async function safeLogScan(service: SupabaseClient, row: CheckInLogRow) {
   try {
     const { error } = await service.from("event_check_ins").insert(row);
     if (error) {
