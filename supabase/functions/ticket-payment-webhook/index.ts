@@ -1,12 +1,12 @@
 /**
  * ticket-payment-webhook — Stripe webhook receiver (Phase 1 events).
  *
- * Subscribed events:
- *   - payment_intent.succeeded → ticket_payment_finalize RPC
- *     (atomically flips order pending → paid, attendees pending → active,
- *      ticket qty_pending - quantity AND qty_sold + quantity)
+ * Subscribed events (configure all in Stripe Dashboard):
+ *   - checkout.session.completed → ticket_payment_finalize (primary Checkout path)
+ *   - checkout.session.async_payment_succeeded → ticket_payment_finalize (delayed methods)
+ *   - checkout.session.expired → ticket_checkout_cancel (release qty_pending)
+ *   - payment_intent.succeeded → ticket_payment_finalize (idempotent if session event also fires)
  *   - charge.refunded → ticket_payment_refund RPC
- *     (flips order paid → refunded, attendees → refunded, qty_sold - quantity)
  *
  * Auth: Stripe signature verification ONLY. No Supabase JWT — Stripe doesn't
  * send one. `verify_jwt = false` in supabase/config.toml.
@@ -27,17 +27,32 @@
  *     (task 008) regardless. The email is delight, not the source of truth.
  */
 import Stripe from "https://esm.sh/stripe@14.21.0?target=denonext";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { errorBody, getCorsHeaders, jsonResponse } from "../_shared/http.ts";
 import { getServiceClient } from "../_shared/supabase-clients.ts";
 // Lazy Stripe init so missing-key configurations surface as 500 CONFIG_ERROR
 // rather than crashing on cold-start before headers are sent.
 let _stripe: Stripe | null = null;
+interface TicketFinalizeData {
+  order?: {
+    id?: string;
+    access_token?: string;
+    buyer_email?: string;
+    short_id?: string | null;
+  };
+  event?: {
+    name?: string;
+    address?: string | null;
+  };
+  attendees?: unknown[];
+}
+
 function getStripe(): Stripe | null {
   if (_stripe) return _stripe;
   const key = Deno.env.get("STRIPE_SECRET_KEY");
   if (!key) return null;
   _stripe = new Stripe(key, {
-    apiVersion: "2024-06-20",
+    apiVersion: "2026-04-22.dahlia",
     httpClient: Stripe.createFetchHttpClient(),
   });
   return _stripe;
@@ -76,7 +91,7 @@ Deno.serve(async (req) => {
       req,
     );
   }
-  let event;
+  let event: Stripe.Event;
   try {
     event = await stripe.webhooks.constructEventAsync(
       rawBody,
@@ -114,10 +129,23 @@ Deno.serve(async (req) => {
   }
   // 3. Branch on event type.
   try {
-    if (event.type === "payment_intent.succeeded") {
-      await handlePaymentSucceeded(event.data.object, service);
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded"
+    ) {
+      await handleCheckoutSessionPaid(
+        event.data.object as Stripe.Checkout.Session,
+        service,
+      );
+    } else if (event.type === "checkout.session.expired") {
+      await handleCheckoutSessionExpired(
+        event.data.object as Stripe.Checkout.Session,
+        service,
+      );
+    } else if (event.type === "payment_intent.succeeded") {
+      await handlePaymentSucceeded(event.data.object as Stripe.PaymentIntent, service);
     } else if (event.type === "charge.refunded") {
-      await handleRefund(event.data.object, service);
+      await handleRefund(event.data.object as Stripe.Charge, service);
     } else {
       // Unsubscribed event types: 200 OK so Stripe stops retrying. Logged for
       // observability but not an error.
@@ -165,39 +193,32 @@ Deno.serve(async (req) => {
     req,
   );
 });
-async function handlePaymentSucceeded(pi, service) {
-  const orderId = pi.metadata?.order_id;
-  if (!orderId) {
-    // Not one of our tickets (e.g., admin manually charges through Stripe).
-    // Treat as successful no-op so Stripe doesn't retry.
-    console.log(
-      `payment_intent.succeeded had no order_id metadata; ignoring pi=${pi.id}`,
-    );
-    return;
-  }
-  // Single atomic finalize: order flip + attendee flip + qty_sold increment
-  // + qty_pending decrement, all in one DB transaction (audit R4).
+function paymentIntentIdFromSession(session: Stripe.Checkout.Session): string | null {
+  if (typeof session.payment_intent === "string") return session.payment_intent;
+  return session.payment_intent?.id ?? null;
+}
+
+async function finalizePaidOrder(
+  orderId: string,
+  paymentIntentId: string,
+  service: SupabaseClient,
+) {
   const { data, error } = await service.rpc("ticket_payment_finalize", {
     p_order_id: orderId,
-    p_payment_intent_id: pi.id,
+    p_payment_intent_id: paymentIntentId,
   });
   if (error) {
-    // Two failure modes worth distinguishing:
-    //   ORDER_NOT_FOUND  → log + swallow (manual reconcile via Stripe Dashboard)
-    //   ORDER_BAD_STATE  → log + swallow (already refunded? double-fire?)
-    //   anything else    → throw → Stripe retries
     const msg = error.message ?? "";
     if (msg.includes("ORDER_NOT_FOUND") || msg.includes("ORDER_BAD_STATE")) {
       console.error(
-        `ticket_payment_finalize: ${msg} for order=${orderId} pi=${pi.id}`,
+        `ticket_payment_finalize: ${msg} for order=${orderId} pi=${paymentIntentId}`,
       );
       return;
     }
     throw new Error(`ticket_payment_finalize failed: ${msg}`);
   }
-  // Email/PDF is best-effort; failures here MUST NOT roll back the DB flip.
   try {
-    await maybeSendTicketEmail(data);
+    await maybeSendTicketEmail(data as TicketFinalizeData | null);
   } catch (emailErr) {
     console.error(
       "ticket-payment-webhook: email send failed; tickets remain accessible via /me/tickets",
@@ -205,7 +226,71 @@ async function handlePaymentSucceeded(pi, service) {
     );
   }
 }
-async function handleRefund(charge, service) {
+
+async function handleCheckoutSessionPaid(
+  session: Stripe.Checkout.Session,
+  service: SupabaseClient,
+) {
+  const orderId = session.metadata?.order_id;
+  if (!orderId) {
+    console.log(
+      `checkout session paid missing order_id; ignoring session=${session.id}`,
+    );
+    return;
+  }
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+    console.log(
+      `checkout session not paid yet; session=${session.id} status=${session.payment_status}`,
+    );
+    return;
+  }
+  const piId = paymentIntentIdFromSession(session);
+  if (!piId) {
+    console.log(
+      `checkout session paid missing payment_intent; session=${session.id}`,
+    );
+    return;
+  }
+  await finalizePaidOrder(orderId, piId, service);
+}
+
+async function handleCheckoutSessionExpired(
+  session: Stripe.Checkout.Session,
+  service: SupabaseClient,
+) {
+  const orderId = session.metadata?.order_id;
+  if (!orderId) {
+    console.log(
+      `checkout.session.expired missing order_id; ignoring session=${session.id}`,
+    );
+    return;
+  }
+  const { error } = await service.rpc("ticket_checkout_cancel", {
+    p_order_id: orderId,
+  });
+  if (error) {
+    const msg = error.message ?? "";
+    if (msg.includes("ORDER_NOT_FOUND") || msg.includes("ORDER_NOT_PENDING")) {
+      console.error(
+        `ticket_checkout_cancel (expired): ${msg} order=${orderId}`,
+      );
+      return;
+    }
+    throw new Error(`ticket_checkout_cancel failed: ${msg}`);
+  }
+}
+
+async function handlePaymentSucceeded(pi: Stripe.PaymentIntent, service: SupabaseClient) {
+  const orderId = pi.metadata?.order_id;
+  if (!orderId) {
+    console.log(
+      `payment_intent.succeeded had no order_id metadata; ignoring pi=${pi.id}`,
+    );
+    return;
+  }
+  await finalizePaidOrder(orderId, pi.id, service);
+}
+async function handleRefund(charge: Stripe.Charge, service: SupabaseClient) {
   // R5 fix: charge.payment_intent is `string | Stripe.PaymentIntent | null`.
   const piId = typeof charge.payment_intent === "string"
     ? charge.payment_intent
@@ -246,7 +331,7 @@ async function handleRefund(charge, service) {
 // Email — best-effort; skipped silently when SENDGRID_API_KEY is unset.
 // PDF rendering is deferred to Phase 1.5 (HE-3 react-pdf integration).
 // ---------------------------------------------------------------------------
-async function maybeSendTicketEmail(finalizeData) {
+async function maybeSendTicketEmail(finalizeData: TicketFinalizeData | null) {
   const sendgridKey = Deno.env.get("SENDGRID_API_KEY");
   if (!sendgridKey) return; // Phase 1.5 — buyers retrieve tickets via /me/tickets
   const data = finalizeData;
@@ -299,7 +384,7 @@ async function maybeSendTicketEmail(finalizeData) {
     throw new Error(`SendGrid ${res.status}: ${text}`);
   }
 }
-function escapeHtml(s) {
+function escapeHtml(s: string) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(
     ">",
     "&gt;",

@@ -44,7 +44,7 @@ function getStripe(): Stripe | null {
   const key = Deno.env.get("STRIPE_SECRET_KEY");
   if (!key) return null;
   _stripe = new Stripe(key, {
-    apiVersion: "2024-06-20",
+    apiVersion: "2026-04-22.dahlia",
     httpClient: Stripe.createFetchHttpClient(),
   });
   return _stripe;
@@ -178,38 +178,41 @@ Deno.serve(async (req) => {
   //    everything else from the DB via that order_id (audit B1 fix).
   let session;
   try {
-    session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      // Explicit card for COP — avoids dashboard "automatic methods" gaps in test/live.
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            // Phase 1 = COP only (CHECK constraint on event_tickets.currency
-            // enforces this). When we extend to USD/MXN, surface currency
-            // from the RPC return value and pass through here.
-            currency: "cop",
-            product_data: {
-              name: `${rpcData.ticket_name} — ${rpcData.event_name}`,
-              description: `${body.quantity} × ${rpcData.ticket_name}`,
+    session = await stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        // Explicit card for COP — avoids dashboard "automatic methods" gaps in test/live.
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              // Phase 1 = COP only (CHECK constraint on event_tickets.currency
+              // enforces this). When we extend to USD/MXN, surface currency
+              // from the RPC return value and pass through here.
+              currency: "cop",
+              product_data: {
+                name: `${rpcData.ticket_name} — ${rpcData.event_name}`,
+                description: `${body.quantity} × ${rpcData.ticket_name}`,
+              },
+              unit_amount: rpcData.price_cents,
             },
-            unit_amount: rpcData.price_cents,
+            quantity: body.quantity,
           },
-          quantity: body.quantity,
+        ],
+        customer_email: body.buyer_email,
+        success_url: body.return_url_success,
+        cancel_url: body.return_url_cancel,
+        payment_intent_data: {
+          metadata: {
+            order_id: rpcData.order_id,
+          },
         },
-      ],
-      customer_email: body.buyer_email,
-      success_url: body.return_url_success,
-      cancel_url: body.return_url_cancel,
-      payment_intent_data: {
         metadata: {
           order_id: rpcData.order_id,
         },
       },
-      metadata: {
-        order_id: rpcData.order_id,
-      },
-    });
+      { idempotencyKey: body.idempotency_key },
+    );
   } catch (stripeErr) {
     // Stripe failure → cancel the pending RPC so qty_pending decrements
     // and the slots are immediately released. Otherwise capacity stays

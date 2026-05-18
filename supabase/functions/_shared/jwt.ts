@@ -105,10 +105,11 @@ export async function verifyJwtHs256<T extends JwtPayload = JwtPayload>(
   const data = `${encodedHeader}.${encodedPayload}`;
   const key = await importHmacKey(secret, "verify");
   const sigBytes = base64UrlDecode(encodedSignature);
+  const signature = new Uint8Array(sigBytes);
   const ok = await crypto.subtle.verify(
     "HMAC",
     key,
-    sigBytes.buffer.slice(sigBytes.byteOffset, sigBytes.byteOffset + sigBytes.byteLength),
+    signature,
     encoder.encode(data),
   );
   if (!ok) return { valid: false, reason: "BAD_SIGNATURE" };
